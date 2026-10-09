@@ -1,0 +1,9 @@
+node_modules
+dist
+dev-dist
+.wrangler
+*.log
+.DS_Store
+.claude/settings.local.json
+testdata
+public/pdfjs
