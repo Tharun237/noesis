@@ -3,7 +3,9 @@ import { settings } from './settings.js'
 import { db } from './db.js'
 import { recordToBlob } from './tts.js'
 import { VISUAL_KINDS } from './text.js'
-import { getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar } from './library.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos } from './library.js'
+import { toast } from './nav.js'
+import { flushNow } from './sync.js'
 
 // `playing` is the listener's intent. `waiting` = the next sentence isn't voiced yet (we resume on arrival).
 export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null })
@@ -42,10 +44,20 @@ function skipVisual(c, i, dir) {
   return i
 }
 
-function savePosition() {
-  clearTimeout(posTimer)
-  posTimer = setTimeout(() => { const { id, i } = player.get(); if (id) patch(id, { pos: i, lastPlayed: Date.now() }) }, 1200)
+// Position = sentence index + fraction through it, so another device lands on the same word
+// even with a different voice or speed.
+function positionNow() {
+  const { id, i } = player.get()
+  const f = audio.duration > 0 && current?.i === i ? Math.min(0.999, audio.currentTime / audio.duration) : 0
+  return id && { id, p: { pos: i, posF: Math.round(f * 1000) / 1000, lastPlayed: Date.now() } }
 }
+function savePosition(now = false) {
+  clearTimeout(posTimer)
+  const save = () => { const x = positionNow(); if (x) patch(x.id, x.p) }
+  now ? save() : (posTimer = setTimeout(save, 1200))
+}
+addEventListener('pagehide', () => savePosition(true))
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && savePosition(true))
 
 async function load(i, { autoplay = player.get().playing, offset = 0, dir = 1 } = {}) {
   const { id } = player.get()
@@ -114,7 +126,8 @@ export async function open(id, { at, autoplay = true } = {}) {
   if (!c) return // still being prepared — the reader shows progress
   const start = at ?? (same ? player.get().i : d.finished ? 0 : d.pos || 0)
   if (d.finished && at == null) patch(id, { finished: false })
-  load(start, { autoplay })
+  const resume = at == null && !same && !d.finished && start === d.pos && d.posF && c.durs[start]
+  load(start, { autoplay, offset: resume ? d.posF * c.durs[start] : 0 })
 }
 
 export function play() {
@@ -129,7 +142,25 @@ export function play() {
 export function pause() {
   player.set({ playing: false })
   audio.pause()
+  savePosition(true)
+  flushNow()
 }
+
+// Another device moved ahead. Never yank audio that is playing here: offer a jump instead.
+onRemotePos((id, v) => {
+  const p = player.get()
+  if (p.id !== id || v.pos === p.i) return
+  const from = v.dev ? `from your ${v.dev}` : 'from your other device'
+  if (p.playing) {
+    toast(`Further along ${from}`, { label: 'Jump there', run: () => loadDoc(id).then(c => load(v.pos, { offset: (v.posF || 0) * (c.durs[v.pos] || 0) })) })
+  } else {
+    loadDoc(id).then(c => load(v.pos, { autoplay: false, offset: (v.posF || 0) * (c.durs[v.pos] || 0) }))
+    toast(`Synced ${from}`)
+  }
+})
+
+// A doc deleted on another device disappears here too: stop playing it.
+library.sub(() => { const { id } = player.get(); if (id && !getDoc(id)) stopIf(id) })
 
 export const toggle = () => (player.get().playing ? pause() : play())
 export const nextSentence = () => load(player.get().i + 1, { dir: 1 })

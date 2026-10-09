@@ -180,5 +180,23 @@ export async function readPdf(data, filename, onProgress) {
     blocks: kept.map(({ k, text, page }) => ({ k, text, page: page + 1 })),
     pdf,
     pageText,
+    scanned: await isScanned(pdf),
   }
+}
+
+// A scanned PDF draws its OCR text invisibly (render mode 3) over a page image. Checked on three body
+// pages: structural, so it never mistakes a technical book's jargon for OCR noise (measured: word-based
+// heuristics can't tell a clean engineering text from a scan).
+async function isScanned(pdf) {
+  const { OPS } = pdfjs
+  let hits = 0
+  for (const f of [0.3, 0.5, 0.7]) {
+    const page = await pdf.getPage(Math.max(1, Math.round(pdf.numPages * f)))
+    const { fnArray: fn, argsArray: args } = await page.getOperatorList()
+    page.cleanup()
+    const invisible = fn.some((op, i) => op === OPS.setTextRenderingMode && args[i][0] === 3)
+    const image = fn.some(op => op === OPS.paintImageXObject || op === OPS.paintJpegXObject)
+    if (invisible && image) hits++
+  }
+  return hits >= 2
 }

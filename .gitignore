@@ -7,3 +7,6 @@ dev-dist
 .claude/settings.local.json
 testdata
 public/pdfjs
+.wrangler
+.dev.vars
+public/dict

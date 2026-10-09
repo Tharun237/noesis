@@ -1,4 +1,3 @@
-import { Readability } from '@mozilla/readability'
 import { htmlToBlocks } from './html.js'
 import { readMarkdown, readPlain, titleFrom } from './text.js'
 
@@ -18,7 +17,8 @@ export function kindOf(name = '', type = '') {
 
 export const ACCEPT = '.pdf,.epub,.docx,.md,.markdown,.txt,.html,.htm,application/pdf,application/epub+zip,text/plain,text/markdown,text/html'
 
-function readHtml(html, url, fallback) {
+async function readHtml(html, url, fallback) {
+  const { Readability } = await import('@mozilla/readability') // only web pages need it
   const doc = new DOMParser().parseFromString(html, 'text/html')
   if (url) { const b = doc.createElement('base'); b.href = url; doc.head.prepend(b) }
   const art = new Readability(doc, { charThreshold: 300 }).parse()

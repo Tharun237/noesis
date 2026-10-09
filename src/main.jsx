@@ -4,7 +4,7 @@ import '@fontsource-variable/literata'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
-import { ui, openSheet } from './lib/nav.js'
+import { ui, openSheet, toast } from './lib/nav.js'
 
 // Install prompt: we show our own button instead of the browser's mini-infobar.
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); ui.set({ installEvt: e }) })
@@ -17,6 +17,14 @@ if (q.has('url') || q.has('text')) {
   const url = q.get('url') || text.match(/https?:\/\/\S+/)?.[0]
   history.replaceState({ view: 'library' }, '', '/')
   openSheet('add', { prefill: url ? { tab: 'link', url } : { tab: 'text', text, title: q.get('title') || '' } })
+}
+
+// Back from Google sign-in: /#signed-in or /#signin-failed=<reason> (set by /api/auth/callback).
+const FAILED = { cancelled: 'Sign-in was cancelled.', access_denied: 'Sign-in was cancelled.', expired: 'Sign-in took too long. Please try again.' }
+if (location.hash === '#signed-in' || location.hash.startsWith('#signin-failed')) {
+  const failed = location.hash.startsWith('#signin-failed') && decodeURIComponent(location.hash.split('=')[1] || '')
+  history.replaceState({ view: 'library' }, '', location.pathname + location.search)
+  setTimeout(() => toast(failed ? FAILED[failed] || 'Sign-in failed. Please try again.' : 'Signed in. Your library now syncs.'), 600)
 }
 
 // Desktop "Open with → Noesis" (manifest file_handlers).

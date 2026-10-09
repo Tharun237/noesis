@@ -36,8 +36,9 @@ addEventListener('popstate', e => {
 })
 
 let toastTimer = null
-export function toast(msg) {
+// action: optional { label, run } — e.g. "Jump there" when another device is further along.
+export function toast(msg, action = null) {
   clearTimeout(toastTimer)
-  ui.set({ toast: msg })
-  toastTimer = setTimeout(() => ui.set({ toast: null }), 3200)
+  ui.set({ toast: msg, toastAction: action })
+  toastTimer = setTimeout(() => ui.set({ toast: null, toastAction: null }), action ? 9000 : 3200)
 }

@@ -7,6 +7,7 @@ import { engine, loadEngine } from '../lib/tts.js'
 import { deleteAllAudio, kickVoice } from '../lib/library.js'
 import { VOICES } from '../lib/voices.js'
 import { Button, IconButton, Segmented, Toggle, Field, Progress, inputStyle } from './kit.jsx'
+import { AccountCard } from './AccountCard.jsx'
 
 const DEVICE = { webgpu: 'WebGPU (graphics chip)', wasm: 'WebAssembly (processor)' }
 
@@ -19,6 +20,7 @@ export function Settings({ wide }) {
         <div style={{ fontSize: 17, fontWeight: 700 }}>Settings</div>
       </header>
       <div style={{ maxWidth: 680, margin: '0 auto', padding: wide ? '36px 24px 140px' : '20px 16px 160px', display: 'grid', gap: 18 }}>
+        <AccountCard Card={Card} />
         <EngineCard />
         <GeminiCard />
         <Card title="Listening">

@@ -5,6 +5,7 @@ import { synthesize, engine } from './tts.js'
 import { toListening } from './text.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
+import { touch, configureSync, startSync, downloadContent, deviceName } from './sync.js'
 
 // Document lifecycle: queued → reading → narrating (AI only) → voicing → ready  (or error)
 // Two independent loops: PREP (parse + optional Gemini) and VOICE (on-device TTS, one sentence at a time),
@@ -28,10 +29,21 @@ export const getDoc = id => library.get().docs.find(d => d.id === id)
 const voicedSet = id => voiced.get(id) ?? voiced.set(id, new Set()).get(id)
 export const isVoiced = (id, i) => voicedSet(id).has(i)
 
-export function patch(id, p) {
+// What syncs between devices. Everything else on a doc (status, voicing progress, errors) is per-device.
+const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts']
+const POS_FIELDS = ['pos', 'posF', 'finished', 'lastPlayed']
+const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]))
+
+export function patch(id, p, remote = false) {
   let next = null
   library.set(s => ({ docs: s.docs.map(d => (d.id === id ? (next = { ...d, ...p }) : d)) }))
-  if (next) db.putMeta(next)
+  if (!next) return
+  db.putMeta(next)
+  if (remote) return
+  const keys = Object.keys(p)
+  if (keys.some(k => META_FIELDS.includes(k))) touch('meta:' + id)
+  if (keys.some(k => POS_FIELDS.includes(k))) touch('pos:' + id)
+  if (keys.includes('marks')) touch('marks:' + id)
 }
 
 // Seconds of audio per character, learned from what this device has actually produced.
@@ -157,6 +169,7 @@ async function prepare(id) {
   try {
     patch(id, { status: 'reading', stage: 'Reading document', error: null, prep: 0 })
     let src = await db.getSource(id)
+    if (!src) throw new Error('The original file is on the device you added it from. Re-process it there.')
     if (src.kind === 'link') {
       patch(id, { stage: 'Fetching link' })
       src = await fetchUrl(src.url)
@@ -183,6 +196,16 @@ async function prepare(id) {
       if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
     }
 
+    // Scanned book without AI narration: repair OCR errors on-device with a dictionary.
+    if (parsed.scanned && !(d.ai && hasKey())) {
+      patch(id, { stage: 'Repairing scanned text' })
+      const { loadRepair } = await import('../ingest/ocrfix.js')
+      const fix = await loadRepair()
+      blocks = fix.repair(blocks)
+      note = `Scanned book: Noesis fixed ${fix.stats.fixed.toLocaleString()} OCR errors and removed ${fix.stats.dropped.toLocaleString()} garbled lines on this device.`
+    }
+    patch(id, { scanned: !!parsed.scanned })
+
     if (d.mode !== 'full') {
       if (!hasKey()) throw new Error('Summaries need a free Gemini key. Add one in Settings.')
       patch(id, { status: 'narrating', stage: d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary', prep: 0 })
@@ -204,7 +227,8 @@ async function prepare(id) {
     await db.putDurs(id, new Array(total).fill(0))
     cache.delete(id)
     voiced.set(id, new Set())
-    patch(id, { status: 'voicing', stage: 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos: Math.min(d.pos || 0, total - 1), note })
+    // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
+    patch(id, { status: 'voicing', stage: 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos: Math.min(d.pos || 0, total - 1), note, contentVer: Date.now() })
     kickVoice()
   } catch (e) {
     console.error(e)
@@ -225,6 +249,86 @@ export async function boot() {
   persistStorage()
   kickPrep()
   kickVoice()
+  configureSync(syncHooks)
+  for (const d of metas) {
+    if (d.status === 'syncing') fetchSynced(d.id) // resume interrupted downloads
+    // Documents prepared before text versioning existed: give them a stable version so their text can sync.
+    else if (d.total && !d.contentVer) patch(d.id, { contentVer: d.createdAt })
+  }
+  startSync().catch(e => console.warn('Sync failed to start:', e))
+}
+
+// ── sync bridge ───────────────────────────────────────────────────────────────────────
+const remotePos = new Set()
+export const onRemotePos = f => { remotePos.add(f); return () => remotePos.delete(f) }
+const pending = new Map() // pos/marks that arrived before their doc's meta: id → patch
+
+const syncHooks = {
+  allKeys: () => ['cols', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id])],
+  content: id => db.getDoc(id),
+  snapshot(k) {
+    if (k === 'cols') return { collections: library.get().collections }
+    const [type, id] = k.split(':')
+    const d = getDoc(id)
+    if (type === 'meta') return d ? pick(d, META_FIELDS) : { deleted: true } // deleted → tombstone
+    if (!d) return undefined
+    if (type === 'pos') return { ...pick(d, POS_FIELDS), dev: deviceName() }
+    if (type === 'marks') return { marks: d.marks || [] }
+  },
+  async apply(k, v) {
+    if (k === 'cols') return library.set({ collections: v.collections || [] })
+    const [type, id] = k.split(':')
+    const d = getDoc(id)
+    if (type === 'meta') {
+      if (v.deleted) return d && deleteDoc(id, true)
+      if (!d) return createSynced(id, v)
+      patch(id, pick(v, META_FIELDS), true)
+      if (v.contentVer && v.contentVer !== d.contentVer) fetchSynced(id) // text was re-processed elsewhere
+      return
+    }
+    const p = type === 'pos' ? pick(v, POS_FIELDS) : { marks: v.marks || [] }
+    if (!d) return pending.set(id, { ...pending.get(id), ...p })
+    patch(id, p, true)
+    if (type === 'pos') remotePos.forEach(f => f(id, v))
+  },
+}
+
+async function createSynced(id, v) {
+  const meta = {
+    id, title: 'Untitled', author: '', kind: 'text', url: null, createdAt: Date.now(), lastPlayed: 0, mode: 'full', ai: false,
+    voice: settings.get().voice, status: 'syncing', stage: 'Downloading from your other device', prep: 0, total: 0, chars: 0,
+    done: 0, vChars: 0, vSec: 0, pos: 0, posF: 0, finished: false, archived: false, collections: [], marks: [], cover: null,
+    error: null, note: null, ...pick(v, META_FIELDS), ...pending.get(id),
+  }
+  pending.delete(id)
+  await db.putMeta(meta)
+  library.set(s => ({ docs: [meta, ...s.docs].sort((a, b) => b.createdAt - a.createdAt) }))
+  fetchSynced(id)
+}
+
+const fetching = new Set()
+async function fetchSynced(id) {
+  const d = getDoc(id)
+  if (!d?.contentVer || !d.parts || fetching.has(id)) return
+  fetching.add(id)
+  try {
+    patch(id, { status: 'syncing', stage: 'Downloading from your other device', error: null }, true)
+    const doc = await downloadContent(id, d.contentVer, d.parts)
+    await db.delAudio(id)
+    await db.putDoc(id, doc)
+    const total = doc.blocks.reduce((a, b) => a + b.s.length, 0)
+    const chars = doc.blocks.reduce((a, b) => a + b.s.reduce((x, t) => x + t.length, 0), 0)
+    await db.putDurs(id, new Array(total).fill(0))
+    cache.delete(id)
+    voiced.set(id, new Set())
+    patch(id, { status: 'voicing', stage: 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
+    kickVoice()
+  } catch (e) {
+    patch(id, { status: 'syncing', stage: 'Waiting to download from your other device', error: e.message }, true)
+    setTimeout(() => fetchSynced(id), 60_000)
+  } finally {
+    fetching.delete(id)
+  }
 }
 
 export async function addDocument(src, overrides = {}) {
@@ -261,10 +365,11 @@ export function reprocess(id, changes = {}) {
   kickPrep()
 }
 
-export async function deleteDoc(id) {
+export async function deleteDoc(id, remote = false) {
   cache.delete(id)
   voiced.delete(id)
   library.set(s => ({ docs: s.docs.filter(d => d.id !== id) }))
+  if (!remote) touch('meta:' + id) // snapshot of a missing doc = tombstone → deleted on every device
   await Promise.all([db.delMeta(id), db.delContent(id), db.delAudio(id)])
 }
 
@@ -290,6 +395,7 @@ export const setMarkNote = (id, i, note) => patch(id, { marks: (getDoc(id).marks
 export function addCollection(name) {
   const c = { id: uid(), name: name.trim() }
   library.set(s => ({ collections: [...s.collections, c] }))
+  touch('cols')
   return c.id
 }
 
@@ -301,6 +407,7 @@ export function toggleInCollection(docId, colId) {
 
 export function removeCollection(colId) {
   library.set(s => ({ collections: s.collections.filter(c => c.id !== colId) }))
+  touch('cols')
   for (const d of library.get().docs) if (d.collections.includes(colId)) patch(d.id, { collections: d.collections.filter(x => x !== colId) })
 }
 

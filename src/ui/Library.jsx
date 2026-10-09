@@ -11,6 +11,7 @@ import { voiceName } from '../lib/voices.js'
 import { Icon, Logo } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur } from './kit.jsx'
 import { SAMPLE } from './sample.js'
+import { AccountChip } from './SyncStatus.jsx'
 
 const KIND = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', html: 'WEB', md: 'MD', txt: 'TXT', text: 'TEXT', link: 'LINK' }
 const MODE = { long: 'Long summary', short: 'Short summary' }
@@ -126,6 +127,7 @@ function Sidebar() {
         </button>
       )}
       <div style={{ flex: 1 }} />
+      <div style={{ padding: '0 2px 8px' }}><AccountChip /></div>
       <button type="button" onClick={() => go('settings')}
         style={{ display: 'flex', alignItems: 'center', gap: 12, height: 40, padding: '0 12px', border: 'none', borderRadius: T.r.sm, background: 'transparent', color: T.sub, fontFamily: T.font, fontSize: 14, cursor: 'pointer' }}>
         <Icon name="settings" size={17} /> Settings
@@ -196,6 +198,7 @@ function MobileHeader() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 60, padding: '0 10px 0 12px' }}>
         <div style={{ flex: 1 }}><Wordmark size={24} /></div>
         <IconButton icon={searching ? 'close' : 'search'} label="Search" onClick={() => { setSearching(!searching); ui.set({ query: '' }) }} />
+        <AccountChip compact />
         <IconButton icon="settings" label="Settings" onClick={() => go('settings')} />
         <IconButton icon="plus" label="Add document" onClick={() => openSheet('add')} style={{ background: T.text, color: T.bg, marginLeft: 4 }} />
       </div>

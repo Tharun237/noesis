@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { handleFetch } from './functions/api/fetch.js'
+import { handleSync, handleBlob } from './server/sync.js'
+import { handleAuth } from './server/auth.js'
 import pkg from './package.json' with { type: 'json' }
 
 // Cross-origin isolation unlocks SharedArrayBuffer → multithreaded WASM inference.
@@ -12,16 +14,26 @@ const isolation = {
   'Cross-Origin-Embedder-Policy': 'credentialless',
 }
 
-// Dev only: serve the exact handler Cloudflare Pages runs at /api/fetch in production.
+// Dev only: serve the exact handlers Cloudflare Pages runs in production. D1 comes from
+// wrangler's local emulation (getPlatformProxy reads wrangler.toml), so sync works offline in dev.
 const apiInDev = {
   name: 'noesis-api',
-  configureServer(server) {
-    server.middlewares.use('/api/fetch', async (req, res) => {
-      const r = await handleFetch(new Request('http://localhost' + req.originalUrl))
+  async configureServer(server) {
+    const { getPlatformProxy } = await import('wrangler')
+    const { env } = await getPlatformProxy()
+    const route = (path, handler) => server.middlewares.use(path, async (req, res) => {
+      const chunks = []
+      for await (const c of req) chunks.push(c)
+      const body = chunks.length ? Buffer.concat(chunks) : undefined
+      const r = await handler(new Request('http://localhost' + req.originalUrl, { method: req.method, headers: req.headers, body }), env)
       res.statusCode = r.status
       r.headers.forEach((v, k) => res.setHeader(k, v))
       res.end(Buffer.from(await r.arrayBuffer()))
     })
+    route('/api/fetch', req => handleFetch(req))
+    route('/api/auth', handleAuth)
+    route('/api/sync/blob', handleBlob) // before /api/sync: connect matches paths by prefix
+    route('/api/sync', handleSync)
   },
 }
 
@@ -67,7 +79,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,mjs}'],
-        globIgnores: ['pdfjs/**'],
+        globIgnores: ['pdfjs/**', 'dict/**'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
         // Model weights + voices are cached by transformers.js / kokoro-js themselves (Cache Storage).
@@ -78,7 +90,7 @@ export default defineConfig({
           options: { cacheName: 'noesis-wasm' },
         }, {
           // pdf.js CMaps / standard fonts / image decoders (self-hosted under /pdfjs/), cached on first use.
-          urlPattern: ({ url }) => url.pathname.startsWith('/pdfjs/'),
+          urlPattern: ({ url }) => url.pathname.startsWith('/pdfjs/') || url.pathname.startsWith('/dict/'),
           handler: 'CacheFirst',
           options: { cacheName: 'noesis-pdfjs' },
         }],

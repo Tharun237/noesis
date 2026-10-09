@@ -2,8 +2,8 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui } from '../lib/nav.js'
-import { library, loadDoc, docDuration } from '../lib/library.js'
+import { ui, go } from '../lib/nav.js'
+import { library, loadDoc, docDuration, reprocess } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
 import { engine } from '../lib/tts.js'
@@ -115,7 +115,7 @@ export function Reader({ wide }) {
             </div>
 
             {d.status !== 'ready' && <Preparing d={d} />}
-            {d.note && <div style={{ fontSize: 13, color: T.sub, margin: '0 0 24px', padding: '12px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}` }}>{d.note}</div>}
+            {(d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
 
             {doc && (
               <div onClick={e => { if (window.getSelection()?.toString()) return; const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i) }}>
@@ -151,6 +151,25 @@ export function Reader({ wide }) {
       {sheet('type', 'Reading settings', <ReadingSettings wide={wide} />, 460)}
       {sheet('marks', 'Bookmarks & notes', <Marks d={d} doc={doc} offs={offs} rate={rate} onSeek={onSeek} onClose={() => setPanel(null)} />, 520)}
       {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} /></div>)}
+    </div>
+  )
+}
+
+// Notes about how a document was prepared; scanned books get a one-tap path to AI narration.
+function DocNote({ d }) {
+  const keyed = useStore(settings, s => s.geminiKey.trim().length > 20)
+  const offerAi = d.scanned && !d.ai && d.status !== 'queued' && d.status !== 'reading' && d.status !== 'narrating'
+  return (
+    <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, margin: '0 0 24px', padding: '12px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, display: 'grid', gap: 10 }}>
+      {d.note && <div>{d.note}</div>}
+      {offerAi && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 200 }}>For the cleanest read, AI narration reads the page images directly instead of the scan's text layer.</span>
+          {keyed
+            ? <Button kind="accent" icon="sparkle" onClick={() => reprocess(d.id, { ai: true })}>Use AI narration</Button>
+            : <Button icon="settings" onClick={() => go('settings')}>Add a free Gemini key</Button>}
+        </div>
+      )}
     </div>
   )
 }

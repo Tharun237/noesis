@@ -9,20 +9,22 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node --test src/lib/*.test.js",
+    "test": "node --test src/lib/*.test.js src/ingest/*.test.js",
     "icons": "pwa-assets-generator",
-    "postinstall": "node -e \"for (const d of ['wasm','cmaps','standard_fonts','iccs']) require('fs').cpSync('node_modules/pdfjs-dist/'+d, 'public/pdfjs/'+d, {recursive: true})\""
+    "postinstall": "node -e \"const fs=require('fs');for (const d of ['wasm','cmaps','standard_fonts','iccs']) fs.cpSync('node_modules/pdfjs-dist/'+d,'public/pdfjs/'+d,{recursive:true});fs.mkdirSync('public/dict',{recursive:true});fs.copyFileSync('node_modules/dictionary-en/index.aff','public/dict/en.aff');fs.copyFileSync('node_modules/dictionary-en/index.dic','public/dict/en.dic')\""
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/literata": "^5.3.0",
     "@mozilla/readability": "^0.6.0",
+    "dictionary-en": "^4.0.0",
     "idb-keyval": "^6.3.0",
     "jszip": "^3.10.2",
     "kokoro-js": "^1.2.1",
     "mammoth": "^1.13.0",
     "motion": "^14.1.0",
+    "nspell": "^2.1.5",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
@@ -31,6 +33,7 @@
     "@vite-pwa/assets-generator": "^2.0.0",
     "@vitejs/plugin-react": "^6.1.2",
     "vite": "^8.3.4",
-    "vite-plugin-pwa": "^2.0.0"
+    "vite-plugin-pwa": "^2.0.0",
+    "wrangler": "^4.149.0"
   }
 }
