@@ -10,7 +10,10 @@ Free for everyone, no account, no limits, works offline. Install it from the bro
 - **Reads what matters.** Running headers, page numbers, citation markers, URLs, tables of contents, indexes and reference lists are removed before listening.
 - **Natural voices, on-device.** [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) runs in your browser, on WebGPU when available and WebAssembly everywhere else. 28 English voices (US and UK).
 - **Every format.** PDF, EPUB, DOCX, HTML, Markdown, plain text, pasted text and web links. arXiv links fetch the paper itself, not the abstract page.
-- **Read along.** The reader highlights the sentence being spoken. Tap any sentence to jump there. A table of contents comes from the document's headings.
+- **Read along.** The reader highlights the sentence being spoken *and the word within it*. Tap any sentence to jump there. A contents sidebar shows every chapter with its timestamp, and "Back to now" returns you to the playhead.
+- **Reading comfort.** Literata (Google's long-form reading typeface) or DM Sans, with adjustable size, line spacing, column width and justification.
+- **Bookmarks & notes, search.** Bookmark the sentence you are hearing and attach a note. Find any phrase in the document.
+- **Ask about the document.** Chat with the document using your own Gemini key. It knows which sentence you are hearing ("explain what I just heard"), and answers can be read aloud in the same voice.
 - **A real player.** 0.5–4× speed, previous/next sentence, a sleep timer (minutes or end of chapter), skipping figure and table descriptions, plus lock-screen, headset and car controls through the Media Session API.
 - **Library.** Queue, archive, collections, search and sort. Listening position is remembered per document.
 - **Export.** Save the whole book as one `.opus` audio file, or export the transcript as Markdown.

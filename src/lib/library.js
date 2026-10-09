@@ -38,16 +38,24 @@ export function patch(id, p) {
 export const secPerChar = d => (d.vChars > 400 ? d.vSec / d.vChars : 1 / 14.5)
 export const docDuration = d => d.chars * secPerChar(d)
 
-export async function loadDoc(id) {
-  if (cache.has(id)) return cache.get(id)
-  const [doc, durs] = await Promise.all([db.getDoc(id), db.getDurs(id)])
-  if (!doc) return null
-  const segs = []
-  const starts = []
-  doc.blocks.forEach((b, bi) => { starts.push(segs.length); for (const t of b.s) segs.push({ t, b: bi, k: b.k }) })
-  const c = { blocks: doc.blocks, segs, starts, durs: durs?.length === segs.length ? durs : new Array(segs.length).fill(0) }
-  cache.set(id, c)
-  return c
+// Concurrent callers (reader, player, voice loop) must share ONE object: durations are filled in
+// place as sentences are voiced. So the in-flight promise is shared, not just the finished result.
+const loading = new Map()
+export function loadDoc(id) {
+  if (cache.has(id)) return Promise.resolve(cache.get(id))
+  if (!loading.has(id)) {
+    loading.set(id, (async () => {
+      const [doc, durs] = await Promise.all([db.getDoc(id), db.getDurs(id)])
+      if (!doc) return null
+      const segs = []
+      const starts = []
+      doc.blocks.forEach((b, bi) => { starts.push(segs.length); for (const t of b.s) segs.push({ t, b: bi, k: b.k }) })
+      const c = { blocks: doc.blocks, segs, starts, durs: durs?.length === segs.length ? durs : new Array(segs.length).fill(0) }
+      cache.set(id, c)
+      return c
+    })().finally(() => loading.delete(id)))
+  }
+  return loading.get(id)
 }
 
 const durTimers = new Map()
@@ -226,7 +234,7 @@ export async function addDocument(src, overrides = {}) {
     id, title: src.title || src.name || src.url || 'Untitled', author: '', kind: src.kind, url: src.url || null,
     createdAt: Date.now(), lastPlayed: 0, mode: s.mode, ai: s.aiNarration && hasKey(), voice: s.voice,
     status: 'queued', stage: 'Waiting', prep: 0, total: 0, chars: 0, done: 0, vChars: 0, vSec: 0,
-    pos: 0, finished: false, archived: false, collections: [], cover: null, error: null, note: null,
+    pos: 0, finished: false, archived: false, collections: [], marks: [], cover: null, error: null, note: null,
     ...overrides,
   }
   await db.putSource(id, src)
@@ -269,6 +277,15 @@ export async function deleteAllAudio() {
     if (d.total) patch(d.id, { done: 0, vChars: 0, vSec: 0, status: d.status === 'ready' ? 'voicing' : d.status })
   }
 }
+
+// Bookmarks & notes: [{ i: sentence index, note, at }]
+export function toggleMark(id, i) {
+  const marks = getDoc(id).marks || []
+  const has = marks.some(m => m.i === i)
+  patch(id, { marks: has ? marks.filter(m => m.i !== i) : [...marks, { i, note: '', at: Date.now() }].sort((a, b) => a.i - b.i) })
+  return !has
+}
+export const setMarkNote = (id, i, note) => patch(id, { marks: (getDoc(id).marks || []).map(m => (m.i === i ? { ...m, note } : m)) })
 
 export function addCollection(name) {
   const c = { id: uid(), name: name.trim() }

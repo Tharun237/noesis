@@ -103,10 +103,11 @@ function AddForm({ wide }) {
         <label onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
           onDrop={e => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]) }}
           style={{
-            display: 'grid', placeItems: 'center', gap: 10, padding: '34px 20px', borderRadius: T.r.lg, cursor: 'pointer', textAlign: 'center',
+            position: 'relative', display: 'grid', placeItems: 'center', gap: 10, padding: '34px 20px', borderRadius: T.r.lg, cursor: 'pointer', textAlign: 'center',
             border: `1.5px dashed ${over || file ? T.accent : T.borderHi}`, background: over ? T.accentSoft : T.surface,
           }}>
-          <input ref={inputRef} type="file" accept={ACCEPT} onChange={e => pick(e.target.files[0])} style={{ display: 'none' }} />
+          <input ref={inputRef} type="file" accept={ACCEPT} aria-label="Choose a document file" onChange={e => pick(e.target.files[0])}
+            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)' }} />
           <motion.div animate={{ y: over ? -4 : 0 }} transition={T.spring}><Icon name={file ? 'check' : 'upload'} size={26} style={{ color: file ? T.accent : T.sub }} /></motion.div>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text, wordBreak: 'break-all' }}>{file ? file.name : wide ? 'Drop a file here, or click to choose' : 'Tap to choose a file'}</div>
           <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{file ? `${(file.size / 1048576).toFixed(1)} MB · ${kind?.toUpperCase()}` : 'PDF · EPUB · DOCX · HTML · MD · TXT'}</div>

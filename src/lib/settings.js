@@ -14,6 +14,14 @@ export const DEFAULTS = {
   skipVisuals: false, // skip figure/table/math/code descriptions during playback
   mode: 'full', // full | long | short
   view: 'grid',
+  // Reading
+  readFont: 'serif', // serif (Literata) | sans (DM Sans)
+  readSize: 19,
+  readLeading: 1.75,
+  readWidth: 700,
+  justify: false,
+  wordHighlight: true,
+  tocOpen: true,
 }
 
 function load() {

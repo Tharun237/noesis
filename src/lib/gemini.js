@@ -121,3 +121,68 @@ Write for the ear: clear, flowing sentences, no bullet symbols, no markdown. Use
 export async function summarize({ text, title, mode, key, model, signal }) {
   return blocksCall(key, model, [{ text: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}` }], signal)
 }
+
+// ── Ask about this document (streaming) ──────────────────────────────────────────────
+const ASK = `You are Noesis, a study companion. The user is LISTENING to the document below and asking about it.
+Answer accurately and concisely from the document, naming the section when it helps. If the document does not cover it, say so, then answer from general knowledge and label it as such.
+Your answer may be read aloud: write plain, flowing sentences. Avoid tables and heavy markdown; use short lists only when they truly help.`
+
+// ponytail: very long books are windowed around the listener's position (plus the full outline)
+// so each question stays within free-tier token limits; raise MAX_CONTEXT if quotas allow.
+const MAX_CONTEXT = 600_000
+export function askContext(blocks, starts, at) {
+  const outline = blocks.map((b, bi) => (b.k === 'h' ? `[${starts[bi]}] ${b.s.join(' ')}` : null)).filter(Boolean).join('\n')
+  const lines = blocks.map(b => (b.k === 'h' ? `\n## ${b.s.join(' ')}\n` : b.s.join(' ')))
+  const full = lines.join('\n')
+  if (full.length <= MAX_CONTEXT) return full
+  const atBlock = Math.max(0, starts.findLastIndex(s => s <= at))
+  let lo = atBlock, hi = atBlock, size = 0
+  while (size < MAX_CONTEXT && (lo > 0 || hi < lines.length - 1)) {
+    if (hi < lines.length - 1) size += lines[++hi].length
+    if (lo > 0 && size < MAX_CONTEXT) size += lines[--lo].length
+  }
+  return `OUTLINE (whole book):\n${outline}\n\nEXCERPT around the listener's position:\n${lines.slice(lo, hi + 1).join('\n')}`
+}
+
+export async function askStream({ key, model, title, context, history, question, nowHearing, onText, signal }) {
+  const contents = [
+    ...history.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
+    { role: 'user', parts: [{ text: nowHearing ? `${question}\n\n(I am currently listening to: "${nowHearing}")` : question }] },
+  ]
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: `${ASK}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${context}` }] },
+    contents,
+    generationConfig: { temperature: 0.4 },
+  })
+  let res
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(`${BASE}/models/${model}:streamGenerateContent?alt=sse`, {
+      method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, body, signal,
+    })
+    if (res.ok) break
+    const err = await res.json().catch(() => ({}))
+    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+      const retry = err.error?.details?.find(d => d.retryDelay)?.retryDelay
+      await sleep(retry ? parseFloat(retry) * 1000 + 500 : 2000 * 2 ** attempt)
+      continue
+    }
+    throw new Error(err.error?.message || `Gemini error ${res.status}`)
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += value.replace(/\r/g, '')
+    for (let k; (k = buf.indexOf('\n\n')) >= 0;) {
+      const event = buf.slice(0, k)
+      buf = buf.slice(k + 2)
+      for (const line of event.split('\n')) {
+        if (!line.startsWith('data:')) continue
+        const j = JSON.parse(line.slice(5))
+        const t = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')
+        if (t) onText(t)
+      }
+    }
+  }
+}

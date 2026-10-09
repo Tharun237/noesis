@@ -19,6 +19,7 @@ export const T = {
 
   font: "'DM Sans Variable', 'DM Sans', system-ui, -apple-system, sans-serif",
   mono: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",
+  serif: "'Literata Variable', 'Literata', Georgia, serif",
 
   r: { xs: 6, sm: 10, md: 14, lg: 20, xl: 28, pill: 999 },
   ease: [0.22, 1, 0.36, 1],
@@ -28,6 +29,8 @@ export const T = {
   playerH: 132,
   playerHDesktop: 96,
   sidebarW: 248,
+  tocW: 290,
+  askW: 420,
   readerW: 720,
   split: 900,
 }

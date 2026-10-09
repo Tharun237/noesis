@@ -147,6 +147,9 @@ export function setRate(r) {
 
 export const setSleep = s => player.set({ sleep: s })
 
+// Sub-second clock for word highlighting (timeupdate only fires ~4×/s).
+export const audioClock = () => audio.currentTime
+
 export function stopIf(id) {
   if (player.get().id !== id) return
   audio.pause()

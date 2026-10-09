@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go, openSheet } from '../lib/nav.js'
+import { go, openSheet, toast } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { library, loadDoc } from '../lib/library.js'
+import { library, loadDoc, toggleMark } from '../lib/library.js'
 import { player, toggle, nextSentence, prevSentence, setRate, setSleep, seekTime, timeline } from '../lib/player.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
-import { IconButton, Menu, Progress, fmtTime } from './kit.jsx'
+import { IconButton, Menu, Progress, fmtTime, fmtDur } from './kit.jsx'
 import { Cover } from './Library.jsx'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
@@ -69,6 +69,8 @@ export function PlayerBar({ wide, full }) {
         ) : <SpeedMenu />}
         <Transport />
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
+          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{fmtDur(remaining)} left</span>}
+          {wide && <BookmarkButton d={d} i={i} />}
           {wide && <SpeedMenu />}
           <MoreMenu d={d} />
         </div>
@@ -123,6 +125,11 @@ function SpeedMenu() {
   )
 }
 
+function BookmarkButton({ d, i }) {
+  const on = (d.marks || []).some(m => m.i === i)
+  return <IconButton icon="bookmark" label={on ? 'Remove bookmark' : 'Bookmark this sentence'} active={on} fill={on} onClick={() => toast(toggleMark(d.id, i) ? 'Bookmarked' : 'Bookmark removed')} />
+}
+
 function MoreMenu({ d }) {
   const sleep = useStore(player, s => s.sleep)
   const skip = useStore(settings, s => s.skipVisuals)
@@ -132,6 +139,7 @@ function MoreMenu({ d }) {
       ...SLEEP.map(([m, l]) => ({ label: m ? `Sleep in ${l}` : 'Sleep timer off', icon: m === 0 ? 'moon' : undefined, right: m === 0 ? sleepLeft : undefined, onClick: () => setSleep(m ? { until: Date.now() + m * 60000 } : null) })),
       { label: 'Sleep at end of chapter', onClick: () => setSleep({ chapter: true }) },
       '-',
+      { label: 'Bookmark this sentence', icon: 'bookmark', onClick: () => toast(toggleMark(d.id, player.get().i) ? 'Bookmarked' : 'Bookmark removed') },
       { label: skip ? 'Read figure & table summaries' : 'Skip figure & table summaries', icon: 'sparkle', onClick: () => settings.set({ skipVisuals: !skip }) },
       { label: 'Change voice', icon: 'voice', right: voiceName(d.voice), onClick: () => openSheet('voice', { docId: d.id }) },
     ]} />

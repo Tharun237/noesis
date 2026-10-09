@@ -19,7 +19,9 @@ export const db = {
   putDoc: (id, doc) => set('doc:' + id, doc, content),
   getDurs: id => get('durs:' + id, content),
   putDurs: (id, d) => set('durs:' + id, d, content),
-  delContent: id => delMany(['src:' + id, 'doc:' + id, 'durs:' + id], content),
+  getChat: id => get('chat:' + id, content),
+  putChat: (id, msgs) => set('chat:' + id, msgs, content),
+  delContent: id => delMany(['src:' + id, 'doc:' + id, 'durs:' + id, 'chat:' + id], content),
 
   akey: (id, i) => id + ':' + i,
   getAudio: (id, i) => get(id + ':' + i, audio),
