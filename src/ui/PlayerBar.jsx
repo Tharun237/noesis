@@ -60,7 +60,7 @@ export function PlayerBar({ wide, full }) {
     </div>
   )
 
-  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} />
+  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} left={total ? `${fmtDur(remaining)} left` : ''} />
 
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
@@ -161,7 +161,7 @@ function MoreMenu({ d }) {
   )
 }
 
-function MiniPlayer({ d, progress, voiceLabel, gate }) {
+function MiniPlayer({ d, progress, voiceLabel, gate, left }) {
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
       style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
@@ -172,7 +172,7 @@ function MiniPlayer({ d, progress, voiceLabel, gate }) {
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{voiceLabel} · {gate != null ? `ready in ${fmtWait(gate)}` : `${Math.round(progress * 100)}%`}</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, gate != null ? `ready in ${fmtWait(gate)}` : left].filter(Boolean).join(' · ')}</span>
           </span>
         </button>
         <MiniTransport />

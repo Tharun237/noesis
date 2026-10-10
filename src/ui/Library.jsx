@@ -267,33 +267,29 @@ export function Cover({ d, w = 56, h = 74 }) {
   )
 }
 
+// One true statement about a document's audio, or nothing. "Generating audio 0%" beside "playable now" read as a
+// contradiction (2026-10-11): what matters to the listener is only whether they can press play, and if not, when.
 export function StatusLine({ d }) {
-  const now = useStore(library, s => s.voicingNow)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const voiceLoading = useStore(engine, s => s.status === 'loading')
+  const r = useStore(settings, s => s.voiceSpeed)
   if (d.status === 'error') return <span style={{ color: T.danger }}>{d.error || 'Failed'}</span>
   if (d.status === 'ready') return null
-  if (sys && d.status === 'voicing') return null // built-in voice: playable as soon as the text is ready
-  if (d.status === 'voicing' && now !== d.id) {
-    const pct = Math.floor((d.done / Math.max(1, d.total)) * 100)
-    return <span style={{ color: T.sub }}>In line for audio{pct ? ` · ${pct}% ready` : ''}</span>
+  if (d.status === 'voicing') {
+    if (sys) return null // built-in voice: playable as soon as the text is ready
+    if (voiceLoading) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Waiting for the voice</span>
+    // Same rule as the player's gate, from the document's own counters: can it play to the end without stalling?
+    const w = r && d.chars ? waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * secPerChar(d), r) : null
+    if (w === 0) return null // ready to play; the rest is prepared ahead of the listener, silently
+    const when = w == null ? '' : ` · ready in ${w < 90 ? 'under 2 min' : w < 3600 ? `about ${Math.round(w / 60)} min` : `about ${(w / 3600).toFixed(1)} h`}`
+    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Preparing audio{when}</span>
   }
-  const pct = d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
-  const text = d.status === 'voicing' ? (voiceLoading ? 'Waiting for the voice' : 'Generating audio') : d.stage || 'Waiting'
+  const pct = d.prep || 0
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}>
-      <Pulse /> {text}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}{d.status === 'voicing' && <TimeLeft d={d} />}
+      <Pulse /> {d.stage || 'Waiting'}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}
     </span>
   )
-}
-
-// Card estimate from the document's own counters (the reader computes the exact gate from the listening position).
-function TimeLeft({ d }) {
-  const r = useStore(settings, s => s.voiceSpeed)
-  if (!r || !d.chars) return null
-  const per = secPerChar(d)
-  const w = waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * per, r)
-  return <span style={{ color: w > 0 ? T.sub : T.lime }}>{w > 0 ? ` · playable in ${w < 90 ? '<2 min' : w < 3600 ? `~${Math.round(w / 60)} min` : `~${(w / 3600).toFixed(1)} h`}` : ' · playable now'}</span>
 }
 
 const DocCard = memo(function DocCard({ d, playing }) {
