@@ -3,15 +3,11 @@ import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, toast, goBack } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
-import { engine, loadEngine } from '../lib/tts.js'
-import { deleteAllAudio, kickVoice } from '../lib/library.js'
-import { VOICES } from '../lib/voices.js'
-import { Button, IconButton, Segmented, Toggle, Field, Progress, inputStyle } from './kit.jsx'
+import { deleteAllAudio } from '../lib/library.js'
+import { Button, IconButton, Toggle, Field, inputStyle } from './kit.jsx'
 import { AccountCard } from './AccountCard.jsx'
 import { VoiceCard } from './VoiceCard.jsx'
-import { isMobile } from '../lib/engine.js'
 
-const DEVICE = { webgpu: 'WebGPU (graphics chip)', wasm: 'WebAssembly (processor)' }
 
 export function Settings({ wide }) {
   const s = useStore(settings)
@@ -41,7 +37,6 @@ export function Settings({ wide }) {
             hint="Keeps your queue to what you haven't heard yet." />
         </Card>
         <GeminiCard />
-        <EngineCard />
         <StorageCard />
         <AppCard />
       </div>
@@ -55,32 +50,6 @@ function Card({ title, children, right }) {
       <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ ...label, flex: 1 }}>{title}</div>{right}</div>
       {children}
     </section>
-  )
-}
-
-function EngineCard() {
-  const e = useStore(engine)
-  const pref = useStore(settings, s => s.engine)
-  return (
-    <Card title="Voice engine">
-      <div style={{ display: 'grid', gap: 6 }}>
-        <div style={{ fontSize: 15, fontWeight: 600 }}>
-          {e.status === 'ready' ? `Ready · ${DEVICE[e.device]}` : e.status === 'loading' ? 'Downloading the voice model…' : e.status === 'error' ? 'Failed to start' : 'Not loaded yet'}
-        </div>
-        <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
-          Kokoro-82M runs entirely on this device. It downloads once (about 90 MB, or about 330 MB for the faster WebGPU build) and then works offline. Your documents never leave this device for voicing.
-        </div>
-        {e.status === 'loading' && e.total > 0 && <Progress value={e.loaded / e.total} />}
-        {e.status === 'error' && <div style={{ fontFamily: T.mono, fontSize: 12, color: T.danger }}>{e.error}</div>}
-      </div>
-      <Field title="Compute" hint={isMobile() ? "Phones use the compact build: the graphics build is too large for a phone's memory and makes the whole phone lag." : 'Auto uses the graphics chip on computers. Changes apply after reloading the app.'}>
-        <Segmented value={isMobile() ? 'wasm' : pref} disabled={isMobile() ? ['auto', 'webgpu'] : []} onChange={v => { settings.set({ engine: v }); toast('Reload Noesis to switch engines') }} size="sm"
-          options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'Compact' }]} />
-      </Field>
-      {e.status !== 'ready' && e.status !== 'loading' && (
-        <Button kind="primary" icon="download" onClick={() => loadEngine().then(kickVoice).catch(() => {})}>{e.status === 'error' ? 'Retry' : 'Download now'}</Button>
-      )}
-    </Card>
   )
 }
 
@@ -139,8 +108,8 @@ function GeminiCard() {
   )
 }
 
-// Where transformers.js (used by kokoro-js) caches model weights: separate from the library database.
-const MODEL_CACHE = 'transformers-cache'
+// Where the voice worker caches downloaded voices (tts.worker.js): separate from the library database.
+const MODEL_CACHE = 'noesis-voices'
 
 function StorageCard() {
   const [est, setEst] = useState(null)
@@ -166,9 +135,9 @@ function StorageCard() {
         }}>Delete generated audio</Button>
         {hasModel && (
           <Button kind="danger" icon="trash" onClick={async () => {
-            if (!confirm('Remove the downloaded natural voice model? Your documents and audio stay. The model downloads again only if this device uses the natural voice.')) return
-            await caches.delete(MODEL_CACHE); toast('Voice model removed'); setTimeout(() => location.reload(), 900) // also frees it from memory
-          }}>Remove voice model</Button>
+            if (!confirm('Remove the downloaded natural voices? Your documents and audio stay. A voice downloads again the next time it is needed.')) return
+            await caches.delete(MODEL_CACHE); toast('Downloaded voices removed'); setTimeout(() => location.reload(), 900) // also frees it from memory
+          }}>Remove downloaded voices</Button>
         )}
       </div>
     </Card>
@@ -190,7 +159,7 @@ function AppCard() {
       {evt && !installed && (
         <Button kind="primary" icon="install" onClick={async () => { evt.prompt(); const r = await evt.userChoice; if (r.outcome === 'accepted') ui.set({ installEvt: null }) }}>Install Noesis</Button>
       )}
-      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')} · free & open source (MIT) · voices by Kokoro-82M (Apache-2.0)</div>
+      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')} · free & open source (MIT) · voices by Piper (rhasspy/piper-voices; public domain, CC0 and CC BY voices only)</div>
     </Card>
   )
 }

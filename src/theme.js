@@ -12,6 +12,7 @@ export const T = {
   borderHi: 'rgba(255,255,255,0.18)',
   glass: 'rgba(10,10,10,0.82)',
   text: '#FFFFFF',
+  brand: '#F8F4EF', // the logo's ivory (sampled from the artwork); used for the logo only
   body: 'rgba(255,255,255,0.84)',
   sub: 'rgba(255,255,255,0.56)',
   faint: 'rgba(255,255,255,0.34)',

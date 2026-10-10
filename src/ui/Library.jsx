@@ -7,9 +7,9 @@ import { settings } from '../lib/settings.js'
 import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection, kickVoice } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
 import { engine, loadEngine } from '../lib/tts.js'
-import { voiceName } from '../lib/voices.js'
+import { voiceName, VOICES } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
-import { Icon, Logo } from './icons.jsx'
+import { Icon, LogoWordmark } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur } from './kit.jsx'
 import { SAMPLE } from './sample.js'
 import { AccountChip } from './SyncStatus.jsx'
@@ -132,12 +132,7 @@ function Sidebar() {
 }
 
 export function Wordmark({ size = 26 }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px' }}>
-      <Logo size={size} />
-      <span style={{ fontSize: size * 0.78, fontWeight: 700, letterSpacing: '-0.03em', color: T.text }}>noesis</span>
-    </div>
-  )
+  return <div style={{ padding: '0 8px' }}><LogoWordmark height={Math.round(size * 0.82)} /></div>
 }
 
 const FILTER_NAMES = { queue: 'Queue', all: 'All', archived: 'Archived' }
@@ -294,7 +289,7 @@ export function StatusLine({ d }) {
 
 // Card estimate from the document's own counters (the reader computes the exact gate from the listening position).
 function TimeLeft({ d }) {
-  const r = useStore(settings, s => s.naturalSpeed)
+  const r = useStore(settings, s => s.voiceSpeed)
   if (!r || !d.chars) return null
   const per = secPerChar(d)
   const w = waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * per, r)
@@ -375,7 +370,7 @@ function EngineNotice() {
   )
 }
 
-const STATS = [['₹0', 'Free forever'], ['100%', 'On your device'], ['28', 'Natural voices']]
+const STATS = [['₹0', 'Free forever'], ['100%', 'On your device'], [String(VOICES.length), 'Natural voices']]
 const FEATURES = [
   ['waves', 'Natural voices, on your device', 'Audio is generated locally. No account, no limits, works offline.'],
   ['sparkle', 'Skips the page junk', 'Headers, page numbers, citations and reference lists are removed before listening.'],
@@ -390,7 +385,7 @@ function EmptyState({ wide }) {
     <div style={{ maxWidth: 880, margin: wide ? '8vh auto 0' : '6vh 0 0', padding: wide ? '0 8px' : '0 24px' }}>
       <motion.div {...rise(0)} style={{ ...eyebrow, display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ width: 6, height: 6, borderRadius: 6, background: T.lime }} />
-        The Noesis idea
+        Listen deeper
         <span style={{ width: 56, height: 1, background: T.borderHi }} />
       </motion.div>
       <motion.h2 {...rise(1)} style={{ margin: '22px 0 0', fontSize: wide ? 76 : 46, lineHeight: 0.98, letterSpacing: '-0.055em', fontWeight: 800, color: T.text }}>

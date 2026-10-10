@@ -183,7 +183,7 @@ function Preparing({ d, doc, pos }) {
   const loaded = useStore(engine, s => s.loaded)
   const total = useStore(engine, s => s.total)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
-  const speed = useStore(settings, s => s.naturalSpeed)
+  const speed = useStore(settings, s => s.voiceSpeed)
   const textReady = d.status === 'voicing' || d.status === 'ready'
   const [asked, setAsked] = useState(notifyAsked)
   if (sys && textReady) return null // the built-in voice speaks straight away: nothing to prepare
@@ -233,7 +233,7 @@ function Preparing({ d, doc, pos }) {
 }
 
 // Word timing is estimated from the sentence's real duration, weighted by word length plus
-// punctuation pauses. Kokoro doesn't emit word timestamps; this tracks speech closely in practice.
+// punctuation pauses. The voice engine doesn't emit word timestamps; this tracks speech closely in practice.
 function wordWeights(text) {
   const ws = text.split(' ')
   const w = ws.map(x => x.length + 1 + (/[,;:—–]$/.test(x) ? 4 : /[.!?…]["”')]?$/.test(x) ? 6 : 0))
@@ -254,7 +254,7 @@ function ActiveSentence({ i, text, dur, words }) {
     if (sys || !words || !dur) return
     let raf
     const tick = () => {
-      const f = (audioClock() - 0.06) / Math.max(0.2, dur - 0.18) // Kokoro adds ~60 ms lead-in and ~120 ms tail
+      const f = (audioClock() - 0.06) / Math.max(0.2, dur - 0.18) // lead-in/tail allowance (tuned on Kokoro; to re-measure on Piper)
       setW(f <= 0 ? 0 : ends.findIndex(e => e >= f))
       raf = requestAnimationFrame(tick)
     }

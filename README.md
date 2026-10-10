@@ -9,7 +9,7 @@ Sign in with Google (optional) and your library follows you between laptop and p
 ## What it does
 
 - **Reads what matters.** Running headers, page numbers, citation markers, URLs, tables of contents, indexes and reference lists are removed before listening.
-- **Natural voices, on-device.** [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) runs in your browser, on WebGPU when available and WebAssembly everywhere else. 28 English voices (US and UK).
+- **Natural voices, on every device.** [Piper](https://github.com/rhasspy/piper) neural voices run in your browser on the CPU (WebAssembly), several times faster than real time even on phones, so a laptop isn't needed. 11 English voices (US and UK), all public domain, CC0 or CC BY. Each voice downloads once (about 63 MB) and then works offline. A document's voice syncs, so it sounds the same on your phone and computer.
 - **Every format.** PDF, EPUB, DOCX, HTML, Markdown, plain text, pasted text and web links. arXiv links fetch the paper itself, not the abstract page.
 - **Read along.** The reader highlights the sentence being spoken *and the word within it*. Tap any sentence to jump there. A contents sidebar shows every chapter with its timestamp, and "Back to now" returns you to the playhead.
 - **Reading comfort.** Literata (Google's long-form reading typeface) or DM Sans, with adjustable size, line spacing, column width and justification.
@@ -28,7 +28,7 @@ Sign in with Google (optional) and your library follows you between laptop and p
 | Work | Where it runs | Cost |
 |---|---|---|
 | Parsing PDF/EPUB/DOCX/HTML | your browser | free |
-| Voice generation (Kokoro-82M) | your device (WebGPU / WASM) | free |
+| Voice generation (Piper) | your device (WebAssembly) | free |
 | Audio storage (Opus, ~30 kbps) | your browser (IndexedDB) | free |
 | AI narration & summaries | Google Gemini, with *your* key | Google's free tier |
 | Fetching web links | one tiny Cloudflare Pages Function | Cloudflare free tier |
@@ -48,7 +48,7 @@ blocks {k: h | p | fig | table | math | code, text}
 src/lib/text.js           cleanup (citations, URLs, ligatures, abbreviations) · LaTeX → words · Intl.Segmenter sentences
    ▼
 src/lib/library.js        two loops: PREP (parse/AI) and VOICE (one sentence at a time, following the playhead)
-   │  src/lib/tts.worker.js     Kokoro-82M in a Web Worker → WebCodecs AudioEncoder (Opus)
+   │  src/lib/tts.worker.js     Piper (eSpeak-ng phonemes → VITS/ONNX) in a Web Worker → WebCodecs AudioEncoder (Opus)
    ▼
 IndexedDB (idb-keyval)    meta · content · audio (one record per sentence)
    ▼
@@ -74,7 +74,7 @@ npm test           # unit tests (text cleanup, segmentation, Ogg muxer, OCR repa
 npm run build      # production build in dist/
 ```
 
-The first time a document is voiced, the browser downloads the voice model once: about 90 MB (compact build, used on phones) or about 330 MB (WebGPU build, used on computers). After that it works offline.
+The first time a voice is used, the browser downloads it once (about 63 MB per voice, plus the 11 MB speech engine). After that it works offline.
 
 ## Deploy (free)
 
@@ -100,12 +100,12 @@ npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name noesis
 
 ## Honest limits
 
-- **Speed depends on your device.** On a desktop GPU, Kokoro voices text many times faster than real time. On a phone's CPU it can be slower than real time. Noesis always voices *ahead of where you are listening*, and audio is kept, so it is only ever generated once.
+- **Speed depends on your device.** Piper runs on one CPU core at about 3.6× real time on a desktop (measured); phones are slower but expected to stay above real time. Noesis always voices *ahead of where you are listening*, and audio is kept, so it is only ever generated once. (Kokoro-82M was tried first: more expressive, but 0.15× real time on a real Android phone, and its GPU build crashed the phone.)
 - **Scanned PDFs:** on-device repair fixes common OCR confusions conservatively (tuned on real books to avoid false fixes), but it can't recover badly garbled words. AI narration (your Gemini key) reads the page images and is the high-accuracy path. Image-only scans with no text layer need AI mode.
 - **Rule-based cleanup is heuristic.** Unusual layouts can leave a stray line. AI narration is the high-accuracy path.
 - **Sync isn't end-to-end encrypted.** Your library's text and positions are stored under your Google account ID, protected by sign-in, like most reading apps. Audio never leaves your device.
-- **English voices only** for now. Kokoro-82M's web build ships English voices; a multilingual engine (Piper) is the planned next step.
+- **English voices only** for now. Piper has 177 voices in 58 languages; more languages (and translation) are the planned next step.
 
 ## License
 
-MIT. Voices: Kokoro-82M (Apache-2.0).
+MIT. Voices: [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices); only voices whose model card allows free use are offered (see `src/lib/voices.js` for each voice's license).

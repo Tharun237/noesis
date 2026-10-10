@@ -4,12 +4,12 @@ import { db } from './db.js'
 import { recordToBlob } from './tts.js'
 import { VISUAL_KINDS } from './text.js'
 import { activeEngine, pickSystemVoice } from './engine.js'
-import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue } from './library.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches } from './library.js'
 import { toast } from './nav.js'
 import { flushNow } from './sync.js'
 
 // Two ways to speak, chosen per device (engine.js):
-//   natural — pre-generated Kokoro audio per sentence, played through an <audio> element
+//   natural — pre-generated Piper audio per sentence, played through an <audio> element
 //   system  — the device's built-in TTS, spoken live sentence by sentence (no generation, no CPU load)
 //
 // `playing` is the listener's intent. `waiting` = natural audio for the next sentence isn't generated yet.
@@ -35,7 +35,7 @@ const revoke = x => x && URL.revokeObjectURL(x.url)
 async function urlFor(id, i) {
   if (next?.i === i) { const n = next; next = null; return n.url }
   const rec = await db.getAudio(id, i)
-  if (!rec) return null
+  if (!rec || !audioMatches(getDoc(id), rec)) return null // not generated yet, or made in a previous voice
   if (rec.codec === 'none') return 'skip'
   return URL.createObjectURL(recordToBlob(rec))
 }
@@ -44,7 +44,7 @@ async function prefetch(id, i) {
   const c = await loadDoc(id)
   if (i >= c.segs.length || next?.i === i) return
   const rec = await db.getAudio(id, i)
-  if (!rec || rec.codec === 'none' || player.get().id !== id) return
+  if (!rec || rec.codec === 'none' || player.get().id !== id || !audioMatches(getDoc(id), rec)) return
   revoke(next)
   next = { i, url: URL.createObjectURL(recordToBlob(rec)) }
 }

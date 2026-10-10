@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go, closeSheet, toast } from '../lib/nav.js'
+import { ui, closeSheet, toast } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection } from '../lib/library.js'
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
@@ -67,7 +67,8 @@ function AddForm({ wide }) {
   const [over, setOver] = useState(false)
   const inputRef = useRef(null)
 
-  useEffect(() => { loadEngine().catch(() => {}) }, []) // start the one-time model download while the user picks a file
+  // Fetch the chosen voice (one download, then cached) while the user picks a file.
+  useEffect(() => { if (activeEngine() === 'natural') loadEngine(voice).catch(() => {}) }, [voice])
   useEffect(() => () => ui.set({ prefill: null }), [])
 
   const kind = file ? kindOf(file.name, file.type) : null
@@ -143,7 +144,7 @@ function AddForm({ wide }) {
       <Field title="Voice">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select value={voice} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
-            {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'} · grade {v.grade}</option>)}
+            {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
           </select>
           <PreviewButton voice={voice} busy={busy} setBusy={setBusy} />
         </div>
@@ -180,14 +181,14 @@ function VoicePicker() {
   return (
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>
-      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are.</div>
+      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice you haven't used yet downloads once (about 63 MB).</div>
       {VOICES.map(v => (
         <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
           <button type="button" onClick={() => { changeVoice(d.id, v.id); toast(`Switching to ${v.name}`); closeSheet() }}
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', fontFamily: T.font }}>
             <span style={{ width: 18, color: T.accent }}>{v.id === d.voice && <Icon name="check" size={17} />}</span>
             <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{v.name}</span>
-            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.accent} · {v.g} · {v.grade}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.accent} · {v.g}</span>
           </button>
           <PreviewButton voice={v.id} busy={busy} setBusy={setBusy} />
         </div>

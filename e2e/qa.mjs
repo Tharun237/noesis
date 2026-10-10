@@ -83,7 +83,7 @@ const docBy = title => app(`m.lib.library.get().docs.find(d => d.title === ${JSO
 
 console.log(`QA against ${BASE}`)
 await page.goto(BASE)
-await page.evaluate(() => { localStorage.setItem('noesis.settings.v1', JSON.stringify({ engine: 'wasm' })) }) // headless: no GPU
+await page.evaluate(() => { localStorage.setItem('noesis.settings.v1', JSON.stringify({})) }) // defaults: natural (Piper) voice
 await page.goto(BASE)
 await page.waitForLoadState('networkidle')
 
@@ -103,7 +103,7 @@ await step('add sample → reader opens', async () => {
 await step('voice engine loads and voices the sample', async () => {
   await until(async () => (await docBy('On Listening'))?.status === 'ready', 240_000, 'sample to be fully voiced')
   const d = await docBy('On Listening')
-  return `${d.total} sentences, ${d.vSec.toFixed(1)} s audio, engine ${(await app('m.tts.engine.get().device'))}`
+  return `${d.total} sentences, ${d.vSec.toFixed(1)} s audio, voice ${(await app('m.tts.engine.get().voice'))}, ${(await app('m.settings.settings.get().voiceSpeed'))}× real time`
 })
 
 await step('play starts audio and highlights the sentence', async () => {
@@ -161,8 +161,8 @@ await step('change voice mid-listening: same sentence restarts in the new voice'
   const changedAt = Date.now()
   await page.getByRole('button', { name: 'Player menu' }).click()
   await page.getByRole('menuitem', { name: /Change voice/ }).click()
-  await page.getByRole('button', { name: /^Michael/ }).click()
-  await until(async () => (await docBy('On Listening')).voice === 'am_michael', 3000, 'voice saved')
+  await page.getByRole('button', { name: /^John/ }).click()
+  await until(async () => (await docBy('On Listening')).voice === 'en_US-john-medium', 3000, 'voice saved')
   // The old voice must stop at once, and the SAME sentence must restart in the new voice.
   await until(async () => { const s = await playerState(); return s.waiting || s.gate != null || !s.playing || s.clock < 0.3 }, 3000, 'old voice to stop immediately')
   const resumed = await until(async () => {
@@ -170,7 +170,7 @@ await step('change voice mid-listening: same sentence restarts in the new voice'
     return s.playing && !s.waiting && s.clock > 0.2 && s
   }, 240_000, 'playback to resume in the new voice') // the readiness gate holds playback until it can't stall (device-speed dependent)
   expect(resumed.i === before.i, `resumed at sentence ${resumed.i}, expected the same sentence ${before.i}`)
-  return `old voice stopped, sentence ${before.i} restarted in Michael after ${((Date.now() - changedAt) / 1000).toFixed(1)} s`
+  return `old voice stopped, sentence ${before.i} restarted in John after ${((Date.now() - changedAt) / 1000).toFixed(1)} s`
 })
 
 await step('scrubber seeks', async () => {
@@ -413,7 +413,7 @@ await step('back from a reader restored with no page behind it', async () => {
 })
 
 await step('natural voice: readiness gate instead of stalling', async () => {
-  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('noesis.settings.v1')); s.voiceEngine = 'natural'; s.naturalSpeed = 0.05; localStorage.setItem('noesis.settings.v1', JSON.stringify(s)) })
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('noesis.settings.v1')); s.voiceEngine = 'natural'; s.voiceSpeed = 0.05; localStorage.setItem('noesis.settings.v1', JSON.stringify(s)) })
   await page.reload()
   await openDoc('Traction')
   await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()

@@ -77,7 +77,7 @@ export function spokenMath(tex) {
 }
 
 // Sentence segmentation with the platform's own segmenter (ICU), then sized for the TTS model:
-// Kokoro handles ~510 phoneme tokens per call, so very long sentences are split at clause marks.
+// Each sentence is one synthesis call; very long ones are split at clause marks to bound memory and latency.
 const MAX = 280
 const MIN = 18
 const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' })

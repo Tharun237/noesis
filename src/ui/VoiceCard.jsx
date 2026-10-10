@@ -28,24 +28,24 @@ export function SystemVoiceSelect() {
   )
 }
 
-// Settings → Voice: which engine speaks on this device, and with which voice.
+// Settings → Voice: natural voices (Piper, generated on this device) or the device's built-in voice.
 export function VoiceCard({ Card }) {
   const s = useStore(settings)
   const engineNow = activeEngine(s)
   const canSystem = hasSystemVoice()
-  const speed = s.naturalSpeed
+  const speed = s.voiceSpeed
   return (
     <Card title="Voice">
-      <Segmented value={s.voiceEngine} onChange={v => settings.set({ voiceEngine: v })} size="sm" disabled={canSystem ? [] : ['system']}
-        options={[{ value: 'auto', label: 'Auto' }, { value: 'natural', label: 'Natural AI' }, { value: 'system', label: 'Built-in' }]} />
+      <Segmented value={engineNow} onChange={v => settings.set({ voiceEngine: v })} size="sm" disabled={canSystem ? [] : ['system']}
+        options={[{ value: 'natural', label: 'Natural' }, { value: 'system', label: 'Built-in' }]} />
       <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.6 }}>
         {engineNow === 'system'
-          ? <><b style={{ color: T.text }}>Built-in voice{s.voiceEngine === 'auto' ? ' (Auto)' : ''}:</b> your {isMobile() ? 'phone' : 'device'}'s own text to speech. Starts instantly, works offline, uses almost no battery, and highlights each word exactly. "Save audio" isn't available with this voice.</>
-          : <><b style={{ color: T.text }}>Natural AI voice{s.voiceEngine === 'auto' ? ' (Auto)' : ''}:</b> Kokoro, generated on this device. The most natural sound. Audio is prepared before playing, so it never stalls; on slower devices long books take time to prepare.</>}
+          ? <><b style={{ color: T.text }}>Built-in voice:</b> your {isMobile() ? 'phone' : 'device'}'s own text to speech. Starts instantly and works offline, but sounds less natural. "Save audio" isn't available with this voice.</>
+          : <><b style={{ color: T.text }}>Natural voice:</b> neural voices generated on this device, the same on your phone and computer. Each voice downloads once (about 63 MB), then works offline.</>}
       </div>
-      {speed > 0 && (
-        <div style={{ fontFamily: T.mono, fontSize: 12, color: speed >= 1 ? T.ok : T.sub }}>
-          Natural voice on this device: {speed.toFixed(2)}× speaking speed{speed < 1 ? ` · a 1-hour book needs ~${Math.round(60 * (1 - speed) / speed)} min to prepare` : ' · plays immediately'}
+      {speed > 0 && engineNow === 'natural' && (
+        <div style={{ fontFamily: T.mono, fontSize: 12, color: speed >= 1 ? T.lime : T.sub }}>
+          This device generates {speed.toFixed(1)}× faster than speaking speed{speed >= 1 ? ' · plays immediately' : ` · a 1-hour book needs ~${Math.round(60 * (1 - speed) / speed)} min to prepare`}
         </div>
       )}
       {engineNow === 'system'
@@ -53,7 +53,7 @@ export function VoiceCard({ Card }) {
         : (
           <Field title="Natural voice (default for new documents)">
             <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-              {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'} · grade {v.grade}</option>)}
+              {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'} · {v.license}</option>)}
             </select>
           </Field>
         )}

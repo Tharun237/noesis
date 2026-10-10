@@ -1,74 +1,84 @@
-// Runs Kokoro-82M entirely on this device. Messages are processed strictly one at a time.
-import { KokoroTTS } from 'kokoro-js'
-import { packPackets, wav } from './audio-format.js'
+// Generates speech on this device with Piper voices: text → eSpeak-ng phonemes → phoneme ids → VITS (ONNX) → Opus.
+// Messages are processed strictly one at a time.
+import * as ort from 'onnxruntime-web/wasm' // CPU build (11 MB): Piper is fast on CPUs; no GPU code to download
+import { phonemize } from 'phonemizer'
+import { encode } from './encode.js'
+import { voiceUrl } from './voices.js'
 
-const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX'
-const OPUS = { codec: 'opus', numberOfChannels: 1, bitrate: 32000 }
+const CACHE = 'noesis-voices' // voice files, kept for offline use (Settings → Remove downloaded voices)
+// The runtime's glue + WASM are served as standalone static files (public/ort, copied by postinstall): its
+// helper threads re-load that glue by URL, which fails once it is bundled into this worker — a silent hang.
+ort.env.wasm.wasmPaths = new URL('/ort/', self.location.origin).href // absolute: the dev server rewrites root-relative dynamic imports
+// One thread. Measured (2026-10-10): multi-threaded ONNX inside a Web Worker never finishes creating the
+// session (dev and production builds alike), while one thread runs Piper at 3.6–3.9× real time on a single
+// desktop core — enough for phones too — and leaves the other cores to the UI (all-core generation lagged a phone).
+// ponytail: single thread; revisit ORT's proxy/threads in a worker if phones measure below 1×.
+ort.env.wasm.numThreads = 1
 
-let tts = null
-let device = null
-let opusOk = null
+let voice = null // { id, cfg, session }
 
-async function pickDevice(pref, mobile) {
-  if (pref === 'wasm') return 'wasm'
-  // WebGPU wants the fp32 weights (~330 MB). On phones the 90 MB q8/WASM build is the better default.
-  // Phones never use WebGPU: the 330 MB fp32 model (fp16 outputs NaN on WebGPU — measured) exhausts phone
-  // GPU memory and starves the UI of the GPU it renders with (tested 2026-10-10: lag, then the app crashed).
-  if (mobile) return 'wasm'
-  try { if (navigator.gpu && (await navigator.gpu.requestAdapter())) return 'webgpu' } catch { /* no adapter */ }
-  return 'wasm'
+// Cached fetch, reporting download progress (bytes) for the model file.
+async function fetchCached(url, onBytes) {
+  const cache = await caches.open(CACHE)
+  const hit = await cache.match(url)
+  if (hit) return hit
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Voice download failed (${res.status})`)
+  const total = +res.headers.get('content-length') || 0
+  const reader = res.body.getReader()
+  const parts = []
+  let loaded = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    parts.push(value)
+    loaded += value.length
+    onBytes?.(loaded, total)
+  }
+  const out = new Response(new Blob(parts))
+  await cache.put(url, out.clone())
+  return out
 }
 
-async function load({ pref, mobile }) {
-  const progress = new Map()
-  const progress_callback = p => {
-    if (p.status !== 'progress' || !p.total) return
-    progress.set(p.file, [p.loaded, p.total])
-    let a = 0, b = 0
-    for (const [l, t] of progress.values()) { a += l; b += t }
-    postMessage({ type: 'progress', loaded: a, total: b })
-  }
-  device = await pickDevice(pref, mobile)
-  try {
-    tts = await KokoroTTS.from_pretrained(MODEL, { dtype: device === 'webgpu' ? 'fp32' : 'q8', device, progress_callback })
-  } catch (e) {
-    if (device !== 'webgpu') throw e
-    device = 'wasm' // WebGPU adapter present but unusable (driver/blocklist) → fall back, don't fail.
-    tts = await KokoroTTS.from_pretrained(MODEL, { dtype: 'q8', device, progress_callback })
-  }
-  return { device }
+async function load(id) {
+  if (voice?.id === id) return voice
+  const url = voiceUrl(id)
+  const cfg = await (await fetchCached(url + '.json')).json()
+  const model = await (await fetchCached(url, (loaded, total) => postMessage({ type: 'progress', loaded, total }))).arrayBuffer()
+  voice = null // release the previous voice before creating the next session
+  voice = { id, cfg, session: await ort.InferenceSession.create(model, { executionProviders: ['wasm'] }) }
+  return voice
 }
 
-async function encode(pcm, rate) {
-  if (opusOk === null) {
-    opusOk = typeof AudioEncoder !== 'undefined' &&
-      !!(await AudioEncoder.isConfigSupported({ ...OPUS, sampleRate: rate }).catch(() => null))?.supported
+// Piper's input (rhasspy/piper): BOS "^", then each phoneme's id followed by the pad "_", then EOS "$".
+// Punctuation stays as its own phoneme because Piper uses it for pauses and intonation; the phonemizer
+// drops it, so text is split on punctuation and the marks are put back between phonemized chunks.
+const PUNCT = /([.,!?;:…—–"“”«»()¡¿])/
+async function phonemeIds(text, cfg) {
+  const map = cfg.phoneme_id_map
+  const ids = [...map['^']]
+  const push = ch => { if (map[ch]) ids.push(...map[ch], ...map['_']) }
+  for (const part of text.split(PUNCT)) {
+    if (!part.trim()) continue
+    if (PUNCT.test(part)) { for (const ch of part) push(ch); push(' '); continue }
+    for (const ch of (await phonemize(part, cfg.espeak.voice)).join(' ')) push(ch)
   }
-  if (!opusOk) return { codec: 'wav', bytes: wav(pcm, rate) }
-  const packets = []
-  const frames = []
-  let failure = null
-  const enc = new AudioEncoder({
-    output: chunk => {
-      const b = new Uint8Array(chunk.byteLength)
-      chunk.copyTo(b)
-      packets.push(b)
-      frames.push(Math.round(((chunk.duration ?? 20000) * 48000) / 1e6))
-    },
-    error: e => { failure = e },
-  })
-  enc.configure({ ...OPUS, sampleRate: rate })
-  enc.encode(new AudioData({ format: 'f32', sampleRate: rate, numberOfFrames: pcm.length, numberOfChannels: 1, timestamp: 0, data: pcm }))
-  await enc.flush()
-  enc.close()
-  if (failure) throw failure
-  return { codec: 'opus', rate, ...packPackets(packets, frames) }
+  ids.push(...map['$'])
+  return ids
 }
 
-async function speak({ text, voice }) {
-  const out = await tts.generate(text, { voice })
-  const pcm = out.audio
-  const rate = out.sampling_rate
+async function speak({ text, voice: id }) {
+  const { session, cfg } = await load(id)
+  const ids = await phonemeIds(text, cfg)
+  const inf = cfg.inference
+  const feeds = {
+    input: new ort.Tensor('int64', BigInt64Array.from(ids, BigInt), [1, ids.length]),
+    input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(ids.length)]), [1]),
+    scales: new ort.Tensor('float32', Float32Array.from([inf.noise_scale, inf.length_scale, inf.noise_w]), [3]),
+  }
+  if (cfg.num_speakers > 1) feeds.sid = new ort.Tensor('int64', BigInt64Array.from([0n]), [1])
+  const pcm = (await session.run(feeds)).output.data
+  const rate = cfg.audio.sample_rate
   const rec = await encode(pcm, rate)
   rec.dur = pcm.length / rate
   return rec
@@ -78,7 +88,7 @@ let queue = Promise.resolve()
 self.onmessage = ({ data }) => {
   queue = queue.then(async () => {
     try {
-      if (data.type === 'init') postMessage({ type: 'ready', id: data.id, ...(await load(data)) })
+      if (data.type === 'load') { await load(data.voice); postMessage({ type: 'ready', id: data.id }) }
       else if (data.type === 'speak') {
         const rec = await speak(data)
         const transfer = [rec.data?.buffer, rec.bytes?.buffer].filter(Boolean)

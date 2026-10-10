@@ -1,4 +1,5 @@
 import { T } from "../theme.js"
+import { WORDMARK, MARK, TAGLINE } from "./brand-paths.js"
 
 // Inline SVG icons, 24px grid, currentColor stroke. No icon library needed.
 const P = {
@@ -53,17 +54,23 @@ export function Icon({ name, size = 20, stroke = 1.8, fill = false, style }) {
   )
 }
 
+// App icon: the N from the Noesis logo, ivory on a black tile (same geometry as public/icon.svg).
 export function Logo({ size = 28 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
       <rect width="512" height="512" rx="112" fill={T.bg} stroke={T.borderHi} strokeWidth="12" />
-      <g fill={T.accent}>
-        <rect x="118" y="214" width="36" height="84" rx="18" />
-        <rect x="186" y="164" width="36" height="184" rx="18" />
-        <rect x="254" y="110" width="36" height="292" rx="18" />
-        <rect x="322" y="176" width="36" height="160" rx="18" />
-        <rect x="390" y="226" width="36" height="60" rx="18" opacity=".6" />
-      </g>
+      <path transform={`translate(108 116) scale(${280 / MARK.h})`} fillRule="evenodd" fill={T.brand} d={MARK.d} />
+    </svg>
+  )
+}
+
+// The "Noesis" wordmark from the logo; height in px, width follows the artwork's proportions.
+export function LogoWordmark({ height = 22, tagline = false }) {
+  const h = tagline ? WORDMARK.h + 96 : WORDMARK.h
+  return (
+    <svg height={height} viewBox={`0 0 ${WORDMARK.w} ${h}`} role="img" aria-label="Noesis" style={{ display: 'block', flexShrink: 0, width: 'auto' }}>
+      <path fillRule="evenodd" fill={T.brand} d={WORDMARK.d} />
+      {tagline && <path transform={`translate(${(WORDMARK.w - TAGLINE.w) / 2} ${WORDMARK.h + 60})`} fillRule="evenodd" fill={T.brand} d={TAGLINE.d} />}
     </svg>
   )
 }

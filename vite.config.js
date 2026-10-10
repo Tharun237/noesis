@@ -49,7 +49,7 @@ export default defineConfig({
         id: '/',
         name: 'Noesis',
         short_name: 'Noesis',
-        description: 'Listen to any document. Free, private, on-device text to speech.',
+        description: 'Listen deeper. Any document as natural audio, generated on your own device. Free and open source.',
         start_url: '/',
         scope: '/',
         display: 'standalone',
@@ -80,19 +80,19 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,mjs}'],
-        globIgnores: ['pdfjs/**', 'dict/**'],
+        globIgnores: ['pdfjs/**', 'dict/**', 'ort/**'],
         importScripts: ['notify-sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
-        // Model weights + voices are cached by transformers.js / kokoro-js themselves (Cache Storage).
+        // Voices are cached by the voice worker itself (Cache Storage 'noesis-voices').
         runtimeCaching: [{
-          // The 21 MB ONNX runtime WASM is too big to precache; cache it the first time the engine loads.
+          // The 11 MB ONNX runtime WASM is too big to precache; cache it the first time the engine loads.
           urlPattern: ({ url }) => url.pathname.endsWith('.wasm'),
           handler: 'CacheFirst',
           options: { cacheName: 'noesis-wasm' },
         }, {
           // pdf.js CMaps / standard fonts / image decoders (self-hosted under /pdfjs/), cached on first use.
-          urlPattern: ({ url }) => url.pathname.startsWith('/pdfjs/') || url.pathname.startsWith('/dict/'),
+          urlPattern: ({ url }) => ['/pdfjs/', '/dict/', '/ort/'].some(p => url.pathname.startsWith(p)),
           handler: 'CacheFirst',
           options: { cacheName: 'noesis-pdfjs' },
         }],

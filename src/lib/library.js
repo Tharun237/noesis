@@ -3,6 +3,7 @@ import { db, persistStorage } from './db.js'
 import { settings, hasKey } from './settings.js'
 import { synthesize, engine } from './tts.js'
 import { toListening } from './text.js'
+import { isVoice, fromKokoro } from './voices.js'
 import { activeEngine } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
@@ -127,10 +128,8 @@ export const kickPrep = makeLoop(async () => {
 // Measured per compute device: the graphics chip and the processor differ by 10× or more, so a
 // processor measurement must never stand in for the GPU (or vice versa) after switching.
 function recordSpeed(x) {
-  const dev = engine.get().device || 'wasm'
-  const prev = settings.get().speeds[dev]
-  const v = Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 1000) / 1000
-  settings.set({ speeds: { ...settings.get().speeds, [dev]: v }, naturalSpeed: v })
+  const prev = settings.get().voiceSpeed
+  settings.set({ voiceSpeed: Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 1000) / 1000 })
 }
 
 // Paper2Audio-style readiness for the natural voice: can playback from sentence `from` run to the end
@@ -149,7 +148,7 @@ export function readiness(d, c, from = 0) {
   for (let k = i; k < n; k++) rest += c.durs[k] || c.segs[k].t.length * est
   // Safety margin is a fixed buffer, not a speed discount: discounting would turn a device that is
   // just faster than real time (1.06×) into a "slow" one and make long books wait for nothing.
-  const wait = waitSeconds(ahead, rest, Math.max(0.02, settings.get().naturalSpeed || 1))
+  const wait = waitSeconds(ahead, rest, Math.max(0.02, settings.get().voiceSpeed || 1))
   return { ready: wait <= 0, wait }
 }
 
@@ -158,12 +157,21 @@ settings.sub(() => { const e = activeEngine(); if (e !== lastEngine) { lastEngin
 
 export const kickVoice = makeLoop(async () => {
   if (activeEngine() === 'system') return false // built-in voice speaks directly; no generation, no CPU load
-  if (engine.get().status === 'error') return false // wait for Settings → retry (which kicks)
+  if (engine.get().status === 'error') return false // wait for a retry (which kicks)
   const job = await nextVoiceJob()
   if (!job) { if (library.get().voicingNow) library.set({ voicingNow: null }); return false }
   await voiceOne(job.id, job.i)
   return true
 })
+
+async function resetAudio(id) {
+  const d = getDoc(id)
+  await db.delAudio(id)
+  voicedSet(id).clear()
+  const c = cache.get(id)
+  if (c) { c.durs.fill(0); db.putDurs(id, c.durs) }
+  patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Generating audio' } : {}) })
+}
 
 async function nextVoiceJob() {
   const p = priority()
@@ -189,20 +197,21 @@ async function voiceOne(id, i) {
   const d = getDoc(id)
   const c = cache.get(id)
   const seg = c.segs[i]
-  const voice = d.voice
+  const voice = isVoice(d.voice) ? d.voice : fromKokoro(d.voice) // a device not yet updated may sync a Kokoro voice
   let rec
-  const warm = engine.get().status === 'ready' // the first call also loads the model; don't count it as speed
+  const warm = engine.get().status === 'ready' && engine.get().voice === voice // the first call also downloads the voice
   const t0 = performance.now()
   try {
     rec = await synthesize(seg.t, voice)
     if (warm && rec.dur > 0.5) recordSpeed(rec.dur / ((performance.now() - t0) / 1000))
   } catch (e) {
-    if (engine.get().status === 'error') return // engine failed to load; loop parks until retried
+    if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
     console.warn('Sentence failed, skipping:', seg.t, e)
     rec = { codec: 'none', dur: 0 }
   }
   const now = getDoc(id)
-  if (!now || now.voice !== voice || cache.get(id) !== c) return // deleted / voice changed / re-processed meanwhile
+  if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || cache.get(id) !== c) return // deleted / voice changed / re-processed meanwhile
+  rec.v = voice
   await db.putAudio(id, i, rec)
   const set = voicedSet(id)
   set.add(i)
@@ -302,6 +311,7 @@ export async function boot() {
     voicedSet(k.slice(0, j)).add(+k.slice(j + 1))
   }
   library.set({ docs: metas.sort((a, b) => b.createdAt - a.createdAt), loaded: true })
+  await retireKokoro(metas)
   persistStorage()
   kickPrep()
   kickVoice()
@@ -312,6 +322,18 @@ export async function boot() {
     else if (d.total && !d.contentVer) patch(d.id, { contentVer: d.createdAt })
   }
   startSync().catch(e => console.warn('Sync failed to start:', e))
+}
+
+// One-time move off the retired Kokoro engine: free its ~310 MB model cache, and give documents in a
+// Kokoro voice the closest Piper voice (their Kokoro audio is deleted so it regenerates, never skipped).
+async function retireKokoro(metas) {
+  globalThis.caches?.delete('transformers-cache').catch(() => {})
+  if (!isVoice(settings.get().voice)) settings.set({ voice: fromKokoro(settings.get().voice) })
+  for (const d of metas) {
+    if (isVoice(d.voice)) continue
+    await resetAudio(d.id)
+    patch(d.id, { voice: fromKokoro(d.voice) })
+  }
 }
 
 // ── sync bridge ───────────────────────────────────────────────────────────────────────
@@ -407,13 +429,14 @@ export async function addDocument(src, overrides = {}) {
 export async function changeVoice(id, voice) {
   const d = getDoc(id)
   if (!d || d.voice === voice) return
-  await db.delAudio(id)
-  voicedSet(id).clear()
-  const c = cache.get(id)
-  if (c) { c.durs.fill(0); db.putDurs(id, c.durs) }
-  patch(id, { voice, done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Generating audio' } : {}) })
+  await resetAudio(id)
+  patch(id, { voice })
   kickVoice()
 }
+
+// Stored audio is only valid for the voice it was made in (records are tagged with rec.v; untagged
+// records are from the retired Kokoro engine and never match).
+export const audioMatches = (d, rec) => !!d && rec.v === (isVoice(d.voice) ? d.voice : fromKokoro(d.voice))
 
 export function reprocess(id, changes = {}) {
   cache.delete(id)

@@ -10,6 +10,7 @@ public/pdfjs
 .wrangler
 .dev.vars
 public/dict
+public/ort
 .qa-profile
 .qa-out
 .qa-profile-prod
