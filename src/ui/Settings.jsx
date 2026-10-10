@@ -139,12 +139,17 @@ function GeminiCard() {
   )
 }
 
+// Where transformers.js (used by kokoro-js) caches model weights: separate from the library database.
+const MODEL_CACHE = 'transformers-cache'
+
 function StorageCard() {
   const [est, setEst] = useState(null)
   const [persisted, setPersisted] = useState(null)
+  const [hasModel, setHasModel] = useState(false)
   const refresh = () => {
     navigator.storage?.estimate?.().then(setEst)
     navigator.storage?.persisted?.().then(setPersisted)
+    globalThis.caches?.has(MODEL_CACHE).then(setHasModel)
   }
   useEffect(refresh, [])
   const gb = n => (n > 1073741824 ? `${(n / 1073741824).toFixed(1)} GB` : `${Math.round(n / 1048576)} MB`)
@@ -159,6 +164,12 @@ function StorageCard() {
           if (!confirm('Delete all generated audio? Your documents stay; audio regenerates when you play them.')) return
           await deleteAllAudio(); refresh(); toast('Audio deleted')
         }}>Delete generated audio</Button>
+        {hasModel && (
+          <Button kind="danger" icon="trash" onClick={async () => {
+            if (!confirm('Remove the downloaded natural voice model? Your documents and audio stay. The model downloads again only if this device uses the natural voice.')) return
+            await caches.delete(MODEL_CACHE); toast('Voice model removed'); setTimeout(() => location.reload(), 900) // also frees it from memory
+          }}>Remove voice model</Button>
+        )}
       </div>
     </Card>
   )
