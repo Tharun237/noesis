@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, toast } from '../lib/nav.js'
+import { ui, toast, goBack } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { deleteAllAudio, kickVoice } from '../lib/library.js'
 import { VOICES } from '../lib/voices.js'
 import { Button, IconButton, Segmented, Toggle, Field, Progress, inputStyle } from './kit.jsx'
 import { AccountCard } from './AccountCard.jsx'
+import { VoiceCard } from './VoiceCard.jsx'
 
 const DEVICE = { webgpu: 'WebGPU (graphics chip)', wasm: 'WebAssembly (processor)' }
 
@@ -16,19 +17,15 @@ export function Settings({ wide }) {
   return (
     <div style={{ minHeight: '100%' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, display: 'flex', alignItems: 'center', gap: 8, padding: `calc(env(safe-area-inset-top) + 8px) ${wide ? 20 : 8}px 8px`, borderBottom: `1px solid ${T.border}` }}>
-        <IconButton icon="back" label="Back" onClick={() => history.back()} />
+        <IconButton icon="back" label="Back" onClick={goBack} />
         <div style={{ fontSize: 17, fontWeight: 700 }}>Settings</div>
       </header>
       <div style={{ maxWidth: 680, margin: '0 auto', padding: wide ? '36px 24px 140px' : '20px 16px 160px', display: 'grid', gap: 18 }}>
         <AccountCard Card={Card} />
         <EngineCard />
         <GeminiCard />
+        <VoiceCard Card={Card} />
         <Card title="Listening">
-          <Field title="Default voice">
-            <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-              {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'} · grade {v.grade}</option>)}
-            </select>
-          </Field>
           <Field title={`Default speed · ${s.speed}x`}>
             <input type="range" min={0.5} max={3} step={0.05} value={s.speed} onChange={e => settings.set({ speed: +e.target.value })} style={{ accentColor: T.accent, width: '100%' }} />
           </Field>

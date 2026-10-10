@@ -7,6 +7,17 @@ import { settings } from '../lib/settings.js'
 import { library, loadDoc, toggleMark } from '../lib/library.js'
 import { player, toggle, nextSentence, prevSentence, setRate, setSleep, seekTime, timeline } from '../lib/player.js'
 import { voiceName } from '../lib/voices.js'
+import { activeEngine, pickSystemVoice, systemVoiceLabel, systemVoices } from '../lib/engine.js'
+
+const fmtWait = w => (w < 90 ? '< 2 min' : w < 3600 ? `${Math.round(w / 60)} min` : `${(w / 3600).toFixed(1)} h`)
+
+// Which voice is actually speaking on this device right now.
+function useVoiceLabel(d) {
+  const sys = useStore(settings, s => activeEngine(s) === 'system')
+  useStore(settings, s => s.systemVoice)
+  useStore(systemVoices, s => s.list)
+  return sys ? systemVoiceLabel(pickSystemVoice()) : voiceName(d.voice)
+}
 import { Icon } from './icons.jsx'
 import { IconButton, Menu, Progress, fmtTime, fmtDur } from './kit.jsx'
 import { Cover } from './Library.jsx'
@@ -28,6 +39,8 @@ export function PlayerBar({ wide, full }) {
   const t = useStore(player, s => s.t)
   const { d, c, offs } = useTimeline(id)
   const [drag, setDrag] = useState(null)
+  const gate = useStore(player, s => s.gate)
+  const voiceLabel = useVoiceLabel(d || {})
   if (!id || !d) return null
   const total = offs ? offs[offs.length - 1] : 0
   const pos = offs ? Math.min(total, offs[Math.min(i, offs.length - 1)] + t) : 0
@@ -47,7 +60,7 @@ export function PlayerBar({ wide, full }) {
     </div>
   )
 
-  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} />
+  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} />
 
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
@@ -63,13 +76,13 @@ export function PlayerBar({ wide, full }) {
             <Cover d={d} w={34} h={44} />
             <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-              <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono }}>{voiceName(d.voice)}</span>
+              <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono }}>{voiceLabel}</span>
             </span>
           </button>
         ) : <SpeedMenu />}
         <Transport />
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
-          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{fmtDur(remaining)} left</span>}
+          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{gate != null ? `Ready in ${fmtWait(gate)}` : `${fmtDur(remaining)} left`}</span>}
           {wide && <BookmarkButton d={d} i={i} />}
           {wide && <SpeedMenu />}
           <MoreMenu d={d} />
@@ -81,7 +94,7 @@ export function PlayerBar({ wide, full }) {
 
 function Transport({ size = 58 }) {
   const playing = useStore(player, s => s.playing)
-  const waiting = useStore(player, s => s.waiting)
+  const waiting = useStore(player, s => s.waiting || s.gate != null)
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
       <IconButton icon="prev" label="Previous sentence" onClick={prevSentence} size={46} iconSize={22} />
@@ -95,7 +108,7 @@ function PlayButton({ playing, waiting, size }) {
   return (
     <motion.button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} whileTap={{ scale: 0.9 }} transition={T.spring}
       style={{ width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
-      {waiting && playing && (
+      {waiting && (
         <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
       )}
@@ -146,7 +159,7 @@ function MoreMenu({ d }) {
   )
 }
 
-function MiniPlayer({ d, progress }) {
+function MiniPlayer({ d, progress, voiceLabel, gate }) {
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
       style={{ position: 'fixed', left: 8, right: 8, bottom: 'calc(env(safe-area-inset-bottom) + 8px)', zIndex: 30, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
@@ -157,7 +170,7 @@ function MiniPlayer({ d, progress }) {
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono }}>{voiceName(d.voice)} · {Math.round(progress * 100)}%</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono }}>{voiceLabel} · {gate != null ? `ready in ${fmtWait(gate)}` : `${Math.round(progress * 100)}%`}</span>
           </span>
         </button>
         <MiniTransport />
@@ -168,7 +181,7 @@ function MiniPlayer({ d, progress }) {
 
 function MiniTransport() {
   const playing = useStore(player, s => s.playing)
-  const waiting = useStore(player, s => s.waiting)
+  const waiting = useStore(player, s => s.waiting || s.gate != null)
   return (
     <>
       <PlayButton playing={playing} waiting={waiting} size={44} />

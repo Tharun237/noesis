@@ -3,6 +3,8 @@ import { db, persistStorage } from './db.js'
 import { settings, hasKey } from './settings.js'
 import { synthesize, engine } from './tts.js'
 import { toListening } from './text.js'
+import { activeEngine } from './engine.js'
+import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
 import { touch, configureSync, startSync, downloadContent, deviceName } from './sync.js'
@@ -105,7 +107,37 @@ export const kickPrep = makeLoop(async () => {
   return true
 })
 
+// How fast THIS device generates natural voice: seconds of audio per second of work (moving average).
+function recordSpeed(x) {
+  const prev = settings.get().naturalSpeed
+  settings.set({ naturalSpeed: Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 1000) / 1000 })
+}
+
+// Paper2Audio-style readiness for the natural voice: can playback from sentence `from` run to the end
+// without ever catching up with generation? With A s already generated ahead, R s still to generate and
+// generation running at r× speaking speed, playback never stalls once A ≥ R·(1−r)/r.
+// Waiting w seconds adds r·w to A and removes r·w from R, so the wait is max(0, R·(1−r)/r − A).
+export function readiness(d, c, from = 0) {
+  if (!d || !c) return { ready: false, wait: null }
+  const n = c.segs.length
+  let i = from
+  let ahead = 0
+  while (i < n && c.durs[i] > 0) ahead += c.durs[i++]
+  if (i >= n) return { ready: true, wait: 0 }
+  const est = secPerChar(d)
+  let rest = 0
+  for (let k = i; k < n; k++) rest += c.durs[k] || c.segs[k].t.length * est
+  // Safety margin is a fixed buffer, not a speed discount: discounting would turn a device that is
+  // just faster than real time (1.06×) into a "slow" one and make long books wait for nothing.
+  const wait = waitSeconds(ahead, rest, Math.max(0.02, settings.get().naturalSpeed || 1))
+  return { ready: wait <= 0, wait }
+}
+
+let lastEngine = activeEngine()
+settings.sub(() => { const e = activeEngine(); if (e !== lastEngine) { lastEngine = e; kickVoice() } })
+
 export const kickVoice = makeLoop(async () => {
+  if (activeEngine() === 'system') return false // built-in voice speaks directly; no generation, no CPU load
   if (engine.get().status === 'error') return false // wait for Settings → retry (which kicks)
   const job = await nextVoiceJob()
   if (!job) { if (library.get().voicingNow) library.set({ voicingNow: null }); return false }
@@ -139,8 +171,11 @@ async function voiceOne(id, i) {
   const seg = c.segs[i]
   const voice = d.voice
   let rec
+  const warm = engine.get().status === 'ready' // the first call also loads the model; don't count it as speed
+  const t0 = performance.now()
   try {
     rec = await synthesize(seg.t, voice)
+    if (warm && rec.dur > 0.5) recordSpeed(rec.dur / ((performance.now() - t0) / 1000))
   } catch (e) {
     if (engine.get().status === 'error') return // engine failed to load; loop parks until retried
     console.warn('Sentence failed, skipping:', seg.t, e)

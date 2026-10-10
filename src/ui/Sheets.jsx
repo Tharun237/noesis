@@ -8,6 +8,8 @@ import { library, addDocument, changeVoice, addCollection, toggleInCollection } 
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
 import { VOICES, voiceName } from '../lib/voices.js'
+import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
+import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle } from './kit.jsx'
 
@@ -83,7 +85,7 @@ function AddForm({ wide }) {
     const id = await addDocument(src, { mode, voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}) })
     if (voice !== s.voice) settings.set({ voice })
     if (mode !== s.mode && keyed) settings.set({ mode })
-    history.replaceState({ view: 'reader', docId: id }, '') // the sheet's history entry becomes the reader
+    history.replaceState({ view: 'reader', docId: id, depth: history.state?.depth || 1 }, '') // the sheet's history entry becomes the reader
     ui.set({ sheet: null, view: 'reader', docId: id })
   }
 
@@ -133,6 +135,11 @@ function AddForm({ wide }) {
           options={[{ value: 'full', label: 'Full text' }, { value: 'long', label: 'Long summary' }, { value: 'short', label: 'Short summary' }]} />
       </Field>
 
+      {activeEngine(s) === 'system' ? (
+        <Field title="Voice" hint="Your device's built-in voice: starts instantly. Change it, or switch to the natural AI voice, in Settings.">
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: T.sub }}>{systemVoiceLabel(pickSystemVoice())}</div>
+        </Field>
+      ) : (
       <Field title="Voice">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select value={voice} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
@@ -141,6 +148,7 @@ function AddForm({ wide }) {
           <PreviewButton voice={voice} busy={busy} setBusy={setBusy} />
         </div>
       </Field>
+      )}
 
       {keyed && aiApplies && (
         <Toggle checked={ai} onChange={setAi} labelText="AI narration"
@@ -156,8 +164,19 @@ function AddForm({ wide }) {
 function VoicePicker() {
   const docId = useStore(ui, s => s.docId)
   const d = useStore(library, s => s.docs.find(x => x.id === docId))
+  const sys = useStore(settings, s => activeEngine(s) === 'system')
   const [busy, setBusy] = useState(null)
   if (!d) return null
+  if (sys) {
+    return (
+      <div style={{ padding: '20px 20px 26px', display: 'grid', gap: 14 }}>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>Voice</div>
+        <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>You're using your device's built-in voice. The change applies immediately, from the sentence you're on.</div>
+        <SystemVoiceSelect />
+        <Button onClick={() => { settings.set({ voiceEngine: 'natural' }); closeSheet() }}>Switch to the natural AI voice</Button>
+      </div>
+    )
+  }
   return (
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>

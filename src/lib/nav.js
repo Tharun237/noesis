@@ -17,21 +17,30 @@ export const ui = createStore({
   toast: null,
 })
 
-history.replaceState({ view: restored.view, docId: restored.docId || null }, '')
+history.replaceState({ view: restored.view, docId: restored.docId || null, depth: restored.depth || 0 }, '')
 
 export function go(view, docId = null) {
   const s = ui.get()
   if (s.view === view && s.docId === docId) return
-  history.pushState({ view, docId }, '')
+  history.pushState({ view, docId, depth: depth() + 1 }, '')
   ui.set({ view, docId, sheet: null })
 }
 
 export function openSheet(sheet, extra = {}) {
-  history.pushState({ ...history.state, sheet }, '')
+  history.pushState({ ...history.state, sheet, depth: depth() + 1 }, '')
   ui.set({ sheet, ...extra })
 }
 
 export const closeSheet = () => { if (ui.get().sheet) history.back() }
+
+// How many in-app pages sit behind this one. Back must never depend on browser history the app didn't
+// create (opened straight into a book, restored after an update, arrived from a share or a link).
+const depth = () => history.state?.depth || 0
+export function goBack() {
+  if (depth() > 0) return history.back()
+  history.replaceState({ view: 'library', docId: null, depth: 0 }, '')
+  ui.set({ view: 'library', docId: null, sheet: null })
+}
 
 addEventListener('popstate', e => {
   const s = e.state || {}

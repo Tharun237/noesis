@@ -3,19 +3,30 @@ import { settings } from './settings.js'
 import { db } from './db.js'
 import { recordToBlob } from './tts.js'
 import { VISUAL_KINDS } from './text.js'
-import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos } from './library.js'
+import { activeEngine, pickSystemVoice } from './engine.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness } from './library.js'
 import { toast } from './nav.js'
 import { flushNow } from './sync.js'
 
-// `playing` is the listener's intent. `waiting` = the next sentence isn't voiced yet (we resume on arrival).
-export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null })
+// Two ways to speak, chosen per device (engine.js):
+//   natural — pre-generated Kokoro audio per sentence, played through an <audio> element
+//   system  — the device's built-in TTS, spoken live sentence by sentence (no generation, no CPU load)
+//
+// `playing` is the listener's intent. `waiting` = natural audio for the next sentence isn't generated yet.
+// `gate` = seconds until the natural voice can play to the end without stalling (null = no gate).
+// `word` = character offset of the word being spoken (built-in voice reports exact word boundaries).
+export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null, gate: null, word: 0 })
 
 const audio = new Audio()
 audio.preload = 'auto'
 let current = null // { i, url }
 let next = null // prefetched { i, url }
 let token = 0
+let utter = 0
 let posTimer = null
+let pendingStart = false // play was pressed while the natural voice was still preparing
+
+const system = () => activeEngine() === 'system'
 
 setPriority(() => { const p = player.get(); return p.id ? { id: p.id, i: p.i } : null })
 
@@ -44,35 +55,58 @@ function skipVisual(c, i, dir) {
   return i
 }
 
-// Position = sentence index + fraction through it, so another device lands on the same word
-// even with a different voice or speed.
-function positionNow() {
-  const { id, i } = player.get()
-  const f = audio.duration > 0 && current?.i === i ? Math.min(0.999, audio.currentTime / audio.duration) : 0
-  return id && { id, p: { pos: i, posF: Math.round(f * 1000) / 1000, lastPlayed: Date.now() } }
+// Swapping sentences must not pause the <audio> element (that would flash "paused" on every seek).
+function cancelSpeech() {
+  utter++
+  if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
 }
+function stopOutput() {
+  cancelSpeech()
+  audio.pause()
+}
+
+// Position = sentence index + fraction through it, so another device lands on the same word
+// even with a different voice, engine or speed.
+function fraction() {
+  const p = player.get()
+  if (system()) {
+    const len = segText(p.i).length
+    return len ? Math.min(0.999, p.word / len) : 0
+  }
+  return audio.duration > 0 && current?.i === p.i ? Math.min(0.999, audio.currentTime / audio.duration) : 0
+}
+let doc = null // loaded content of the current document (for synchronous lookups)
+const segText = i => doc?.segs[i]?.t || ''
+
 function savePosition(now = false) {
   clearTimeout(posTimer)
-  const save = () => { const x = positionNow(); if (x) patch(x.id, x.p) }
+  const save = () => {
+    const { id, i } = player.get()
+    if (id) patch(id, { pos: i, posF: Math.round(fraction() * 1000) / 1000, lastPlayed: Date.now() })
+  }
   now ? save() : (posTimer = setTimeout(save, 1200))
 }
 addEventListener('pagehide', () => savePosition(true))
 document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && savePosition(true))
 
-async function load(i, { autoplay = player.get().playing, offset = 0, dir = 1 } = {}) {
+async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, dir = 1 } = {}) {
   const { id } = player.get()
   const c = await loadDoc(id)
   if (!c) return
+  doc = c
   i = skipVisual(c, Math.max(0, i), dir)
   if (i >= c.segs.length) return finish()
   const my = ++token
-  player.set({ i, t: offset, waiting: false })
+  cancelSpeech()
+  player.set({ i, t: offset, waiting: false, word: from })
   savePosition()
+  if (system()) { audio.pause(); return speak(c, i, autoplay, from) }
+
   const url = await urlFor(id, i)
   if (my !== token) { if (url && url !== 'skip') URL.revokeObjectURL(url); return }
   if (url === 'skip') return load(i + dir, { autoplay, dir })
   if (!url) {
-    // Not voiced yet: voicing follows the playhead, so this sentence is generated next.
+    // Not generated yet: generation follows the playhead, so this sentence is made next.
     audio.pause()
     player.set({ waiting: true })
     kickVoice()
@@ -87,31 +121,88 @@ async function load(i, { autoplay = player.get().playing, offset = 0, dir = 1 } 
   prefetch(id, skipVisual(c, i + 1, 1))
 }
 
+// ── built-in voice ───────────────────────────────────────────────────────────────
+function speak(c, i, autoplay, from = 0) {
+  const my = ++utter
+  if (!autoplay) return
+  const full = c.segs[i].t
+  const text = full.slice(from)
+  if (!text.trim()) return sentenceEnded()
+  const u = new SpeechSynthesisUtterance(text)
+  const voice = pickSystemVoice()
+  if (voice) { u.voice = voice; u.lang = voice.lang }
+  u.rate = player.get().rate
+  const est = secPerChar(getDoc(player.get().id) || { vChars: 0 })
+  u.onboundary = e => {
+    if (my !== utter || e.name === 'sentence') return
+    const word = from + e.charIndex
+    player.set({ word, t: word * est })
+    sleepCheck()
+  }
+  u.onend = () => { if (my === utter) sentenceEnded() }
+  u.onerror = e => {
+    if (my !== utter || e.error === 'interrupted' || e.error === 'canceled') return
+    console.warn('Built-in voice error:', e.error)
+    if (e.error === 'not-allowed') return player.set({ playing: false })
+    sentenceEnded()
+  }
+  speechSynthesis.speak(u)
+  player.set({ playing: true })
+}
+
+async function sentenceEnded() {
+  const p = player.get()
+  const c = await loadDoc(p.id)
+  if (!c) return
+  if (p.sleep?.chapter && c.segs[p.i + 1]?.k === 'h') { player.set({ sleep: null }); return pause() }
+  if (sleepCheck()) return
+  load(p.i + 1, { autoplay: true })
+}
+
+function sleepCheck() {
+  const { sleep } = player.get()
+  if (sleep?.until && Date.now() >= sleep.until) { player.set({ sleep: null }); pause(); return true }
+  return false
+}
+
 function finish() {
   const { id } = player.get()
-  audio.pause()
+  stopOutput()
   player.set({ playing: false, waiting: false })
   if (id) patch(id, { finished: true, pos: 0 })
 }
 
-audio.addEventListener('ended', async () => {
-  const p = player.get()
-  const c = await loadDoc(p.id)
-  if (p.sleep?.chapter && c.segs[p.i + 1]?.k === 'h') { player.set({ sleep: null }); return pause() }
-  load(p.i + 1)
-})
+audio.addEventListener('ended', sentenceEnded)
 audio.addEventListener('timeupdate', () => {
-  const p = player.get()
   player.set({ t: audio.currentTime })
-  if (p.sleep?.until && Date.now() >= p.sleep.until) { player.set({ sleep: null }); pause() }
+  sleepCheck()
   updatePositionState()
 })
-audio.addEventListener('pause', () => { if (!audio.ended && !player.get().waiting && player.get().playing && audio.src) player.set({ playing: false }) })
+audio.addEventListener('pause', () => { if (!audio.ended && !player.get().waiting && player.get().playing && audio.src && !system()) player.set({ playing: false }) })
 audio.addEventListener('play', () => player.set({ playing: true }))
 
-onSegment((id, i) => {
+// ── natural voice readiness gate (like Paper2Audio: don't start what would stall) ─────
+async function gateCheck() {
   const p = player.get()
-  if (p.waiting && p.id === id && p.i === i) load(i, { autoplay: p.playing })
+  if (system()) return true
+  const d = getDoc(p.id)
+  const c = await loadDoc(p.id)
+  const r = readiness(d, c, p.i)
+  player.set({ gate: r.ready ? null : r.wait })
+  return r.ready
+}
+
+const fmtWait = s => (s < 90 ? 'under 2 minutes' : s < 3600 ? `about ${Math.round(s / 60)} minutes` : `about ${(s / 3600).toFixed(1)} hours`)
+
+onSegment(async (id, i) => {
+  const p = player.get()
+  if (p.id !== id) return
+  if (p.waiting && p.i === i) return load(i, { autoplay: p.playing })
+  if (pendingStart && await gateCheck()) {
+    pendingStart = false
+    toast('The natural voice is ready')
+    play()
+  }
 })
 
 // ── public controls ──────────────────────────────────────────────────────────────
@@ -119,30 +210,52 @@ export async function open(id, { at, autoplay = true } = {}) {
   const d = getDoc(id)
   if (!d) return
   revoke(next); next = null
+  pendingStart = false
   const same = player.get().id === id
-  player.set({ id, playing: autoplay })
-  heard = { id, voice: d.voice }
+  player.set({ id, playing: false, gate: null })
+  heard = { id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine() }
   setSession(d)
   const c = await loadDoc(id)
   if (!c) return // still being prepared — the reader shows progress
+  doc = c
   const start = at ?? (same ? player.get().i : d.finished ? 0 : d.pos || 0)
   if (d.finished && at == null) patch(id, { finished: false })
-  const resume = at == null && !same && !d.finished && start === d.pos && d.posF && c.durs[start]
-  load(start, { autoplay, offset: resume ? d.posF * c.durs[start] : 0 })
+  const resume = at == null && !same && !d.finished && start === d.pos && d.posF
+  await load(start, {
+    autoplay: false,
+    offset: resume && c.durs[start] ? d.posF * c.durs[start] : 0,
+    from: resume && system() ? wordStart(c.segs[start].t, d.posF) : 0,
+  })
+  if (autoplay) play()
 }
 
-export function play() {
+// Character offset of the word at a fraction through a sentence (resume a built-in voice mid-sentence).
+const wordStart = (t, f) => { const at = Math.floor(t.length * f); const k = t.lastIndexOf(' ', at); return k < 0 ? 0 : k + 1 }
+
+export async function play() {
   const p = player.get()
   if (!p.id) return
-  player.set({ playing: true })
+  if (!(await gateCheck())) {
+    pendingStart = true
+    player.set({ playing: false })
+    kickVoice()
+    const wait = player.get().gate
+    toast(`The natural voice is still being prepared on this device: ready in ${fmtWait(wait)}. It starts by itself.`,
+      typeof speechSynthesis !== 'undefined' ? { label: 'Use built-in voice now', run: () => settings.set({ voiceEngine: 'system' }) } : null)
+    return
+  }
+  pendingStart = false
+  player.set({ playing: true, gate: null })
+  if (system()) return load(p.i, { autoplay: true, from: p.word })
   if (p.waiting) return kickVoice()
   if (!audio.src || current?.i !== p.i) return load(p.i, { autoplay: true })
   audio.play().catch(() => player.set({ playing: false }))
 }
 
 export function pause() {
-  player.set({ playing: false })
-  audio.pause()
+  pendingStart = false
+  player.set({ playing: false, gate: null })
+  stopOutput()
   savePosition(true)
   flushNow()
 }
@@ -152,37 +265,37 @@ onRemotePos((id, v) => {
   const p = player.get()
   if (p.id !== id || v.pos === p.i) return
   const from = v.dev ? `from your ${v.dev}` : 'from your other device'
-  if (p.playing) {
-    toast(`Further along ${from}`, { label: 'Jump there', run: () => loadDoc(id).then(c => load(v.pos, { offset: (v.posF || 0) * (c.durs[v.pos] || 0) })) })
-  } else {
-    loadDoc(id).then(c => load(v.pos, { autoplay: false, offset: (v.posF || 0) * (c.durs[v.pos] || 0) }))
-    toast(`Synced ${from}`)
-  }
+  const jump = autoplay => loadDoc(id).then(c => load(v.pos, { autoplay, offset: (v.posF || 0) * (c.durs[v.pos] || 0), from: wordStart(c.segs[v.pos].t, v.posF || 0) }))
+  if (p.playing) toast(`Further along ${from}`, { label: 'Jump there', run: () => jump(true) })
+  else { jump(false); toast(`Synced ${from}`) }
 })
 
-// A doc deleted on another device disappears here too: stop playing it.
-// A voice change (here or synced from another device) takes effect immediately: drop the sentence
-// prefetched in the old voice and restart the current sentence, which voicing regenerates first.
-let heard = { id: null, voice: null }
-library.sub(() => {
+// Voice or engine changes (here, in Settings, or synced) take effect at once: restart the current
+// sentence in the new voice. A doc deleted on another device stops playing here.
+let heard = { id: null, voice: null, sys: null, engine: null }
+function voiceChanged() {
   const p = player.get()
   if (!p.id) return
   const d = getDoc(p.id)
   if (!d) return stopIf(p.id)
-  if (heard.id === d.id && heard.voice !== d.voice) {
-    revoke(next)
-    next = null
-    if (p.playing || p.waiting) load(p.i, { autoplay: true })
-    else { revoke(current); current = null; audio.removeAttribute('src') }
-  }
-  heard = { id: d.id, voice: d.voice }
-})
+  const now = { id: d.id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine() }
+  const changed = heard.id === now.id && (heard.voice !== now.voice || heard.sys !== now.sys || heard.engine !== now.engine)
+  heard = now
+  if (!changed) return
+  revoke(next)
+  next = null
+  if (p.playing || p.waiting) { stopOutput(); play() }
+  else { stopOutput(); revoke(current); current = null; audio.removeAttribute('src') }
+}
+library.sub(voiceChanged)
+settings.sub(voiceChanged)
 
-export const toggle = () => (player.get().playing ? pause() : play())
+export const toggle = () => (player.get().playing || pendingStart ? pause() : play())
 export const nextSentence = () => load(player.get().i + 1, { dir: 1 })
 export const prevSentence = () => {
   const p = player.get()
-  load(audio.currentTime > 2.5 && !p.waiting ? p.i : p.i - 1, { dir: -1 })
+  const into = system() ? p.word > 12 : audio.currentTime > 2.5 && !p.waiting
+  load(into ? p.i : p.i - 1, { dir: -1 })
 }
 export const seekTo = i => load(i)
 
@@ -190,22 +303,24 @@ export function setRate(r) {
   const rate = Math.round(Math.min(4, Math.max(0.5, r)) * 100) / 100
   audio.playbackRate = rate
   player.set({ rate })
+  if (system() && player.get().playing) load(player.get().i, { autoplay: true, from: player.get().word }) // utterance rate is fixed once speaking
 }
 
 export const setSleep = s => player.set({ sleep: s })
 
-// Sub-second clock for word highlighting (timeupdate only fires ~4×/s).
+// Sub-second clock for word highlighting with the natural voice (timeupdate only fires ~4×/s).
 export const audioClock = () => audio.currentTime
 
 export function stopIf(id) {
   if (player.get().id !== id) return
-  audio.pause()
+  stopOutput()
   audio.removeAttribute('src')
   revoke(current); revoke(next); current = next = null
-  player.set({ id: null, playing: false, waiting: false, i: 0, t: 0 })
+  pendingStart = false
+  player.set({ id: null, playing: false, waiting: false, i: 0, t: 0, gate: null, word: 0 })
 }
 
-// Global timeline: voiced sentences use their real duration, the rest an estimate learned on this device.
+// Global timeline: generated sentences use their real duration, the rest an estimate learned on this device.
 export function timeline(d, c) {
   const est = secPerChar(d)
   const offs = new Float64Array(c.segs.length + 1)

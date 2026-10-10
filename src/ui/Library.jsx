@@ -8,6 +8,7 @@ import { library, docDuration, reprocess, deleteDoc, patch, exportTranscript, ex
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { voiceName } from '../lib/voices.js'
+import { activeEngine } from '../lib/engine.js'
 import { Icon, Logo } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur } from './kit.jsx'
 import { SAMPLE } from './sample.js'
@@ -232,8 +233,10 @@ export function Cover({ d, w = 56, h = 74 }) {
 
 export function StatusLine({ d }) {
   const now = useStore(library, s => s.voicingNow)
+  const sys = useStore(settings, s => activeEngine(s) === 'system')
   if (d.status === 'error') return <span style={{ color: T.danger }}>{d.error || 'Failed'}</span>
   if (d.status === 'ready') return null
+  if (sys && d.status === 'voicing') return null // built-in voice: playable as soon as the text is ready
   if (d.status === 'voicing' && now !== d.id) {
     const pct = Math.floor((d.done / Math.max(1, d.total)) * 100)
     return <span style={{ color: T.sub }}>In line for audio{pct ? ` · ${pct}% ready` : ''}</span>

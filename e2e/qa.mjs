@@ -164,7 +164,7 @@ await step('change voice mid-listening: same sentence restarts in the new voice'
   await page.getByRole('button', { name: /^Michael/ }).click()
   await until(async () => (await docBy('On Listening')).voice === 'am_michael', 3000, 'voice saved')
   // The old voice must stop at once, and the SAME sentence must restart in the new voice.
-  await until(async () => { const s = await playerState(); return s.waiting || s.clock < 0.3 }, 3000, 'old voice to stop immediately')
+  await until(async () => { const s = await playerState(); return s.waiting || s.gate != null || !s.playing || s.clock < 0.3 }, 3000, 'old voice to stop immediately')
   const resumed = await until(async () => {
     const s = await playerState()
     return s.playing && !s.waiting && s.clock > 0.2 && s
@@ -218,6 +218,7 @@ await step('reading settings: switch to DM Sans', async () => {
 })
 
 await step('keyboard: space toggles playback', async () => {
+  await until(async () => (await docBy('On Listening')).status === 'ready', 120_000, 'audio regenerated after the voice change')
   await page.evaluate(() => document.activeElement?.blur())
   await page.keyboard.press('Space')
   await until(async () => (await playerState()).playing, 5000, 'play via space')
@@ -357,6 +358,72 @@ await step('settings: dev sign-in turns on sync', async () => {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await until(async () => (await app('m.sync.syncState.get().status')) === 'idle' && (await app('!!m.sync.account.get().user')), 15_000, 'synced')
   await page.getByRole('button', { name: 'Back', exact: true }).click()
+})
+
+// ── built-in voice (phones), readiness gate, back navigation ──────────────────────
+const traction = () => app("m.lib.library.get().docs.find(d => d.title.startsWith('Traction'))")
+const openDoc = async prefix => {
+  await page.evaluate(() => history.state.view !== 'library' && document.querySelector('button[aria-label="Back to library"]')?.click())
+  await sleep(500)
+  await page.locator('[role=button]').filter({ hasText: prefix }).first().click()
+  await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
+}
+
+await step('settings: switch to the built-in voice', async () => {
+  await page.getByRole('button', { name: 'Settings' }).first().click().catch(() => {})
+  await page.getByRole('tab', { name: 'Built-in' }).click()
+  expect(await app("m.settings.settings.get().voiceEngine") === 'system', 'engine not system')
+  await page.getByRole('button', { name: 'Back', exact: true }).click()
+})
+
+await step('built-in voice plays a book with exact word highlighting', async () => {
+  await openDoc('Traction')
+  await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
+  await until(async () => (await playerState()).playing && await page.evaluate(() => speechSynthesis.speaking), 8000, 'speech to start')
+  const words = new Set()
+  for (let k = 0; k < 12; k++) { words.add((await playerState()).word); await sleep(250) }
+  expect(words.size >= 3, `word position barely moved: ${[...words]}`)
+  const lit = await page.evaluate(() => [...document.querySelectorAll('[data-i] > span')].find(s => s.style.color)?.textContent)
+  expect(!!lit, 'no word highlighted')
+  return `${words.size} word positions, lit "${lit}"`
+})
+
+await step('built-in voice: next sentence and pause', async () => {
+  const a = (await playerState()).i
+  await click('button', 'Next sentence')
+  await until(async () => (await playerState()).i === a + 1 && await page.evaluate(() => speechSynthesis.speaking), 6000, 'next sentence speaking')
+  await click('button', 'Pause')
+  await until(async () => !(await page.evaluate(() => speechSynthesis.speaking)), 4000, 'speech to stop')
+})
+
+await step('no natural-voice generation while the built-in voice is active', async () => {
+  const before = (await traction()).done
+  await sleep(8000)
+  const after = (await traction()).done
+  expect(after === before, `natural generation still running: ${before} → ${after}`)
+})
+
+await step('back from a reader restored with no page behind it', async () => {
+  const id = (await traction()).id
+  await page.evaluate(id => history.replaceState({ view: 'reader', docId: id, depth: 0 }, ''), id)
+  await page.reload()
+  await until(() => page.evaluate(() => history.state?.view === 'reader' && !!document.querySelector('button[aria-label="Back to library"]')), 8000, 'restored reader')
+  await page.getByRole('button', { name: 'Back to library' }).click()
+  await until(() => page.evaluate(() => history.state?.view === 'library' && document.body.innerText.includes('Queue')), 4000, 'library after back')
+})
+
+await step('natural voice: readiness gate instead of stalling', async () => {
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('noesis.settings.v1')); s.voiceEngine = 'natural'; s.naturalSpeed = 0.05; localStorage.setItem('noesis.settings.v1', JSON.stringify(s)) })
+  await page.reload()
+  await openDoc('Traction')
+  await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
+  await until(() => page.getByText(/still being prepared on this device/).isVisible(), 5000, 'gate message')
+  const s1 = await playerState()
+  expect(!s1.playing && s1.gate > 0, `expected gated, got playing=${s1.playing} gate=${s1.gate}`)
+  await page.getByRole('button', { name: 'Use built-in voice now' }).click()
+  await until(async () => (await playerState()).playing && await page.evaluate(() => speechSynthesis.speaking), 8000, 'built-in voice to take over')
+  await click('button', 'Pause')
+  return `gated with ~${Math.round(s1.gate / 60)} min to wait, switched to built-in instantly`
 })
 
 await step('mobile layout: no horizontal overflow, mini player', async () => {

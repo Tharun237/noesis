@@ -2,10 +2,11 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go } from '../lib/nav.js'
-import { library, loadDoc, docDuration, reprocess } from '../lib/library.js'
+import { ui, go, goBack } from '../lib/nav.js'
+import { library, loadDoc, docDuration, reprocess, readiness } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
+import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine } from '../lib/tts.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { voiceName } from '../lib/voices.js'
@@ -77,7 +78,7 @@ export function Reader({ wide }) {
     <div onWheel={() => { userScroll.current = Date.now() }} onTouchMove={() => { userScroll.current = Date.now() }} style={{ minHeight: '100%' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, borderBottom: `1px solid ${T.border}`, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: HEADER_H - 1, padding: `0 ${wide ? 16 : 6}px` }}>
-          <IconButton icon="back" label="Back to library" onClick={() => history.back()} />
+          <IconButton icon="back" label="Back to library" onClick={goBack} />
           {wide && headings.length > 1 && <IconButton icon="toc" label={tocOpen ? 'Hide contents' : 'Show contents'} active={tocOpen} onClick={() => settings.set({ tocOpen: !tocOpen })} />}
           <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 6px' }}>{d.title}</div>
           <IconButton icon="search" label="Find in document" active={searching} onClick={() => setSearching(!searching)} />
@@ -114,7 +115,7 @@ export function Reader({ wide }) {
               </div>
             </div>
 
-            {d.status !== 'ready' && <Preparing d={d} />}
+            {d.status !== 'ready' && <Preparing d={d} doc={doc} pos={active >= 0 ? active : d.pos || 0} />}
             {(d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
 
             {doc && (
@@ -174,30 +175,51 @@ function DocNote({ d }) {
   )
 }
 
-function Preparing({ d }) {
+const fmtWait = w => (w < 90 ? 'under 2 minutes' : w < 3600 ? `about ${Math.round(w / 60)} minutes` : `about ${(w / 3600).toFixed(1)} hours`)
+
+function Preparing({ d, doc, pos }) {
   const eng = useStore(engine, s => s.status)
   const loaded = useStore(engine, s => s.loaded)
   const total = useStore(engine, s => s.total)
+  const sys = useStore(settings, s => activeEngine(s) === 'system')
+  const speed = useStore(settings, s => s.naturalSpeed)
+  const textReady = d.status === 'voicing' || d.status === 'ready'
+  if (sys && textReady) return null // the built-in voice speaks straight away: nothing to prepare
   const downloading = d.status === 'voicing' && eng !== 'ready'
   const pct = downloading ? (total ? loaded / total : 0) : d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
+  const ready = d.status === 'voicing' && !downloading ? readiness(d, doc, pos) : null
+  const slow = speed > 0 && speed < 1 && hasSystemVoice()
   return (
     <div style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${d.status === 'error' || eng === 'error' ? T.danger : T.border}`, background: T.surface, display: 'grid', gap: 12, marginBottom: 32 }}>
       <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
         {downloading
           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: eng === 'error' ? T.danger : T.accent }}>
               <Pulse color={eng === 'error' ? T.danger : T.accent} />
-              {eng === 'error' ? 'The voice engine could not start' : `Downloading the voice model${total ? ` · ${Math.floor(pct * 100)}%` : ''}`}
+              {eng === 'error' ? 'The voice engine could not start' : `Downloading the natural voice${total ? ` · ${Math.floor(pct * 100)}%` : ''}`}
             </span>
-          : <StatusLine d={d} />}
+          : ready
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.ok : T.accent }}>
+                {ready.ready ? <Icon name="check" size={15} /> : <Pulse />}
+                {ready.ready ? 'Ready to play' : `Preparing the natural voice · ready in ${fmtWait(ready.wait)}`}
+              </span>
+            : <StatusLine d={d} />}
       </div>
       {d.status !== 'error' && <Progress value={pct} />}
       <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
         {downloading
           ? eng === 'error' ? 'Check your connection, then retry from Settings.' : 'One time only. After this, Noesis voices documents offline on this device.'
-          : d.status === 'voicing'
-            ? 'You can press play now. Audio is generated ahead of where you are listening, and saved for offline use.'
+          : ready
+            ? ready.ready
+              ? `Generation keeps going in the background and stays ahead of you. ${Math.floor(pct * 100)}% generated.`
+              : `Noesis prepares enough audio to play to the end without pauses (this device generates at ${speed ? speed.toFixed(2) : '…'}× speaking speed). Play starts by itself when ready.`
             : d.status === 'error' ? 'Use the menu above to try again.' : 'Preparing the text. This page fills in when it is ready.'}
       </div>
+      {ready && !ready.ready && slow && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Don't want to wait? Your device's built-in voice starts instantly.</span>
+          <Button kind="accent" onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -214,9 +236,14 @@ function wordWeights(text) {
 
 function ActiveSentence({ i, text, dur, words }) {
   const { ws, ends } = useMemo(() => wordWeights(text), [text])
+  const starts = useMemo(() => { let at = 0; return ws.map(x => { const s0 = at; at += x.length + 1; return s0 }) }, [ws])
   const [w, setW] = useState(-1)
+  // Built-in voice: exact word positions reported by the speech engine.
+  const sys = useStore(settings, s => activeEngine(s) === 'system')
+  const spoken = useStore(player, s => s.word)
+  const sysWord = sys ? Math.max(0, starts.findLastIndex(x => x <= spoken)) : -1
   useEffect(() => {
-    if (!words || !dur) return
+    if (sys || !words || !dur) return
     let raf
     const tick = () => {
       const f = (audioClock() - 0.06) / Math.max(0.2, dur - 0.18) // Kokoro adds ~60 ms lead-in and ~120 ms tail
@@ -225,10 +252,12 @@ function ActiveSentence({ i, text, dur, words }) {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [words, dur, ends])
+  }, [sys, words, dur, ends])
+  const lit = sys ? sysWord : w
+  const showWords = words && (sys || dur)
   return (
     <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: T.accentSoft, color: T.text, boxShadow: `0 0 0 2px ${T.accentSoft}` }}>
-      {words && dur ? ws.map((x, k) => <span key={k} style={{ color: k === w ? T.accent : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
+      {showWords ? ws.map((x, k) => <span key={k} style={{ color: k === lit ? T.accent : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
     </span>
   )
 }
