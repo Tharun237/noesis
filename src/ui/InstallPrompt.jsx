@@ -23,7 +23,7 @@ const iosSafari = () => {
 }
 const snoozed = () => { try { return Date.now() - +localStorage.getItem(DISMISS_KEY) < SNOOZE } catch { return false } }
 
-export function InstallPrompt({ wide, full }) {
+export function InstallPrompt({ wide, full, lift = 0 }) {
   const evt = useStore(ui, s => s.installEvt)
   const installed = useStore(ui, s => s.installed)
   const sheet = useStore(ui, s => s.sheet)
@@ -55,7 +55,7 @@ export function InstallPrompt({ wide, full }) {
           initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }} transition={T.spring}
           style={{
             position: 'fixed', zIndex: 45, left: 12, right: 12, margin: '0 auto', maxWidth: 440,
-            bottom: `calc(${playerHeight(wide, full, active) + 14}px + env(safe-area-inset-bottom))`,
+            bottom: `calc(${playerHeight(wide, full, active) + lift + 14}px + env(safe-area-inset-bottom))`,
             display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px 14px 14px', borderRadius: T.r.lg,
             background: T.bg, border: `1px solid ${T.borderHi}`, boxShadow: '0 18px 50px rgba(0,0,0,0.85)',
           }}>

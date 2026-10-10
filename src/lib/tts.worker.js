@@ -17,34 +17,51 @@ ort.env.wasm.numThreads = 1
 
 let voice = null // { id, cfg, session }
 
-// Cached fetch, reporting download progress (bytes) for the model file.
-async function fetchCached(url, onBytes) {
+// Small cached fetch (voice config).
+async function fetchCached(url) {
   const cache = await caches.open(CACHE)
   const hit = await cache.match(url)
   if (hit) return hit
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Voice download failed (${res.status})`)
+  await cache.put(url, res.clone())
+  return res
+}
+
+// The voice model (~63 MB), as bytes. Downloading streams one copy to the cache while the other fills a single
+// preallocated buffer: holding the chunks, a Blob and its copy at once tripled memory use on phones.
+// Progress is reported at most ~8 times a second.
+async function fetchModel(url) {
+  const cache = await caches.open(CACHE)
+  const hit = await cache.match(url)
+  if (hit) return hit.arrayBuffer()
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Voice download failed (${res.status})`)
   const total = +res.headers.get('content-length') || 0
+  const stored = cache.put(url, res.clone())
   const reader = res.body.getReader()
-  const parts = []
+  let buf = new Uint8Array(total || 80 << 20)
   let loaded = 0
+  let told = 0
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
-    parts.push(value)
+    if (loaded + value.length > buf.length) { const grown = new Uint8Array(Math.max(buf.length * 2, loaded + value.length)); grown.set(buf); buf = grown }
+    buf.set(value, loaded)
     loaded += value.length
-    onBytes?.(loaded, total)
+    if (performance.now() - told > 120) { told = performance.now(); postMessage({ type: 'progress', loaded, total }) }
   }
-  const out = new Response(new Blob(parts))
-  await cache.put(url, out.clone())
-  return out
+  postMessage({ type: 'progress', loaded, total: total || loaded })
+  await stored
+  return loaded === buf.length ? buf.buffer : buf.slice(0, loaded).buffer
 }
 
 async function load(id) {
   if (voice?.id === id) return voice
   const url = voiceUrl(id)
   const cfg = await (await fetchCached(url + '.json')).json()
-  const model = await (await fetchCached(url, (loaded, total) => postMessage({ type: 'progress', loaded, total }))).arrayBuffer()
+  const model = await fetchModel(url)
+  postMessage({ type: 'opening' }) // downloaded; the engine now builds the voice (a few seconds on a phone)
   voice = null // release the previous voice before creating the next session
   voice = { id, cfg, session: await ort.InferenceSession.create(model, { executionProviders: ['wasm'] }) }
   return voice

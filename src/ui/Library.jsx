@@ -4,9 +4,9 @@ import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection, kickVoice } from '../lib/library.js'
+import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
-import { engine, loadEngine } from '../lib/tts.js'
+import { engine } from '../lib/tts.js'
 import { voiceName, VOICES } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
@@ -49,7 +49,6 @@ export function Library({ wide }) {
       {wide && <Sidebar />}
       <main style={{ flex: 1, minWidth: 0, padding: wide ? '28px 36px 40px' : '0 0 24px' }}>
         {wide ? <DesktopHeader summary={summary} /> : <MobileHeader summary={summary} />}
-        <EngineNotice />
         {loaded && total === 0 ? <EmptyState wide={wide} /> : (
           <>
             <div style={{
@@ -271,6 +270,7 @@ export function Cover({ d, w = 56, h = 74 }) {
 export function StatusLine({ d }) {
   const now = useStore(library, s => s.voicingNow)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
+  const voiceLoading = useStore(engine, s => s.status === 'loading')
   if (d.status === 'error') return <span style={{ color: T.danger }}>{d.error || 'Failed'}</span>
   if (d.status === 'ready') return null
   if (sys && d.status === 'voicing') return null // built-in voice: playable as soon as the text is ready
@@ -279,7 +279,7 @@ export function StatusLine({ d }) {
     return <span style={{ color: T.sub }}>In line for audio{pct ? ` · ${pct}% ready` : ''}</span>
   }
   const pct = d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
-  const text = d.status === 'voicing' ? 'Generating audio' : d.stage || 'Waiting'
+  const text = d.status === 'voicing' ? (voiceLoading ? 'Waiting for the voice' : 'Generating audio') : d.stage || 'Waiting'
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}>
       <Pulse /> {text}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}{d.status === 'voicing' && <TimeLeft d={d} />}
@@ -347,27 +347,6 @@ export function docMenu(d) {
     '-',
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) go('library') } } },
   ]
-}
-
-function EngineNotice() {
-  const e = useStore(engine, s => s.status)
-  const loaded = useStore(engine, s => s.loaded)
-  const total = useStore(engine, s => s.total)
-  const error = useStore(engine, s => s.error)
-  if (e !== 'loading' && e !== 'error') return null
-  const mb = n => (n / 1048576).toFixed(0)
-  return (
-    <div style={{ margin: '0 16px 16px', padding: 16, borderRadius: T.r.lg, border: `1px solid ${e === 'error' ? T.danger : T.border}`, background: T.surface, display: 'grid', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 600 }}>
-        {e === 'loading' ? <Pulse /> : <Icon name="close" size={16} style={{ color: T.danger }} />}
-        <span style={{ flex: 1 }}>{e === 'loading' ? 'Downloading the voice model. One time only, then it works offline.' : 'The voice engine could not start'}</span>
-        {e === 'loading' && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub }}>{mb(loaded)}/{mb(total)} MB</span>}
-        {e === 'error' && <Button onClick={() => loadEngine().then(kickVoice).catch(() => {})} icon="refresh">Retry</Button>}
-      </div>
-      {e === 'loading' && <Progress value={total ? loaded / total : 0} />}
-      {e === 'error' && <div style={{ fontFamily: T.mono, fontSize: 12, color: T.sub }}>{error}</div>}
-    </div>
-  )
 }
 
 const STATS = [['₹0', 'Free forever'], ['100%', 'On your device'], [String(VOICES.length), 'Natural voices']]

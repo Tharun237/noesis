@@ -2,7 +2,7 @@ import { createStore, uid } from './store.js'
 import { db, persistStorage } from './db.js'
 import { settings, hasKey } from './settings.js'
 import { synthesize, engine } from './tts.js'
-import { toListening } from './text.js'
+import { toListeningAsync, pause } from './text.js'
 import { isVoice, fromKokoro } from './voices.js'
 import { activeEngine } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
@@ -18,7 +18,14 @@ const COLLECTIONS_KEY = 'noesis.collections.v1'
 const loadCollections = () => { try { return JSON.parse(localStorage.getItem(COLLECTIONS_KEY) || '[]') } catch { return [] } }
 
 export const library = createStore({ docs: [], loaded: false, collections: loadCollections(), voicingNow: null })
-library.sub(() => localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(library.get().collections)))
+// The library store changes many times a second while a book is voiced; only write collections when they change.
+let savedCollections = library.get().collections
+library.sub(() => {
+  const c = library.get().collections
+  if (c === savedCollections) return
+  savedCollections = c
+  localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(c))
+})
 
 const cache = new Map() // id → { blocks, segs: [{t, b, k}], starts: [segIndex per block], durs: [sec, 0 = not voiced] }
 const voiced = new Map() // id → Set<segIndex>
@@ -41,13 +48,32 @@ export function patch(id, p, remote = false) {
   let next = null
   library.set(s => ({ docs: s.docs.map(d => (d.id === id ? (next = { ...d, ...p }) : d)) }))
   if (!next) return
-  db.putMeta(next)
+  saveMeta(id, next)
   if (remote) return
   const keys = Object.keys(p)
   if (keys.some(k => META_FIELDS.includes(k))) touch('meta:' + id)
   if (keys.some(k => POS_FIELDS.includes(k))) touch('pos:' + id)
   if (keys.includes('marks')) touch('marks:' + id)
 }
+
+// Disk writes are grouped. Progress changes several times a second while a book is prepared or voiced, and
+// each write copies the whole record (cover image included) on the UI thread. The latest state is written
+// at most every 400 ms per document, and immediately once the page is hidden (closing, switching apps).
+const metaTimers = new Map()
+function saveMeta(id, next) {
+  if (document.visibilityState === 'hidden') return void db.putMeta(next)
+  if (metaTimers.has(id)) return
+  metaTimers.set(id, setTimeout(() => { metaTimers.delete(id); const d = getDoc(id); if (d) db.putMeta(d) }, 400))
+}
+function flushMeta() {
+  for (const [id, t] of metaTimers) { clearTimeout(t); const d = getDoc(id); if (d) db.putMeta(d) }
+  metaTimers.clear()
+}
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushMeta())
+addEventListener('pagehide', flushMeta)
+
+// Progress callbacks fire per page or per chunk; the UI only needs whole percents.
+const stepped = id => { let last = -1; return p => { if (p >= 1 || p - last >= 0.01) { last = p; patch(id, { prep: p }) } } }
 
 // Seconds of audio per character, learned from what this device has actually produced.
 export const secPerChar = d => (d.vChars > 400 ? d.vSec / d.vChars : 1 / 14.5)
@@ -129,7 +155,9 @@ export const kickPrep = makeLoop(async () => {
 // processor measurement must never stand in for the GPU (or vice versa) after switching.
 function recordSpeed(x) {
   const prev = settings.get().voiceSpeed
-  settings.set({ voiceSpeed: Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 1000) / 1000 })
+  const next = Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 100) / 100
+  // Saving a setting rewrites localStorage and re-renders everything that reads settings: skip the noise.
+  if (!prev || Math.abs(next - prev) / prev > 0.03) settings.set({ voiceSpeed: next })
 }
 
 // Paper2Audio-style readiness for the natural voice: can playback from sentence `from` run to the end
@@ -241,7 +269,8 @@ async function prepare(id) {
       await db.putSource(id, src)
       patch(id, { kind: src.kind, url: src.url })
     }
-    parsed = await parseSource(src, p => patch(id, { prep: p }))
+    parsed = await parseSource(src, stepped(id))
+    await pause()
     patch(id, {
       title: d.renamed ? d.title : parsed.title || d.title,
       author: parsed.author || d.author,
@@ -255,7 +284,7 @@ async function prepare(id) {
       const { narratePdf } = await import('./gemini.js')
       const r = await narratePdf({
         pdf: parsed.pdf, pageText: parsed.pageText, key: s.geminiKey, model: s.geminiModel,
-        onProgress: p => patch(id, { prep: p }),
+        onProgress: stepped(id),
       })
       blocks = r.blocks.flatMap(b => (b.k === 'gap' ? parsed.blocks.filter(x => x.page >= b.from && x.page <= b.to) : [b]))
       if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
@@ -279,7 +308,7 @@ async function prepare(id) {
       blocks = await summarize({ text, title: getDoc(id).title, mode: d.mode, key: s.geminiKey, model: s.geminiModel })
     }
 
-    const listening = toListening(blocks)
+    const listening = await toListeningAsync(blocks)
     if (!listening.length) {
       throw new Error(parsed.pdf && !hasKey()
         ? 'No selectable text found (scanned PDF?). Add a free Gemini key in Settings to read scanned pages.'

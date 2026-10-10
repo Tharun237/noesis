@@ -11,6 +11,7 @@ import { PlayerBar, playerHeight } from './ui/PlayerBar.jsx'
 import { Sheets } from './ui/Sheets.jsx'
 import { InstallPrompt } from './ui/InstallPrompt.jsx'
 import { TabBar } from './ui/TabBar.jsx'
+import { ActivityStrip, useActivity, ACTIVITY_H } from './ui/Activity.jsx'
 
 const Settings = lazy(() => import('./ui/Settings.jsx').then(m => ({ default: m.Settings })))
 
@@ -22,6 +23,7 @@ export default function App() {
   const toastMsg = useStore(ui, s => s.toast)
   const toastAction = useStore(ui, s => s.toastAction)
   const libraryScroll = useRef(0)
+  const activity = useActivity()
 
   useEffect(() => { boot() }, [])
 
@@ -46,9 +48,11 @@ export default function App() {
   }, [view, docId])
 
   const full = view === 'reader'
+  const dock = playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
+  const lift = activity ? ACTIVITY_H : 0
   return (
     <div style={{ fontFamily: T.font, color: T.text, background: T.bg, minHeight: '100dvh', WebkitFontSmoothing: 'antialiased' }}>
-      <div style={{ paddingBottom: playerHeight(wide, full, active) }}>
+      <div style={{ paddingBottom: dock + lift }}>
         {/* Enter-only page transition: an exit phase (AnimatePresence mode="wait") can strand the old page mid-exit. */}
         <motion.div key={view + (docId || '')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: T.dur.base, ease: T.ease }}>
@@ -60,12 +64,13 @@ export default function App() {
       <PlayerBar wide={wide} full={full} />
       {!wide && !full && <TabBar />}
       <Sheets wide={wide} />
-      <InstallPrompt wide={wide} full={full} />
+      <ActivityStrip activity={activity} bottom={dock} />
+      <InstallPrompt wide={wide} full={full} lift={lift} />
       <AnimatePresence>
         {toastMsg && (
           <motion.div key={toastMsg} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={T.spring} role="status"
             style={{
-              position: 'fixed', left: '50%', bottom: playerHeight(wide, full, active) + 16, x: '-50%', zIndex: 60, padding: toastAction ? '8px 8px 8px 18px' : '12px 18px',
+              position: 'fixed', left: '50%', bottom: dock + lift + 16, x: '-50%', zIndex: 60, padding: toastAction ? '8px 8px 8px 18px' : '12px 18px',
               borderRadius: T.r.pill, background: T.text, color: T.bg, fontSize: 14, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 32px)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
               display: 'flex', alignItems: 'center', gap: 12, boxSizing: 'border-box',
             }}>

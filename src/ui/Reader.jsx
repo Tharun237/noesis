@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
@@ -54,17 +54,27 @@ export function Reader({ wide }) {
 
   useEffect(() => {
     if (active < 0 || Date.now() - userScroll.current < 4000) return
-    document.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    scrollToSentence(active)
   }, [active, doc])
 
-  useEffect(() => {
-    if (hit >= 0) document.querySelector(`[data-i="${hit}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [hit])
+  useEffect(() => { if (hit >= 0) scrollToSentence(hit) }, [hit])
 
   const typo = useMemo(() => ({ font: font === 'serif' ? T.serif : T.font, size, leading, justify, words }), [font, size, leading, justify, words])
   const offs = useMemo(() => (doc && d ? timeline(d, doc) : null), [doc, d?.done, d?.vSec]) // eslint-disable-line react-hooks/exhaustive-deps
   const headings = useMemo(() => (doc ? doc.blocks.map((b, bi) => b.k === 'h' && { text: b.s.join(' '), i: doc.starts[bi] }).filter(Boolean) : []), [doc])
-  const markSet = useMemo(() => new Set((d?.marks || []).map(m => m.i)), [d?.marks])
+  const marks = d?.marks
+  const chunks = useMemo(() => chunkDoc(doc), [doc])
+  // Marked sentences per chunk, as a string so unchanged chunks keep the same prop (and skip rendering).
+  const marksBy = useMemo(() => {
+    const by = new Map()
+    for (const m of marks || []) { const ci = chunkOf(chunks, m.i); if (ci >= 0) by.set(ci, (by.get(ci) || '') + m.i + ',') }
+    return by
+  }, [marks, chunks])
+  const near = useNearChunks(chunks, typo)
+  const colRef = useRef(null)
+  const heights = useRef(new Map()) // chunk -> measured height, so a chunk scrolled away keeps its exact size
+  useEffect(() => { heights.current = new Map() }, [typo, doc, wide, width])
+  const onHeight = useCallback((ci, h) => { heights.current.set(ci, h) }, [])
 
   if (!d) return null
   const onSeek = i => { userScroll.current = 0; playId === id ? seekTo(i) : openPlayer(id, { at: i }) }
@@ -120,16 +130,15 @@ export function Reader({ wide }) {
             {(d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
 
             {doc && (
-              <div onClick={e => { if (window.getSelection()?.toString()) return; const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i) }}>
-                {doc.blocks.map((b, bi) => {
-                  const start = doc.starts[bi]
-                  const end = start + b.s.length
-                  const inBlock = active >= start && active < end ? active - start : -1
-                  const hitHere = hit >= start && hit < end ? hit - start : -1
-                  let marks = ''
-                  for (let k = start; k < end; k++) if (markSet.has(k)) marks += k - start + ','
-                  return <Block key={bi} b={b} start={start} active={inBlock} dur={inBlock >= 0 ? doc.durs[active] : 0} hit={hitHere} marks={marks}
-                    dim={skip && VISUAL_KINDS.has(b.k)} typo={typo} />
+              <div ref={colRef} onClick={e => { if (window.getSelection()?.toString()) return; const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i) }}>
+                {chunks.map((ch, ci) => {
+                  const hasActive = active >= ch.s0 && active < ch.s1
+                  const hasHit = hit >= ch.s0 && hit < ch.s1
+                  return <Chunk key={ci} ci={ci} ch={ch} doc={doc} typo={typo} skip={skip}
+                    mounted={near.has(ci) || hasActive || hasHit}
+                    est={heights.current.get(ci) ?? estimateHeight(ch, typo, colRef.current?.clientWidth || (wide ? width : innerWidth - 40))}
+                    active={hasActive ? active : -1} dur={hasActive ? doc.durs[active] : 0} hit={hasHit ? hit : -1}
+                    marks={marksBy.get(ci) || ''} onHeight={onHeight} />
                 })}
               </div>
             )}
@@ -146,7 +155,7 @@ export function Reader({ wide }) {
         )}
       </AnimatePresence>
 
-      <JumpToNow active={active} bottom={bottom} onJump={() => { userScroll.current = 0; document.querySelector(`[data-i="${active}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }} />
+      <JumpToNow active={active} bottom={bottom} onJump={() => { userScroll.current = 0; scrollToSentence(active) }} />
 
       {sheet('toc', 'Contents', <div style={{ padding: '20px 10px 24px' }}><div style={{ ...label, padding: '0 12px 12px' }}>Contents</div>
         <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} onClose={() => setPanel(null)} /></div>, 480)}
@@ -156,6 +165,92 @@ export function Reader({ wide }) {
     </div>
   )
 }
+
+// -- windowed rendering -----------------------------------------------------------------
+// A book is tens of thousands of sentences. Building them all froze a phone for seconds on open and made
+// every background update walk the whole book (measured 2026-10-11: a 3.2 s frame to open a 763-page PDF
+// at 4x CPU throttle). So the text is cut into chunks, and only chunks near the screen, plus the one
+// holding the sentence being spoken or found, exist in the page. The rest are placeholders of the right height.
+const CHUNK_BLOCKS = 24
+const AHEAD_PX = 1400 // how far beyond the screen chunks stay built, so scrolling never shows a gap
+
+function chunkDoc(doc) {
+  if (!doc) return []
+  const out = []
+  for (let from = 0; from < doc.blocks.length; from += CHUNK_BLOCKS) {
+    const to = Math.min(doc.blocks.length, from + CHUNK_BLOCKS)
+    let chars = 0
+    for (let bi = from; bi < to; bi++) for (const t of doc.blocks[bi].s) chars += t.length
+    out.push({ from, to, s0: doc.starts[from], s1: doc.starts[to - 1] + doc.blocks[to - 1].s.length, chars })
+  }
+  return out
+}
+
+// Chunks are in sentence order: binary search for the one holding sentence i.
+function chunkOf(chunks, i) {
+  let lo = 0, hi = chunks.length - 1
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1
+    if (i < chunks[m].s0) hi = m - 1
+    else if (i >= chunks[m].s1) lo = m + 1
+    else return m
+  }
+  return -1
+}
+
+// Height of a chunk that has never been built: characters -> lines at this column width and type size.
+function estimateHeight(ch, typo, colW) {
+  const perLine = Math.max(20, colW / (typo.size * 0.5))
+  const blocks = ch.to - ch.from
+  return Math.round((ch.chars / perLine + blocks * 0.6) * typo.size * typo.leading + blocks * typo.size * 1.1)
+}
+
+// Which chunks are on or near the screen. One observer for the whole book.
+function useNearChunks(chunks, typo) {
+  const [near, setNear] = useState(() => new Set([0, 1]))
+  useEffect(() => {
+    setNear(new Set([0, 1]))
+    if (!chunks.length) return
+    const io = new IntersectionObserver(entries => {
+      setNear(prev => {
+        const next = new Set(prev)
+        for (const e of entries) e.isIntersecting ? next.add(+e.target.dataset.c) : next.delete(+e.target.dataset.c)
+        return next
+      })
+    }, { rootMargin: `${AHEAD_PX}px 0px` })
+    document.querySelectorAll('[data-c]').forEach(el => io.observe(el))
+    return () => io.disconnect()
+  }, [chunks, typo])
+  return near
+}
+
+// Far jumps (a chapter away) cut straight there; near ones glide. Gliding across a whole book would build
+// and discard every chunk on the way.
+function scrollToSentence(i) {
+  const el = document.querySelector(`[data-i="${i}"]`)
+  if (!el) return
+  const top = el.getBoundingClientRect().top
+  const far = top < -innerHeight * 2 || top > innerHeight * 3
+  el.scrollIntoView({ block: 'center', behavior: far ? 'auto' : 'smooth' })
+}
+
+const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, hit, marks, onHeight }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => { if (mounted && ref.current) onHeight(ci, ref.current.offsetHeight) })
+  if (!mounted) return <div data-c={ci} style={{ height: est }} />
+  const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
+  const out = []
+  for (let bi = ch.from; bi < ch.to; bi++) {
+    const b = doc.blocks[bi]
+    const start = doc.starts[bi]
+    const end = start + b.s.length
+    let m = ''
+    if (marked) for (let k = start; k < end; k++) if (marked.has(k)) m += k - start + ','
+    out.push(<Block key={bi} b={b} start={start} active={active >= start && active < end ? active - start : -1} dur={dur}
+      hit={hit >= start && hit < end ? hit - start : -1} marks={m} dim={skip && VISUAL_KINDS.has(b.k)} typo={typo} />)
+  }
+  return <div ref={ref} data-c={ci}>{out}</div>
+})
 
 // Notes about how a document was prepared; scanned books get a one-tap path to AI narration.
 function DocNote({ d }) {
@@ -182,6 +277,7 @@ function Preparing({ d, doc, pos }) {
   const eng = useStore(engine, s => s.status)
   const loaded = useStore(engine, s => s.loaded)
   const total = useStore(engine, s => s.total)
+  const opening = useStore(engine, s => s.opening)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const speed = useStore(settings, s => s.voiceSpeed)
   const textReady = d.status === 'voicing' || d.status === 'ready'
@@ -197,7 +293,7 @@ function Preparing({ d, doc, pos }) {
         {downloading
           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: eng === 'error' ? T.danger : T.accent }}>
               <Pulse color={eng === 'error' ? T.danger : T.accent} />
-              {eng === 'error' ? 'The voice engine could not start' : `Downloading the natural voice${total ? ` · ${Math.floor(pct * 100)}%` : ''}`}
+              {eng === 'error' ? 'The voice could not be downloaded' : opening ? 'Setting up the voice' : `Downloading the voice${total ? ` · ${Math.floor(pct * 100)}%` : ''}`}
             </span>
           : ready
             ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.lime : T.text }}>
@@ -209,7 +305,7 @@ function Preparing({ d, doc, pos }) {
       {d.status !== 'error' && <Progress value={pct} />}
       <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
         {downloading
-          ? eng === 'error' ? 'Check your connection, then retry from Settings.' : 'One time only. After this, Noesis voices documents offline on this device.'
+          ? eng === 'error' ? 'Check your connection, then tap Retry below.' : 'One time only. After this, this voice works offline on this device.'
           : ready
             ? ready.ready
               ? `Generation keeps going in the background and stays ahead of you. ${Math.floor(pct * 100)}% generated.`

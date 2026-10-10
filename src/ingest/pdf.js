@@ -1,3 +1,4 @@
+import { pause } from '../lib/text.js'
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -117,8 +118,10 @@ export async function readPdf(data, filename, onProgress) {
   const flush = () => { if (para && para.text.trim()) blocks.push(para); para = null }
 
   const frontMatter = Math.max(8, pages.length * 0.06)
-  pages.forEach((lines, pi) => {
-    if (isNavPage(lines) || (pi < frontMatter && isLegalPage(lines))) { pageText.push(''); return }
+  for (let pi = 0; pi < pages.length; pi++) {
+    const lines = pages[pi]
+    if (pi % 80 === 79) await pause() // a 700-page book is one long job: let the screen draw in between
+    if (isNavPage(lines) || (pi < frontMatter && isLegalPage(lines))) { pageText.push(''); continue }
     const byY = [...lines].sort((a, b) => b.y - a.y)
     const edges = new Set([...byY.slice(0, 2), ...byY.slice(-2)])
     pageText.push(lines.map(l => l.text).join('\n'))
@@ -159,7 +162,7 @@ export async function readPdf(data, filename, onProgress) {
         para.text += ' ' + l.text
       }
     })
-  })
+  }
   flush()
 
   const kept = blocks.filter(b => b.k !== 'p' || !isResidue(b.text))

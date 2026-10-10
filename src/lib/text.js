@@ -117,14 +117,25 @@ export function sentences(text) {
 }
 
 // Blocks → listening model. Block kinds: h (heading), p, fig, table, math, code.
-export function toListening(blocks) {
+function listenBlock(b) {
+  const raw = b.k === 'math' && b.tex ? spokenMath(b.text) : b.text
+  const t = b.k === 'code' && !b.spoken ? 'A code listing appears here.' : cleanText(raw)
+  if (!t || !/[\p{L}\d]/u.test(t)) return null
+  const s = b.k === 'h' ? [t.replace(/\.$/, '')] : sentences(t)
+  return s.length ? { k: b.k, s } : null
+}
+export const toListening = blocks => blocks.map(listenBlock).filter(Boolean)
+
+// Let the screen draw and taps land between slices of a long job (a whole book is one such job).
+export const pause = () => (globalThis.scheduler?.yield ? globalThis.scheduler.yield() : new Promise(r => setTimeout(r)))
+
+// Same result as toListening, in slices: a whole book in one go froze the UI for half a second on a phone.
+export async function toListeningAsync(blocks, slice = 300) {
   const out = []
-  for (const b of blocks) {
-    const raw = b.k === 'math' && b.tex ? spokenMath(b.text) : b.text
-    const t = b.k === 'code' && !b.spoken ? 'A code listing appears here.' : cleanText(raw)
-    if (!t || !/[\p{L}\d]/u.test(t)) continue
-    const s = b.k === 'h' ? [t.replace(/\.$/, '')] : sentences(t)
-    if (s.length) out.push({ k: b.k, s })
+  for (let i = 0; i < blocks.length; i++) {
+    const x = listenBlock(blocks[i])
+    if (x) out.push(x)
+    if (i % slice === slice - 1) await pause()
   }
   return out
 }

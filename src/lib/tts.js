@@ -4,7 +4,7 @@ import { muxOggOpus, unpackPackets } from './audio-format.js'
 
 // The on-device voice engine (Piper, tts.worker.js). The worker starts on first use; each voice is one
 // download, cached on the device. status: idle | loading (downloading/opening `voice`) | ready | error
-export const engine = createStore({ status: 'idle', voice: null, loaded: 0, total: 0, error: null })
+export const engine = createStore({ status: 'idle', voice: null, loaded: 0, total: 0, opening: false, error: null })
 
 let worker = null
 let loading = null // { voice, promise } — concurrent callers share one load
@@ -16,6 +16,7 @@ function call(msg) {
     worker = new Worker(new URL('./tts.worker.js', import.meta.url), { type: 'module' })
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') return engine.set({ loaded: data.loaded, total: data.total })
+      if (data.type === 'opening') return engine.set({ opening: true })
       const p = pending.get(data.id)
       if (!p) return
       pending.delete(data.id)
@@ -39,7 +40,7 @@ export function loadEngine(voice = settings.get().voice) {
   const s = engine.get()
   if (s.status === 'ready' && s.voice === voice) return Promise.resolve()
   if (loading?.voice === voice) return loading.promise
-  engine.set({ status: 'loading', voice, loaded: 0, total: 0, error: null })
+  engine.set({ status: 'loading', voice, loaded: 0, total: 0, opening: false, error: null })
   const promise = call({ type: 'load', voice })
     .then(() => { if (loading?.voice === voice) { loading = null; engine.set({ status: 'ready' }) } })
     .catch(e => { if (loading?.voice === voice) loading = null; engine.set({ status: 'error', error: e.message }); throw e })
