@@ -35,11 +35,11 @@ export function useActivity() {
   if (natural && eng.status === 'error') {
     return { key: 'voice-error', error: true, text: 'The voice could not be downloaded', detail: 'Check your connection', action: { label: 'Retry', run: () => loadEngine().then(kickVoice).catch(() => {}) } }
   }
-  if (natural && eng.status === 'loading') {
-    if (eng.opening) return { key: 'voice', text: `Setting up the ${voiceName(eng.voice)} voice`, detail: 'A few seconds' }
-    return eng.total
-      ? { key: 'voice', text: `Downloading the ${voiceName(eng.voice)} voice`, detail: `${mb(eng.loaded)} of ${mb(eng.total)} MB`, progress: eng.loaded / eng.total }
-      : { key: 'voice', text: `Downloading the ${voiceName(eng.voice)} voice`, detail: 'One time only' }
+  // A voice loading from this device's storage (every launch) is routine: say nothing unless the listener is
+  // waiting on it. `total` is only set when the voice really comes from the network.
+  if (natural && eng.status === 'loading' && (eng.total > 0 || gate != null)) {
+    if (eng.total > 0 && !eng.opening) return { key: 'voice', text: `Downloading the ${voiceName(eng.voice)} voice`, detail: `${mb(eng.loaded)} of ${mb(eng.total)} MB`, progress: eng.loaded / eng.total }
+    return { key: 'voice', text: `Getting the ${voiceName(eng.voice)} voice ready`, detail: 'A few seconds' }
   }
   if (prep && !onReaderOf(prep.id)) {
     return { key: 'prep-' + prep.id, text: prep.stage || 'Preparing', detail: prep.title, progress: prep.prep > 0 ? prep.prep : undefined, open: prep.id }

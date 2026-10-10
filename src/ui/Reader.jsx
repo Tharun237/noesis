@@ -293,7 +293,7 @@ function Preparing({ d, doc, pos }) {
         {downloading
           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: eng === 'error' ? T.danger : T.accent }}>
               <Pulse color={eng === 'error' ? T.danger : T.accent} />
-              {eng === 'error' ? 'The voice could not be downloaded' : opening ? 'Setting up the voice' : `Downloading the voice${total ? ` · ${Math.floor(pct * 100)}%` : ''}`}
+              {eng === 'error' ? 'The voice could not be downloaded' : total && !opening ? `Downloading the voice · ${Math.floor(pct * 100)}%` : 'Getting the voice ready'}
             </span>
           : ready
             ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.lime : T.text }}>
@@ -305,7 +305,7 @@ function Preparing({ d, doc, pos }) {
       {d.status !== 'error' && <Progress value={pct} />}
       <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
         {downloading
-          ? eng === 'error' ? 'Check your connection, then tap Retry below.' : 'One time only. After this, this voice works offline on this device.'
+          ? eng === 'error' ? 'Check your connection, then tap Retry below.' : total && !opening ? 'One time only. After this, this voice works offline on this device.' : 'A few seconds.'
           : ready
             ? ready.ready
               ? `Generation keeps going in the background and stays ahead of you. ${Math.floor(pct * 100)}% generated.`

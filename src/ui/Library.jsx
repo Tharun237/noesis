@@ -277,10 +277,10 @@ export function StatusLine({ d }) {
   if (d.status === 'ready') return null
   if (d.status === 'voicing') {
     if (sys) return null // built-in voice: playable as soon as the text is ready
-    if (voiceLoading) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Waiting for the voice</span>
     // Same rule as the player's gate, from the document's own counters: can it play to the end without stalling?
     const w = r && d.chars ? waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * secPerChar(d), r) : null
     if (w === 0) return null // ready to play; the rest is prepared ahead of the listener, silently
+    if (voiceLoading) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Waiting for the voice</span>
     const when = w == null ? '' : ` · ready in ${w < 90 ? 'under 2 min' : w < 3600 ? `about ${Math.round(w / 60)} min` : `about ${(w / 3600).toFixed(1)} h`}`
     return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Preparing audio{when}</span>
   }
