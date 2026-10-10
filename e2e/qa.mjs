@@ -113,6 +113,12 @@ await step('play starts audio and highlights the sentence', async () => {
   expect(active, 'no highlighted sentence')
 })
 
+await step('plays one continuous stretch longer than 5 s (needed for the Android media notification)', async () => {
+  const st = await until(async () => { const x = await app('m.pl.stretchInfo()'); return x && x.seconds > 0 && x }, 5000, 'a loaded stretch')
+  expect(st.to - st.from > 1 && st.seconds > 5, `stretch is ${st.to - st.from} sentence(s), ${st.seconds?.toFixed(1)} s`)
+  return `${st.to - st.from} sentences in one file, ${st.seconds.toFixed(1)} s`
+})
+
 await step('word highlighting follows speech', async () => {
   const words = new Set()
   for (let k = 0; k < 10; k++) {

@@ -2,6 +2,7 @@ import { createStore } from './store.js'
 import { settings } from './settings.js'
 import { db } from './db.js'
 import { recordToBlob } from './tts.js'
+import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { activeEngine, pickSystemVoice } from './engine.js'
 import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches } from './library.js'
@@ -9,7 +10,7 @@ import { toast } from './nav.js'
 import { flushNow } from './sync.js'
 
 // Two ways to speak, chosen per device (engine.js):
-//   natural — pre-generated Piper audio per sentence, played through an <audio> element
+//   natural — pre-generated Piper audio, played through an <audio> element in continuous stretches of sentences
 //   system  — the device's built-in TTS, spoken live sentence by sentence (no generation, no CPU load)
 //
 // `playing` is the listener's intent. `waiting` = natural audio for the next sentence isn't generated yet.
@@ -19,8 +20,15 @@ export const player = createStore({ id: null, i: 0, playing: false, waiting: fal
 
 const audio = new Audio()
 audio.preload = 'auto'
-let current = null // { i, url }
-let next = null // prefetched { i, url }
+// The natural voice plays in stretches: consecutive generated sentences joined into one audio file. One clip
+// per sentence (usually under 5 s) left tiny gaps between sentences, and Android only shows its media
+// notification (lock screen, headset, car controls) for audio longer than about 5 seconds.
+// A stretch: { id, from, to, n, k, starts, url } — sentences from..to-1, starts[j] = second where sentence j
+// begins (starts[n] = length), k = index of the sentence playing now.
+const STRETCH_S = 40
+const STRETCH_MAX = 48
+let current = null
+let next = null // the following stretch, built shortly before it is needed
 let token = 0
 let utter = 0
 let posTimer = null
@@ -30,23 +38,65 @@ const system = () => activeEngine() === 'system'
 
 setPriority(() => { const p = player.get(); return p.id ? { id: p.id, i: p.i } : null })
 
-const revoke = x => x && URL.revokeObjectURL(x.url)
+const revoke = x => x?.url && URL.revokeObjectURL(x.url)
+const covers = (st, id, i) => !!st && st.id === id && i >= st.from && i < st.to
 
-async function urlFor(id, i) {
-  if (next?.i === i) { const n = next; next = null; return n.url }
-  const rec = await db.getAudio(id, i)
-  if (!rec || !audioMatches(getDoc(id), rec)) return null // not generated yet, or made in a previous voice
-  if (rec.codec === 'none') return 'skip'
-  return URL.createObjectURL(recordToBlob(rec))
+// → a stretch starting at sentence i, 'skip' (that sentence failed to generate), or null (not generated yet).
+async function stretchAt(id, c, i) {
+  if (next?.id === id && next.from === i) { const n = next; next = null; return n }
+  const d = getDoc(id)
+  const recs = await db.getAudios(id, i, Math.min(c.segs.length, i + STRETCH_MAX))
+  const first = recs[0]
+  if (!first || !audioMatches(d, first)) return null // not generated yet, or made in a previous voice
+  if (first.codec === 'none') return 'skip'
+  if (first.codec !== 'opus') return { id, from: i, to: i + 1, n: 1, k: 0, starts: [0, first.dur], url: URL.createObjectURL(recordToBlob(first)) }
+  const packets = []
+  const frames = []
+  const starts = [0]
+  let total = 0 // in 48 kHz samples, from the packets themselves: exact sentence boundaries inside the file
+  let n = 0
+  for (const rec of recs) {
+    if (!rec || rec.codec !== 'opus' || rec.rate !== first.rate || !audioMatches(d, rec)) break
+    if (n > 0 && skipVisual(c, i + n, 1) !== i + n) break // a skipped figure or table ends the stretch
+    const u = unpackPackets(rec)
+    for (let j = 0; j < u.packets.length; j++) { packets.push(u.packets[j]); frames.push(u.frames[j]); total += u.frames[j] }
+    starts.push(total / 48000)
+    n++
+    if (total / 48000 >= STRETCH_S) break
+  }
+  const blob = new Blob([muxOggOpus(packets, frames, { inputRate: first.rate })], { type: 'audio/ogg; codecs=opus' })
+  return { id, from: i, to: i + n, n, k: 0, starts, url: URL.createObjectURL(blob) }
 }
 
-async function prefetch(id, i) {
-  const c = await loadDoc(id)
-  if (i >= c.segs.length || next?.i === i) return
-  const rec = await db.getAudio(id, i)
-  if (!rec || rec.codec === 'none' || player.get().id !== id || !audioMatches(getDoc(id), rec)) return
+async function prefetch(id, c, i) {
+  if (i >= c.segs.length || (next?.id === id && next.from === i)) return
+  const st = await stretchAt(id, c, i)
+  if (!st || st === 'skip' || player.get().id !== id) return void (st?.url && URL.revokeObjectURL(st.url))
   revoke(next)
-  next = { i, url: URL.createObjectURL(recordToBlob(rec)) }
+  next = st
+}
+
+// Which sentence of the stretch is at the audio's current time; moves the highlight and saved position with it.
+function track(withTime) {
+  if (!current || system()) return
+  const t = audio.currentTime
+  let k = current.k
+  while (k + 1 < current.n && t >= current.starts[k + 1]) k++
+  while (k > 0 && t < current.starts[k]) k--
+  const p = player.get()
+  if (!covers(current, p.id, p.i)) return // a jump elsewhere is loading; the old stretch must not pull the position back
+  const i = current.from + k
+  if (k !== current.k || i !== p.i) {
+    current.k = k
+    if (i > p.i && p.sleep?.chapter && doc?.segs[i]?.k === 'h') { // sleep at end of chapter: stop on the heading
+      audio.pause()
+      audio.currentTime = current.starts[k]
+      player.set({ sleep: null, i, t: 0, word: 0 })
+      return pause()
+    }
+    player.set({ i, t: t - current.starts[k], word: 0 })
+    savePosition()
+  } else if (withTime) player.set({ t: t - current.starts[k] })
 }
 
 function skipVisual(c, i, dir) {
@@ -73,7 +123,10 @@ function fraction() {
     const len = segText(p.i).length
     return len ? Math.min(0.999, p.word / len) : 0
   }
-  return audio.duration > 0 && current?.i === p.i ? Math.min(0.999, audio.currentTime / audio.duration) : 0
+  if (!covers(current, p.id, p.i)) return 0
+  const j = p.i - current.from
+  const len = current.starts[j + 1] - current.starts[j]
+  return len > 0 ? Math.max(0, Math.min(0.999, (audio.currentTime - current.starts[j]) / len)) : 0
 }
 let doc = null // loaded content of the current document (for synchronous lookups)
 const segText = i => doc?.segs[i]?.t || ''
@@ -102,10 +155,17 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   savePosition()
   if (system()) { audio.pause(); return speak(c, i, autoplay, from) }
 
-  const url = await urlFor(id, i)
-  if (my !== token) { if (url && url !== 'skip') URL.revokeObjectURL(url); return }
-  if (url === 'skip') return load(i + dir, { autoplay, dir })
-  if (!url) {
+  if (covers(current, id, i) && audio.src) { // inside the stretch that is loaded: just move within it
+    current.k = i - current.from
+    audio.currentTime = current.starts[current.k] + offset
+    audio.playbackRate = player.get().rate
+    if (autoplay && audio.paused) audio.play().catch(() => player.set({ playing: false }))
+    return
+  }
+  const st = await stretchAt(id, c, i)
+  if (my !== token) return void (st?.url && URL.revokeObjectURL(st.url))
+  if (st === 'skip') return load(i + dir, { autoplay, dir })
+  if (!st) {
     // Not generated yet: generation follows the playhead, so this sentence is made next.
     audio.pause()
     player.set({ waiting: true })
@@ -113,12 +173,11 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
     return
   }
   revoke(current)
-  current = { i, url }
-  audio.src = url
+  current = st
+  audio.src = st.url
   audio.playbackRate = player.get().rate
   if (offset) audio.currentTime = offset
   if (autoplay) audio.play().catch(() => player.set({ playing: false }))
-  prefetch(id, skipVisual(c, i + 1, 1))
 }
 
 // ── built-in voice ───────────────────────────────────────────────────────────────
@@ -179,12 +238,31 @@ function finish() {
   open(up.id)
 }
 
-audio.addEventListener('ended', sentenceEnded)
+// End of a stretch: carry on with the next one (or stop for the sleep timer / the end of the document).
+audio.addEventListener('ended', async () => {
+  const p = player.get()
+  const c = await loadDoc(p.id)
+  if (!c || !current) return
+  const to = current.to
+  if (p.sleep?.chapter && c.segs[to]?.k === 'h') { player.set({ sleep: null, i: Math.min(to, c.segs.length - 1), t: 0 }); return pause() }
+  if (sleepCheck()) return
+  load(to, { autoplay: true })
+})
 audio.addEventListener('timeupdate', () => {
-  player.set({ t: audio.currentTime })
+  track(true)
   sleepCheck()
   updatePositionState()
+  // Build the following stretch a few seconds before it is needed, so it holds as much generated audio as possible.
+  if (current && !current.pre && audio.duration - audio.currentTime < 6) {
+    current.pre = true
+    loadDoc(current.id).then(c => c && prefetch(current.id, c, current.to))
+  }
 })
+// timeupdate only fires ~4 times a second; follow sentence changes every frame while the screen is on.
+let raf = 0
+const follow = () => { track(false); raf = requestAnimationFrame(follow) }
+audio.addEventListener('playing', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(follow) })
+for (const e of ['pause', 'ended', 'emptied']) audio.addEventListener(e, () => cancelAnimationFrame(raf))
 audio.addEventListener('pause', () => { if (!audio.ended && !player.get().waiting && player.get().playing && audio.src && !system()) player.set({ playing: false }) })
 audio.addEventListener('play', () => player.set({ playing: true }))
 
@@ -255,7 +333,7 @@ export async function play() {
   player.set({ playing: true, gate: null })
   if (system()) return load(p.i, { autoplay: true, from: p.word })
   if (p.waiting) return kickVoice()
-  if (!audio.src || current?.i !== p.i) return load(p.i, { autoplay: true })
+  if (!audio.src || !covers(current, p.id, p.i)) return load(p.i, { autoplay: true })
   audio.play().catch(() => player.set({ playing: false }))
 }
 
@@ -289,10 +367,13 @@ function voiceChanged() {
   const changed = heard.id === now.id && (heard.voice !== now.voice || heard.sys !== now.sys || heard.engine !== now.engine)
   heard = now
   if (!changed) return
-  revoke(next)
-  next = null
-  if (p.playing || p.waiting) { stopOutput(); play() }
-  else { stopOutput(); revoke(current); current = null; audio.removeAttribute('src') }
+  // Audio in the previous voice must never resume: drop both stretches before playing on.
+  const resume = p.playing || p.waiting
+  stopOutput()
+  revoke(next); revoke(current)
+  next = current = null
+  audio.removeAttribute('src')
+  if (resume) play()
 }
 library.sub(voiceChanged)
 settings.sub(voiceChanged)
@@ -301,7 +382,7 @@ export const toggle = () => (player.get().playing || pendingStart ? pause() : pl
 export const nextSentence = () => load(player.get().i + 1, { dir: 1 })
 export const prevSentence = () => {
   const p = player.get()
-  const into = system() ? p.word > 12 : audio.currentTime > 2.5 && !p.waiting
+  const into = system() ? p.word > 12 : p.t > 2.5 && !p.waiting
   load(into ? p.i : p.i - 1, { dir: -1 })
 }
 export const seekTo = i => load(i)
@@ -316,7 +397,9 @@ export function setRate(r) {
 export const setSleep = s => player.set({ sleep: s })
 
 // Sub-second clock for word highlighting with the natural voice (timeupdate only fires ~4×/s).
-export const audioClock = () => audio.currentTime
+export const audioClock = () => (current ? audio.currentTime - current.starts[current.k] : audio.currentTime) // seconds into the current sentence
+// For tests: the audio that is loaded right now.
+export const stretchInfo = () => (current ? { from: current.from, to: current.to, seconds: audio.duration } : null)
 
 export function stopIf(id) {
   if (player.get().id !== id) return
