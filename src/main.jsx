@@ -5,6 +5,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import { ui, openSheet, toast } from './lib/nav.js'
+import './lib/ready.js'
 
 // Install prompt: we show our own button instead of the browser's mini-infobar.
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); ui.set({ installEvt: e }) })

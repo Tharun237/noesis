@@ -4,7 +4,7 @@ import { db } from './db.js'
 import { recordToBlob } from './tts.js'
 import { VISUAL_KINDS } from './text.js'
 import { activeEngine, pickSystemVoice } from './engine.js'
-import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness } from './library.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue } from './library.js'
 import { toast } from './nav.js'
 import { flushNow } from './sync.js'
 
@@ -165,11 +165,18 @@ function sleepCheck() {
   return false
 }
 
+// End of document: mark it finished, then (unless the sleep timer says "end of document") play what's next.
 function finish() {
-  const { id } = player.get()
+  const { id, sleep } = player.get()
   stopOutput()
-  player.set({ playing: false, waiting: false })
-  if (id) patch(id, { finished: true, pos: 0 })
+  player.set({ playing: false, waiting: false, sleep: sleep?.doc ? null : sleep })
+  if (!id) return
+  const s = settings.get()
+  patch(id, { finished: true, pos: 0, posF: 0, ...(s.archiveFinished && { archived: true }) })
+  const up = !sleep?.doc && s.autoplayNext && nextInQueue(id, s.sort)
+  if (!up) return
+  toast(`Up next: ${up.title}`)
+  open(up.id)
 }
 
 audio.addEventListener('ended', sentenceEnded)

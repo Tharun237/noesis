@@ -190,7 +190,9 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: T.r.lg, padding: 6,
               boxShadow: '0 24px 60px rgba(0,0,0,0.85)', transformOrigin: `${place.side} ${place.up ? 'bottom' : 'top'}`,
             }}>
-            {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : (
+            {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : it.heading ? (
+              <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{it.heading}</div>
+            ) : (
               <button key={i} role="menuitem" type="button" disabled={it.disabled}
                 onClick={() => { setOpen(false); it.onClick() }}
                 style={{

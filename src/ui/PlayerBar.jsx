@@ -23,7 +23,7 @@ import { IconButton, Menu, Progress, fmtTime, fmtDur } from './kit.jsx'
 import { Cover } from './Library.jsx'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
-const SLEEP = [[0, 'Off'], [10, '10 minutes'], [20, '20 minutes'], [30, '30 minutes'], [45, '45 minutes'], [60, '1 hour']]
+const SLEEP = [[0, 'Off'], [10, '10 minutes'], [20, '20 minutes'], [30, '30 minutes'], [45, '45 minutes'], [60, '1 hour'], [90, '1½ hours'], [120, '2 hours']]
 
 function useTimeline(id) {
   const d = useStore(library, s => s.docs.find(x => x.id === id))
@@ -146,11 +146,13 @@ function BookmarkButton({ d, i }) {
 function MoreMenu({ d }) {
   const sleep = useStore(player, s => s.sleep)
   const skip = useStore(settings, s => s.skipVisuals)
-  const sleepLeft = sleep?.until ? `${Math.max(1, Math.round((sleep.until - Date.now()) / 60000))}m` : sleep?.chapter ? 'chapter' : 'off'
+  const sleepLeft = sleep?.until ? `${Math.max(1, Math.round((sleep.until - Date.now()) / 60000))}m` : sleep?.chapter ? 'chapter' : sleep?.doc ? 'end' : 'off'
+  const at = m => new Date(Date.now() + m * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   return (
     <Menu up trigger={t => <IconButton icon="more" label="Player menu" onClick={t} />} items={[
-      ...SLEEP.map(([m, l]) => ({ label: m ? `Sleep in ${l}` : 'Sleep timer off', icon: m === 0 ? 'moon' : undefined, right: m === 0 ? sleepLeft : undefined, onClick: () => setSleep(m ? { until: Date.now() + m * 60000 } : null) })),
-      { label: 'Sleep at end of chapter', onClick: () => setSleep({ chapter: true }) },
+      ...SLEEP.map(([m, l]) => ({ label: m ? `Sleep in ${l}` : 'Sleep timer off', icon: m === 0 ? 'moon' : undefined, right: m ? at(m) : sleepLeft, onClick: () => setSleep(m ? { until: Date.now() + m * 60000 } : null) })),
+      { label: 'Sleep at end of chapter', icon: sleep?.chapter ? 'check' : undefined, onClick: () => setSleep({ chapter: true }) },
+      { label: 'Sleep at end of document', icon: sleep?.doc ? 'check' : undefined, onClick: () => setSleep({ doc: true }) },
       '-',
       { label: 'Bookmark this sentence', icon: 'bookmark', onClick: () => toast(toggleMark(d.id, player.get().i) ? 'Bookmarked' : 'Bookmark removed') },
       { label: skip ? 'Read figure & table summaries' : 'Skip figure & table summaries', icon: 'sparkle', onClick: () => settings.set({ skipVisuals: !skip }) },

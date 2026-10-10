@@ -75,7 +75,8 @@ export async function parseSource(src, onProgress) {
     default: {
       const blocks = readPlain(src.text ?? await src.blob.text())
       const title = src.title || titleFrom(blocks, name.replace(/\.txt$/i, ''))
-      if (blocks[0]?.text.trim().toLowerCase() === title.trim().toLowerCase()) blocks.shift() // title line ≠ body text
+      // A title line isn't body text, unless it IS the body (one short pasted paragraph).
+      if (blocks.length > 1 && blocks[0].text.trim().toLowerCase() === title.trim().toLowerCase()) blocks.shift()
       return { title, author: '', blocks }
     }
   }

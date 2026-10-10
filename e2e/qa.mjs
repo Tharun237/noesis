@@ -426,6 +426,61 @@ await step('natural voice: readiness gate instead of stalling', async () => {
   return `gated with ~${Math.round(s1.gate / 60)} min to wait, switched to built-in instantly`
 })
 
+const cardTitles = async () => {
+  const all = (await app('m.lib.library.get().docs.map(d => d.title)')).sort((a, b) => b.length - a.length) // longest first: 'QA Short 2' before 'QA Short'
+  return page.evaluate(all => [...document.querySelectorAll('div[role=button][tabindex="0"]')].map(e => all.find(t => e.innerText.includes(t))).filter(Boolean), all)
+}
+const addText = (title, text) => app(`m.lib.addDocument({ kind: 'text', name: ${JSON.stringify(title)}, text: ${JSON.stringify(text)} }, { title: ${JSON.stringify(title)}, renamed: true })`)
+const SHORT = 'One sentence here. Two sentences there. And a third to end it.'
+
+await step('library: sort by title, filter by file type', async () => {
+  await page.getByRole('button', { name: 'Back to library' }).click()
+  await app("m.nav.ui.set({ filter: 'all' })")
+  await page.getByRole('button', { name: 'Sort and filter' }).first().click()
+  await click('menuitem', 'Title')
+  const titles = await cardTitles()
+  expect(titles.length > 2 && titles.join('|') === [...titles].sort((a, b) => a.localeCompare(b)).join('|'), `not sorted by title: ${titles}`)
+  await page.getByRole('button', { name: 'Sort and filter' }).first().click()
+  await click('menuitem', 'PDF')
+  await until(async () => { const t = await cardTitles(); return t.length === 1 && t[0].startsWith('Traction') }, 3000, 'only the PDF')
+  await page.getByRole('button', { name: 'Sort and filter' }).first().click()
+  await click('menuitem', 'Clear filters')
+  await until(async () => (await cardTitles()).length === titles.length, 3000, 'filters cleared')
+  return `${titles.length} docs in title order; PDF filter → 1`
+})
+
+await step('"ready to listen" toast when a document finishes preparing', async () => {
+  await addText('QA Short', SHORT)
+  await until(() => page.getByText('Ready to listen: QA Short').isVisible(), 15000, 'ready toast')
+})
+
+await step('end of document: archives it and plays the next in the queue', async () => {
+  await app("m.settings.settings.set({ autoplayNext: true, archiveFinished: true, sort: 'title' })")
+  const id = (await docBy('QA Short')).id
+  await app(`m.pl.open(${JSON.stringify(id)}, { at: 2 })`)
+  await until(async () => { const d = await docBy('QA Short'); return d.finished && d.archived }, 15000, 'finished and archived')
+  await until(async () => { const s = await playerState(); return s.id !== id && s.playing }, 8000, 'next document playing')
+  const next = await app('m.lib.getDoc(m.pl.player.get().id).title')
+  await click('button', 'Pause')
+  return `up next: ${next}`
+})
+
+await step('sleep at end of document stops instead of playing the next', async () => {
+  await addText('QA Short 2', SHORT)
+  await until(async () => ['voicing', 'ready'].includes((await docBy('QA Short 2'))?.status), 15000, 'text prepared')
+  const id = (await docBy('QA Short 2')).id
+  await app(`m.pl.open(${JSON.stringify(id)}, { at: 2, autoplay: false })`)
+  await page.getByRole('button', { name: 'Player menu' }).click()
+  await page.getByRole('menuitem', { name: 'Sleep at end of document' }).click()
+  expect((await playerState()).sleep?.doc, 'sleep-at-end not set')
+  await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
+  await until(async () => (await docBy('QA Short 2')).finished, 15000, 'document finished')
+  await sleep(1500)
+  const s = await playerState()
+  expect(s.id === id && !s.playing && !s.sleep, `kept going: id=${s.id === id} playing=${s.playing}`)
+  await app("m.settings.settings.set({ autoplayNext: false, archiveFinished: false })")
+})
+
 await step('mobile layout: no horizontal overflow, mini player', async () => {
   await page.setViewportSize({ width: 390, height: 844 })
   await sleep(600)

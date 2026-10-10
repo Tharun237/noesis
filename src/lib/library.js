@@ -52,6 +52,22 @@ export function patch(id, p, remote = false) {
 export const secPerChar = d => (d.vChars > 400 ? d.vSec / d.vChars : 1 / 14.5)
 export const docDuration = d => d.chars * secPerChar(d)
 
+// Library sort orders. The player uses the same order to pick "up next", so the queue you see is the queue you hear.
+export const SORTS = {
+  recent: (a, b) => Math.max(b.lastPlayed || 0, b.createdAt) - Math.max(a.lastPlayed || 0, a.createdAt),
+  added: (a, b) => b.createdAt - a.createdAt,
+  title: (a, b) => a.title.localeCompare(b.title),
+  author: (a, b) => (a.author || '￿').localeCompare(b.author || '￿') || a.title.localeCompare(b.title),
+  length: (a, b) => docDuration(b) - docDuration(a),
+}
+
+// The unfinished, unarchived document after `id` in the given order (wrapping to the top).
+export function nextInQueue(id, sort) {
+  const list = library.get().docs.filter(d => d.id === id || (!d.archived && !d.finished && d.status !== 'error')).sort(SORTS[sort] || SORTS.recent)
+  const at = list.findIndex(d => d.id === id)
+  return [...list.slice(at + 1), ...list.slice(0, Math.max(0, at))][0] || null
+}
+
 // Concurrent callers (reader, player, voice loop) must share ONE object: durations are filled in
 // place as sentences are voiced. So the in-flight promise is shared, not just the finished result.
 const loading = new Map()

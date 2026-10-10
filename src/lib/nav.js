@@ -10,7 +10,8 @@ export const ui = createStore({
   sheet: null, // add | null
   filter: 'queue', // queue | all | archived | <collection id>
   query: '',
-  sort: 'recent',
+  kind: null, // file-type filter (KIND label) | null
+  progress: null, // new | started | done | null
   prefill: null, // { tab, url, text } from share target / file handler
   installEvt: null,
   installed: matchMedia('(display-mode: standalone)').matches,

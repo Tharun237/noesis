@@ -4,7 +4,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { library, docDuration, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection, kickVoice } from '../lib/library.js'
+import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection, kickVoice } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { voiceName } from '../lib/voices.js'
@@ -13,6 +13,7 @@ import { Icon, Logo } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur } from './kit.jsx'
 import { SAMPLE } from './sample.js'
 import { AccountChip } from './SyncStatus.jsx'
+import { waitSeconds } from '../lib/readiness-math.js'
 
 const KIND = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', html: 'WEB', md: 'MD', txt: 'TXT', text: 'TEXT', link: 'LINK' }
 const MODE = { long: 'Long summary', short: 'Short summary' }
@@ -21,20 +22,17 @@ function useVisibleDocs() {
   const docs = useStore(library, s => s.docs)
   const filter = useStore(ui, s => s.filter)
   const query = useStore(ui, s => s.query)
-  const sort = useStore(ui, s => s.sort)
+  const sort = useStore(settings, s => s.sort)
+  const kind = useStore(ui, s => s.kind)
+  const progress = useStore(ui, s => s.progress)
   return useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = docs.filter(d =>
       (filter === 'all' ? true : filter === 'archived' ? d.archived : filter === 'queue' ? !d.archived : d.collections.includes(filter)) &&
+      (!kind || KIND[d.kind] === kind) && (!progress || progressOf(d) === progress) &&
       (!q || d.title.toLowerCase().includes(q) || d.author.toLowerCase().includes(q)))
-    const by = {
-      recent: (a, b) => Math.max(b.lastPlayed, b.createdAt) - Math.max(a.lastPlayed, a.createdAt),
-      added: (a, b) => b.createdAt - a.createdAt,
-      title: (a, b) => a.title.localeCompare(b.title),
-      length: (a, b) => docDuration(b) - docDuration(a),
-    }
-    return list.sort(by[sort])
-  }, [docs, filter, query, sort])
+    return list.sort(SORTS[sort] || SORTS.recent)
+  }, [docs, filter, query, sort, kind, progress])
 }
 
 export function Library({ wide }) {
@@ -151,7 +149,6 @@ const FILTER_NAMES = { queue: 'Queue', all: 'All', archived: 'Archived' }
 function DesktopHeader() {
   const filter = useStore(ui, s => s.filter)
   const query = useStore(ui, s => s.query)
-  const sort = useStore(ui, s => s.sort)
   const view = useStore(settings, s => s.view)
   const collections = useStore(library, s => s.collections)
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
@@ -163,7 +160,7 @@ function DesktopHeader() {
         {name}
       </h1>
       <SearchBox value={query} width={220} />
-      <SortMenu sort={sort} />
+      <SortMenu />
       <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
       <Button kind="primary" icon="plus" onClick={() => openSheet('add')}>Add document</Button>
     </header>
@@ -180,11 +177,30 @@ function SearchBox({ value, width, autoFocus }) {
   )
 }
 
-function SortMenu({ sort }) {
-  const opts = [['recent', 'Recently played'], ['added', 'Date added'], ['title', 'Title'], ['length', 'Length']]
+const SORT_NAMES = [['recent', 'Recently played'], ['added', 'Date added'], ['title', 'Title'], ['author', 'Author'], ['length', 'Length']]
+const PROGRESS_NAMES = [['new', 'Not started'], ['started', 'In progress'], ['done', 'Done']]
+export const progressOf = d => (d.finished ? 'done' : d.pos > 0 || d.posF > 0 || d.lastPlayed ? 'started' : 'new')
+
+// Sort is remembered on this device; filters are for this visit.
+function SortMenu() {
+  const sort = useStore(settings, s => s.sort)
+  const kind = useStore(ui, s => s.kind)
+  const progress = useStore(ui, s => s.progress)
+  const kinds = useStore(library, s => [...new Set(s.docs.map(d => KIND[d.kind]).filter(Boolean))].sort().join())
+  const pick = (cur, v, set) => ({ icon: cur === v ? 'check' : undefined, onClick: () => set(cur === v ? null : v) })
   return (
-    <Menu trigger={toggle => <IconButton icon="toc" label="Sort" onClick={toggle} />}
-      items={opts.map(([v, l]) => ({ label: l, icon: sort === v ? 'check' : undefined, onClick: () => ui.set({ sort: v }) }))} />
+    <Menu trigger={toggle => <IconButton icon="toc" label="Sort and filter" active={!!(kind || progress)} onClick={toggle} />} items={[
+      { heading: 'Sort by' },
+      ...SORT_NAMES.map(([v, l]) => ({ label: l, icon: sort === v ? 'check' : undefined, onClick: () => settings.set({ sort: v }) })),
+      '-',
+      { heading: 'Show' },
+      ...PROGRESS_NAMES.map(([v, l]) => ({ label: l, ...pick(progress, v, p => ui.set({ progress: p })) })),
+      kinds && '-',
+      kinds && { heading: 'File type' },
+      ...(kinds ? kinds.split(',') : []).map(k => ({ label: k, ...pick(kind, k, x => ui.set({ kind: x })) })),
+      (kind || progress) && '-',
+      (kind || progress) && { label: 'Clear filters', icon: 'close', onClick: () => ui.set({ kind: null, progress: null }) },
+    ]} />
   )
 }
 
@@ -199,6 +215,7 @@ function MobileHeader() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 60, padding: '0 10px 0 12px' }}>
         <div style={{ flex: 1 }}><Wordmark size={24} /></div>
         <IconButton icon={searching ? 'close' : 'search'} label="Search" onClick={() => { setSearching(!searching); ui.set({ query: '' }) }} />
+        <SortMenu />
         <AccountChip compact />
         <IconButton icon="settings" label="Settings" onClick={() => go('settings')} />
         <IconButton icon="plus" label="Add document" onClick={() => openSheet('add')} style={{ background: T.text, color: T.bg, marginLeft: 4 }} />
@@ -245,9 +262,18 @@ export function StatusLine({ d }) {
   const text = d.status === 'voicing' ? 'Generating audio' : d.stage || 'Waiting'
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.accent }}>
-      <Pulse /> {text}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}
+      <Pulse /> {text}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}{d.status === 'voicing' && <TimeLeft d={d} />}
     </span>
   )
+}
+
+// Card estimate from the document's own counters (the reader computes the exact gate from the listening position).
+function TimeLeft({ d }) {
+  const r = useStore(settings, s => s.naturalSpeed)
+  if (!r || !d.chars) return null
+  const per = secPerChar(d)
+  const w = waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * per, r)
+  return <span style={{ color: w > 0 ? T.sub : T.ok }}>{w > 0 ? ` · playable in ${w < 90 ? '<2 min' : w < 3600 ? `~${Math.round(w / 60)} min` : `~${(w / 3600).toFixed(1)} h`}` : ' · playable now'}</span>
 }
 
 const DocCard = memo(function DocCard({ d, playing }) {

@@ -81,6 +81,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,mjs}'],
         globIgnores: ['pdfjs/**', 'dict/**'],
+        importScripts: ['notify-sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
         // Model weights + voices are cached by transformers.js / kokoro-js themselves (Cache Storage).

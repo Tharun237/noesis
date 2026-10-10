@@ -8,6 +8,7 @@ import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib
 import { settings } from '../lib/settings.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine } from '../lib/tts.js'
+import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
@@ -184,6 +185,7 @@ function Preparing({ d, doc, pos }) {
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const speed = useStore(settings, s => s.naturalSpeed)
   const textReady = d.status === 'voicing' || d.status === 'ready'
+  const [asked, setAsked] = useState(notifyAsked)
   if (sys && textReady) return null // the built-in voice speaks straight away: nothing to prepare
   const downloading = d.status === 'voicing' && eng !== 'ready'
   const pct = downloading ? (total ? loaded / total : 0) : d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
@@ -218,6 +220,12 @@ function Preparing({ d, doc, pos }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Don't want to wait? Your device's built-in voice starts instantly.</span>
           <Button kind="accent" onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>
+        </div>
+      )}
+      {!asked && d.status !== 'error' && !ready?.ready && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Leave it running and get a notification when it's ready.</span>
+          <Button icon="bell" onClick={async () => { await askNotify(); setAsked(true) }}>Notify me</Button>
         </div>
       )}
     </div>

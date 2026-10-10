@@ -17,6 +17,9 @@ export const DEFAULTS = {
   skipVisuals: false, // skip figure/table/math/code descriptions during playback
   mode: 'full', // full | long | short
   view: 'grid',
+  sort: 'recent', // library order, also the order "up next" plays in
+  autoplayNext: false, // when a document ends, play the next one in the queue
+  archiveFinished: false, // move finished documents to Archived
   // Reading
   readFont: 'serif', // serif (Literata) | sans (DM Sans)
   readSize: 19,

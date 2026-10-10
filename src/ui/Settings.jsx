@@ -31,6 +31,10 @@ export function Settings({ wide }) {
           </Field>
           <Toggle checked={s.skipVisuals} onChange={v => settings.set({ skipVisuals: v })} labelText="Skip figure, table, equation and code descriptions"
             hint="They stay in the transcript; playback jumps over them." />
+          <Toggle checked={s.autoplayNext} onChange={v => settings.set({ autoplayNext: v })} labelText="Play the next document automatically"
+            hint="When a document ends, the next unfinished one in your queue starts, in the library's sort order." />
+          <Toggle checked={s.archiveFinished} onChange={v => settings.set({ archiveFinished: v })} labelText="Archive documents when finished"
+            hint="Keeps your queue to what you haven't heard yet." />
         </Card>
         <StorageCard />
         <AppCard />
