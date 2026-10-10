@@ -11,7 +11,8 @@ export const DEFAULTS = {
   speed: 1,
   voiceEngine: 'auto', // auto | natural (Kokoro on device) | system (built-in TTS) — see engine.js
   systemVoice: '', // voiceURI of the built-in voice ('' = device default)
-  naturalSpeed: 0, // measured on this device: seconds of audio generated per second (0 = not measured yet)
+  naturalSpeed: 0, // measured speed of the compute device in use: audio seconds per second (0 = not measured yet)
+  speeds: {}, // measured speed per compute device: { webgpu, wasm }
   engine: 'auto', // natural voice compute: auto | webgpu | wasm
   aiNarration: true, // use Gemini for PDFs when a key is set
   skipVisuals: false, // skip figure/table/math/code descriptions during playback

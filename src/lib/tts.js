@@ -31,7 +31,7 @@ export function loadEngine() {
   }
   engine.set({ status: 'loading', error: null })
   ready = call({ type: 'init', pref: settings.get().engine, mobile: isMobile() })
-    .then(r => { engine.set({ status: 'ready', device: r.device }); return r })
+    .then(r => { engine.set({ status: 'ready', device: r.device }); settings.set({ naturalSpeed: settings.get().speeds[r.device] || 0 }); return r })
     .catch(e => {
       engine.set({ status: 'error', error: e.message })
       worker.terminate()

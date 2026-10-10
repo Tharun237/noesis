@@ -124,9 +124,13 @@ export const kickPrep = makeLoop(async () => {
 })
 
 // How fast THIS device generates natural voice: seconds of audio per second of work (moving average).
+// Measured per compute device: the graphics chip and the processor differ by 10× or more, so a
+// processor measurement must never stand in for the GPU (or vice versa) after switching.
 function recordSpeed(x) {
-  const prev = settings.get().naturalSpeed
-  settings.set({ naturalSpeed: Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 1000) / 1000 })
+  const dev = engine.get().device || 'wasm'
+  const prev = settings.get().speeds[dev]
+  const v = Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 1000) / 1000
+  settings.set({ speeds: { ...settings.get().speeds, [dev]: v }, naturalSpeed: v })
 }
 
 // Paper2Audio-style readiness for the natural voice: can playback from sentence `from` run to the end
