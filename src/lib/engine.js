@@ -35,4 +35,5 @@ export function pickSystemVoice() {
   return list.find(v => v.voiceURI === chosen) || list.find(v => v.localService && v.default) || list.find(v => v.localService) || list[0] || null
 }
 
-export const systemVoiceLabel = v => (v ? `${v.name.replace(/^(Google|Microsoft|Samsung)\s+/i, '')}${v.localService ? '' : ' · online'}` : 'Default voice')
+// "Microsoft David - English (United States)" → "David"; "Google UK English Female" → "UK English Female".
+export const systemVoiceLabel = v => (v ? `${v.name.replace(/^(Google|Microsoft|Samsung|Apple)\s+/i, '').replace(/\s+[-–]\s+.*$/, '').replace(/\s*\((Natural|Enhanced|Premium)\)/i, '') || v.name}${v.localService ? '' : ' · online'}` : 'Default voice')

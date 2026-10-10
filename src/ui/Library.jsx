@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { T, label } from '../theme.js'
+import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
@@ -42,12 +42,13 @@ export function Library({ wide }) {
   const view = useStore(settings, s => s.view)
   const playingId = useStore(player, s => s.id)
   const hours = docs.reduce((a, d) => a + docDuration(d), 0)
+  const summary = total > 0 && `Your library · ${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
 
   return (
     <div style={{ display: 'flex', minHeight: '100%' }}>
       {wide && <Sidebar />}
       <main style={{ flex: 1, minWidth: 0, padding: wide ? '28px 36px 40px' : '0 0 24px' }}>
-        {wide ? <DesktopHeader /> : <MobileHeader />}
+        {wide ? <DesktopHeader summary={summary} /> : <MobileHeader summary={summary} />}
         <EngineNotice />
         {loaded && total === 0 ? <EmptyState wide={wide} /> : (
           <>
@@ -61,11 +62,6 @@ export function Library({ wide }) {
             </div>
             {loaded && docs.length === 0 && (
               <div style={{ padding: '60px 20px', textAlign: 'center', color: T.sub, fontSize: 14 }}>Nothing here yet.</div>
-            )}
-            {docs.length > 0 && (
-              <div style={{ ...label, textTransform: 'none', letterSpacing: 0, padding: wide ? '24px 4px' : '20px 20px', fontSize: 12 }}>
-                {docs.length} {docs.length === 1 ? 'doc' : 'docs'} · {fmtDur(hours)} at 1.0x
-              </div>
             )}
           </>
         )}
@@ -146,19 +142,18 @@ export function Wordmark({ size = 26 }) {
 
 const FILTER_NAMES = { queue: 'Queue', all: 'All', archived: 'Archived' }
 
-function DesktopHeader() {
+function DesktopHeader({ summary }) {
   const filter = useStore(ui, s => s.filter)
   const query = useStore(ui, s => s.query)
   const view = useStore(settings, s => s.view)
   const collections = useStore(library, s => s.collections)
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
-    <header style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22 }}>
-      <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: T.text, flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ color: T.faint, fontWeight: 500 }}>Library</span>
-        <Icon name="next" size={14} style={{ color: T.faint }} />
-        {name}
-      </h1>
+    <header style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
+      <div style={{ flex: 1, minWidth: 0, visibility: summary ? 'visible' : 'hidden' }}>
+        <div style={eyebrow}>{summary}</div>
+        <h1 style={{ margin: '12px 0 0', fontSize: 44, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}>{name}</h1>
+      </div>
       <SearchBox value={query} width={220} />
       <SortMenu />
       <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
@@ -189,7 +184,7 @@ function SortMenu() {
   const kinds = useStore(library, s => [...new Set(s.docs.map(d => KIND[d.kind]).filter(Boolean))].sort().join())
   const pick = (cur, v, set) => ({ icon: cur === v ? 'check' : undefined, onClick: () => set(cur === v ? null : v) })
   return (
-    <Menu trigger={toggle => <IconButton icon="toc" label="Sort and filter" active={!!(kind || progress)} onClick={toggle} />} items={[
+    <Menu trigger={toggle => <IconButton icon="sliders" label="Sort and filter" active={!!(kind || progress)} onClick={toggle} />} items={[
       { heading: 'Sort by' },
       ...SORT_NAMES.map(([v, l]) => ({ label: l, icon: sort === v ? 'check' : undefined, onClick: () => settings.set({ sort: v }) })),
       '-',
@@ -204,24 +199,35 @@ function SortMenu() {
   )
 }
 
-function MobileHeader() {
+function MobileHeader({ summary }) {
   const filter = useStore(ui, s => s.filter)
   const query = useStore(ui, s => s.query)
+  const searching = useStore(ui, s => s.searching)
   const collections = useStore(library, s => s.collections)
-  const [searching, setSearching] = useState(!!query)
   const chips = [['queue', 'Queue'], ['all', 'All'], ['archived', 'Archived'], ...collections.map(c => [c.id, c.name])]
+  const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 60, padding: '0 10px 0 12px' }}>
-        <div style={{ flex: 1 }}><Wordmark size={24} /></div>
-        <IconButton icon={searching ? 'close' : 'search'} label="Search" onClick={() => { setSearching(!searching); ui.set({ query: '' }) }} />
-        <SortMenu />
-        <AccountChip compact />
-        <IconButton icon="settings" label="Settings" onClick={() => go('settings')} />
-        <IconButton icon="plus" label="Add document" onClick={() => openSheet('add')} style={{ background: T.text, color: T.bg, marginLeft: 4 }} />
+    <div>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 56, padding: '0 10px 0 12px' }}>
+          <div style={{ flex: 1 }}><Wordmark size={24} /></div>
+          <SortMenu />
+          <AccountChip compact />
+        </div>
       </div>
-      {searching && <div style={{ padding: '0 16px 10px' }}><SearchBox value={query} autoFocus /></div>}
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 16px 12px', scrollbarWidth: 'none' }}>
+      {summary && (
+        <div style={{ padding: '10px 20px 16px' }}>
+          <div style={eyebrow}>{summary}</div>
+          <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: T.text }}>{name}</h1>
+        </div>
+      )}
+      {searching && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 12px 16px' }}>
+          <div style={{ flex: 1 }}><SearchBox value={query} autoFocus /></div>
+          <IconButton icon="close" label="Close search" onClick={() => ui.set({ searching: false, query: '' })} />
+        </div>
+      )}
+      {summary && <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 16px 12px', scrollbarWidth: 'none' }}>
         {chips.map(([id, name]) => (
           <button key={id} type="button" onClick={() => ui.set({ filter: id })}
             style={{
@@ -233,17 +239,36 @@ function MobileHeader() {
           style={{ height: 32, width: 32, borderRadius: T.r.pill, border: `1px dashed ${T.borderHi}`, background: 'transparent', color: T.sub, display: 'grid', placeItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
           <Icon name="plus" size={15} />
         </button>
-      </div>
+      </div>}
     </div>
   )
 }
 
+// Documents without a real cover get generated artwork (like album art): a glow in one of the ACS
+// hues, picked deterministically from the title so a document looks the same on every device.
+const HUES = ['#AAFF00', '#00E5FF', '#00D4A8', '#2288FF', '#6EE7B7']
+const hueOf = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return HUES[h % HUES.length] }
+
 export function Cover({ d, w = 56, h = 74 }) {
-  if (d.cover) return <img src={d.cover} alt="" width={w} height={h} style={{ width: w, height: h, objectFit: 'cover', borderRadius: T.r.xs, display: 'block', flexShrink: 0, border: `1px solid ${T.border}` }} />
+  const box = { width: w, height: h, borderRadius: Math.max(T.r.xs, w * 0.06), flexShrink: 0, border: `1px solid ${T.border}` }
+  if (d.cover) return <img src={d.cover} alt="" width={w} height={h} style={{ ...box, objectFit: 'cover', display: 'block' }} />
+  const hue = hueOf(d.title)
+  const big = w >= 80 // room to set the title; smaller covers carry the initial, like a monogram
+  const initial = (d.title.match(/[\p{L}\d]/u) || ['N'])[0].toUpperCase()
   return (
-    <div style={{ width: w, height: h, borderRadius: T.r.xs, background: T.surfaceHi, border: `1px solid ${T.border}`, flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-      <span style={{ position: 'absolute', top: 6, left: 7, fontFamily: T.mono, fontSize: 8.5, letterSpacing: '0.08em', color: T.faint }}>{KIND[d.kind] || 'DOC'}</span>
-      <span style={{ position: 'absolute', right: 7, bottom: 2, fontSize: h * 0.5, fontWeight: 700, color: T.surfaceTop, lineHeight: 1 }}>{(d.title.match(/[\p{L}\d]/u) || ['N'])[0].toUpperCase()}</span>
+    <div aria-hidden style={{
+      ...box, position: 'relative', overflow: 'hidden',
+      background: `radial-gradient(130% 95% at 15% 0%, ${hue}B3 0%, ${hue}33 42%, transparent 72%), radial-gradient(80% 60% at 100% 100%, ${hue}2E 0%, transparent 70%), #000`,
+    }}>
+      {w >= 48 && <span style={{ position: 'absolute', top: w * 0.09, left: w * 0.1, fontFamily: T.mono, fontSize: Math.max(7.5, w * 0.1), letterSpacing: '0.14em', color: 'rgba(255,255,255,0.72)' }}>{KIND[d.kind] || 'DOC'}</span>}
+      {big ? (
+        <span style={{
+          position: 'absolute', left: w * 0.1, right: w * 0.08, bottom: w * 0.1, fontFamily: T.serif, fontWeight: 600, fontSize: w * 0.13, lineHeight: 1.15,
+          color: T.text, display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden', hyphens: 'auto',
+        }}>{d.title}</span>
+      ) : (
+        <span style={{ position: 'absolute', left: w * 0.1, bottom: h * 0.02, fontFamily: T.serif, fontWeight: 600, fontSize: h * (w >= 48 ? 0.5 : 0.56), lineHeight: 1, color: T.text }}>{initial}</span>
+      )}
     </div>
   )
 }
@@ -261,7 +286,7 @@ export function StatusLine({ d }) {
   const pct = d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
   const text = d.status === 'voicing' ? 'Generating audio' : d.stage || 'Waiting'
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.accent }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}>
       <Pulse /> {text}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}{d.status === 'voicing' && <TimeLeft d={d} />}
     </span>
   )
@@ -273,7 +298,7 @@ function TimeLeft({ d }) {
   if (!r || !d.chars) return null
   const per = secPerChar(d)
   const w = waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * per, r)
-  return <span style={{ color: w > 0 ? T.sub : T.ok }}>{w > 0 ? ` · playable in ${w < 90 ? '<2 min' : w < 3600 ? `~${Math.round(w / 60)} min` : `~${(w / 3600).toFixed(1)} h`}` : ' · playable now'}</span>
+  return <span style={{ color: w > 0 ? T.sub : T.lime }}>{w > 0 ? ` · playable in ${w < 90 ? '<2 min' : w < 3600 ? `~${Math.round(w / 60)} min` : `~${(w / 3600).toFixed(1)} h`}` : ' · playable now'}</span>
 }
 
 const DocCard = memo(function DocCard({ d, playing }) {
@@ -292,9 +317,9 @@ const DocCard = memo(function DocCard({ d, playing }) {
         <Cover d={d} />
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 5 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            {playing && <Icon name="waves" size={15} style={{ color: T.accent, marginTop: 2 }} />}
+            {playing && <Icon name="waves" size={15} style={{ color: T.lime, marginTop: 2 }} />}
             <div style={{
-              fontSize: 15, fontWeight: 600, lineHeight: 1.3, color: playing ? T.accent : T.text,
+              fontSize: 15, fontWeight: 600, lineHeight: 1.3, color: playing ? T.lime : T.text,
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word',
             }}>{d.title}</div>
           </div>
@@ -350,35 +375,51 @@ function EngineNotice() {
   )
 }
 
+const STATS = [['₹0', 'Free forever'], ['100%', 'On your device'], ['28', 'Natural voices']]
+const FEATURES = [
+  ['waves', 'Natural voices, on your device', 'Audio is generated locally. No account, no limits, works offline.'],
+  ['sparkle', 'Skips the page junk', 'Headers, page numbers, citations and reference lists are removed before listening.'],
+  ['file', 'Papers, books, articles', 'PDF, EPUB, Word, web links, Markdown and plain text.'],
+]
+const rise = i => ({ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: T.dur.slow, ease: T.ease, delay: i * 0.06 } })
+
+// First run, in the ACS landing language: eyebrow, tight headline, italic subline, mono stats, pill CTAs.
 function EmptyState({ wide }) {
-  const features = [
-    ['waves', 'Natural voices, on your device', 'Audio is generated locally. No account, no limits, works offline.'],
-    ['sparkle', 'Skips the page junk', 'Headers, page numbers, citations and reference lists are removed before listening.'],
-    ['file', 'Papers, books, articles', 'PDF, EPUB, Word, web links, Markdown and plain text.'],
-  ]
+  const sample = async () => { const id = await addDocument({ kind: 'text', name: SAMPLE.title, title: SAMPLE.title, text: SAMPLE.text }); go('reader', id) }
   return (
-    <div style={{ maxWidth: 760, margin: wide ? '6vh auto 0' : '4vh auto 0', padding: '0 20px', textAlign: 'center' }}>
-      <motion.h2 initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: T.dur.slow, ease: T.ease }}
-        style={{ margin: 0, fontSize: wide ? 64 : 42, lineHeight: 1.02, letterSpacing: '-0.045em', fontWeight: 700, color: T.text }}>
-        Listen to anything.<br /><span style={{ color: T.accent }}>Understand it.</span>
-      </motion.h2>
-      <motion.p initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: T.dur.slow, ease: T.ease, delay: 0.06 }}
-        style={{ color: T.sub, fontSize: wide ? 18 : 16, lineHeight: 1.55, margin: '20px auto 30px', maxWidth: 520 }}>
-        Turn papers, books and articles into natural audio, generated privately on your own device. Free forever. Open source.
-      </motion.p>
-      <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: T.dur.slow, ease: T.ease, delay: 0.12 }}
-        style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <Button kind="primary" icon="plus" onClick={() => openSheet('add')} style={{ height: 48, padding: '0 24px', fontSize: 15 }}>Add document</Button>
-        <Button icon="play" onClick={async () => { const id = await addDocument({ kind: 'text', name: SAMPLE.title, title: SAMPLE.title, text: SAMPLE.text }); go('reader', id) }}
-          style={{ height: 48, padding: '0 22px', fontSize: 15 }}>Try a sample</Button>
+    <div style={{ maxWidth: 880, margin: wide ? '8vh auto 0' : '6vh 0 0', padding: wide ? '0 8px' : '0 24px' }}>
+      <motion.div {...rise(0)} style={{ ...eyebrow, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 6, background: T.lime }} />
+        The Noesis idea
+        <span style={{ width: 56, height: 1, background: T.borderHi }} />
       </motion.div>
-      <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(3, 1fr)' : '1fr', gap: 12, marginTop: 56, textAlign: 'left' }}>
-        {features.map(([icon, title, body], i) => (
-          <motion.div key={title} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: T.dur.slow, ease: T.ease, delay: 0.18 + i * 0.05 }}
-            style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface }}>
+      <motion.h2 {...rise(1)} style={{ margin: '22px 0 0', fontSize: wide ? 76 : 46, lineHeight: 0.98, letterSpacing: '-0.055em', fontWeight: 800, color: T.text }}>
+        Listen to<br />anything.
+      </motion.h2>
+      <motion.div {...rise(2)} style={{ marginTop: 12, fontSize: wide ? 34 : 26, fontStyle: 'italic', fontWeight: 300, letterSpacing: '-0.02em', color: T.sub }}>
+        Understand it.
+      </motion.div>
+      <motion.p {...rise(3)} style={{ color: T.sub, fontSize: wide ? 18 : 16, lineHeight: 1.6, margin: '22px 0 0', maxWidth: 540 }}>
+        Papers, books and articles turned into natural audio, generated privately on your own device. Open source.
+      </motion.p>
+      <motion.div {...rise(4)} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', justifyContent: 'start', columnGap: wide ? 56 : 28, rowGap: 6, marginTop: 34 }}>
+        {STATS.map(([v]) => <div key={v} style={{ fontFamily: T.mono, fontSize: wide ? 26 : 21, fontWeight: 600, color: T.text }}>{v}</div>)}
+        {STATS.map(([v, l]) => <div key={l} style={{ ...eyebrow, fontSize: 10, letterSpacing: '0.18em' }}>{l}</div>)}
+      </motion.div>
+      <motion.div {...rise(5)} style={{ display: 'flex', flexDirection: wide ? 'row' : 'column', gap: 12, marginTop: 40 }}>
+        <Button kind="primary" onClick={() => openSheet('add')} full={!wide} style={{ height: 56, padding: '0 30px', fontSize: 16, fontWeight: 700, borderRadius: wide ? T.r.pill : T.r.lg }}>
+          Add a document <Icon name="next" size={16} />
+        </Button>
+        <Button icon="play" onClick={sample} full={!wide} style={{ height: 56, padding: '0 26px', fontSize: 16, background: 'transparent', borderColor: T.borderHi, borderRadius: wide ? T.r.pill : T.r.lg }}>
+          Try a sample
+        </Button>
+      </motion.div>
+      <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(3, 1fr)' : '1fr', gap: 12, margin: '64px 0 24px' }}>
+        {FEATURES.map(([icon, title, body], i) => (
+          <motion.div key={title} {...rise(6 + i)} style={{ padding: 20, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface }}>
             <Icon name={icon} size={20} style={{ color: T.accent }} />
-            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 14, color: T.text }}>{title}</div>
-            <div style={{ fontSize: 13.5, color: T.sub, marginTop: 6, lineHeight: 1.5 }}>{body}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 16, color: T.text }}>{title}</div>
+            <div style={{ fontSize: 13.5, color: T.sub, marginTop: 6, lineHeight: 1.55 }}>{body}</div>
           </motion.div>
         ))}
       </div>

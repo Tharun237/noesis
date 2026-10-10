@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { T, label } from '../theme.js'
+import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, toast, goBack } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
@@ -16,14 +16,17 @@ export function Settings({ wide }) {
   const s = useStore(settings)
   return (
     <div style={{ minHeight: '100%' }}>
-      <header style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, display: 'flex', alignItems: 'center', gap: 8, padding: `calc(env(safe-area-inset-top) + 8px) ${wide ? 20 : 8}px 8px`, borderBottom: `1px solid ${T.border}` }}>
-        <IconButton icon="back" label="Back" onClick={goBack} />
-        <div style={{ fontSize: 17, fontWeight: 700 }}>Settings</div>
-      </header>
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: wide ? '36px 24px 140px' : '20px 16px 160px', display: 'grid', gap: 18 }}>
+      {wide && (
+        <header style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: `1px solid ${T.border}` }}>
+          <IconButton icon="back" label="Back" onClick={goBack} />
+        </header>
+      )}
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: wide ? '28px 24px 140px' : 'calc(env(safe-area-inset-top) + 28px) 16px 40px', display: 'grid', gap: 18 }}>
+        <div style={{ padding: '0 4px 6px' }}>
+          <div style={eyebrow}>Noesis · v{__APP_VERSION__}</div>
+          <h1 style={{ margin: '10px 0 0', fontSize: wide ? 44 : 34, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}>Settings</h1>
+        </div>
         <AccountCard Card={Card} />
-        <EngineCard />
-        <GeminiCard />
         <VoiceCard Card={Card} />
         <Card title="Listening">
           <Field title={`Default speed · ${s.speed}x`}>
@@ -36,6 +39,8 @@ export function Settings({ wide }) {
           <Toggle checked={s.archiveFinished} onChange={v => settings.set({ archiveFinished: v })} labelText="Archive documents when finished"
             hint="Keeps your queue to what you haven't heard yet." />
         </Card>
+        <GeminiCard />
+        <EngineCard />
         <StorageCard />
         <AppCard />
       </div>
@@ -72,7 +77,7 @@ function EngineCard() {
           options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'Compact' }]} />
       </Field>
       {e.status !== 'ready' && e.status !== 'loading' && (
-        <Button kind="accent" icon="download" onClick={() => loadEngine().then(kickVoice).catch(() => {})}>{e.status === 'error' ? 'Retry' : 'Download now'}</Button>
+        <Button kind="primary" icon="download" onClick={() => loadEngine().then(kickVoice).catch(() => {})}>{e.status === 'error' ? 'Retry' : 'Download now'}</Button>
       )}
     </Card>
   )
@@ -114,7 +119,7 @@ function GeminiCard() {
         <IconButton icon="eye" active={show} label={show ? 'Hide key' : 'Show key'} onClick={() => setShow(!show)} size={46} />
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button kind="accent" onClick={() => test()} disabled={draft.trim().length < 20 || state === 'testing'}>{state === 'testing' ? 'Checking…' : 'Save & test'}</Button>
+        <Button kind="primary" onClick={() => test()} disabled={draft.trim().length < 20 || state === 'testing'}>{state === 'testing' ? 'Checking…' : 'Save & test'}</Button>
         {key && <Button kind="danger" onClick={() => { settings.set({ geminiKey: '' }); setDraft(''); setModels(null); setState(null) }}>Remove key</Button>}
         {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: T.danger }}>{state}</span>}
       </div>

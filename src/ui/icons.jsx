@@ -28,6 +28,7 @@ const P = {
   voice: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3',
   install: 'M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4',
   toc: 'M4 6h2M4 12h2M4 18h2M9 6h11M9 12h11M9 18h11',
+  sliders: 'M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4',
   upload: 'M12 20V9M7 14l5-5 5 5M5 4h14',
   edit: 'M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4Z',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',

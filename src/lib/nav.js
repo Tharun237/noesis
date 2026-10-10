@@ -10,6 +10,7 @@ export const ui = createStore({
   sheet: null, // add | null
   filter: 'queue', // queue | all | archived | <collection id>
   query: '',
+  searching: false, // phone: search box open in the library header
   kind: null, // file-type filter (KIND label) | null
   progress: null, // new | started | done | null
   prefill: null, // { tab, url, text } from share target / file handler
@@ -25,6 +26,14 @@ export function go(view, docId = null) {
   if (s.view === view && s.docId === docId) return
   history.pushState({ view, docId, depth: depth() + 1 }, '')
   ui.set({ view, docId, sheet: null })
+}
+
+// Phone tab bar: switching tabs replaces the entry instead of stacking pages, like a native tab bar.
+export function tab(view) {
+  const s = ui.get()
+  if (s.view === view && !s.sheet) return
+  history.replaceState({ view, docId: null, depth: depth() }, '')
+  ui.set({ view, docId: null, sheet: null })
 }
 
 export function openSheet(sheet, extra = {}) {

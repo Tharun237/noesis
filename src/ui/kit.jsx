@@ -14,7 +14,7 @@ export function Button({ children, onClick, kind = 'ghost', icon, disabled, full
   }
   const kinds = {
     primary: { background: T.text, color: T.bg, border: `1px solid ${T.text}` },
-    accent: { background: T.accent, color: T.accentInk, border: `1px solid ${T.accent}` },
+    accent: { background: T.lime, color: T.accentInk, border: `1px solid ${T.lime}` }, // the one decisive action on a screen
     danger: { color: T.danger, border: `1px solid ${T.border}` },
     ghost: {},
   }
@@ -105,7 +105,7 @@ export function Progress({ value, height = 3, color = T.accent, track = T.surfac
   )
 }
 
-export function Pulse({ color = T.accent }) {
+export function Pulse({ color = T.lime }) {
   return (
     <motion.span animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
       style={{ width: 6, height: 6, borderRadius: 6, background: color, display: 'inline-block', flexShrink: 0 }} />

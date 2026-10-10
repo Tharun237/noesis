@@ -200,7 +200,7 @@ function Preparing({ d, doc, pos }) {
               {eng === 'error' ? 'The voice engine could not start' : `Downloading the natural voice${total ? ` · ${Math.floor(pct * 100)}%` : ''}`}
             </span>
           : ready
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.ok : T.accent }}>
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.lime : T.text }}>
                 {ready.ready ? <Icon name="check" size={15} /> : <Pulse />}
                 {ready.ready ? 'Ready to play' : `Preparing the natural voice · ready in ${fmtWait(ready.wait)}`}
               </span>
@@ -265,7 +265,7 @@ function ActiveSentence({ i, text, dur, words }) {
   const showWords = words && (sys || dur)
   return (
     <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: T.accentSoft, color: T.text, boxShadow: `0 0 0 2px ${T.accentSoft}` }}>
-      {showWords ? ws.map((x, k) => <span key={k} style={{ color: k === lit ? T.accent : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
+      {showWords ? ws.map((x, k) => <span key={k} style={{ color: k === lit ? T.lime : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
     </span>
   )
 }

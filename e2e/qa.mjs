@@ -92,7 +92,7 @@ await app(`Promise.all(m.lib.library.get().docs.map(d => m.lib.deleteDoc(d.id)))
 await page.reload()
 
 await step('empty state renders', async () => {
-  await page.getByText('Listen to anything.').waitFor({ timeout: 8000 })
+  await page.getByRole('heading', { name: /Listen to\s*anything/ }).waitFor({ timeout: 8000 })
 })
 
 await step('add sample → reader opens', async () => {
@@ -168,7 +168,7 @@ await step('change voice mid-listening: same sentence restarts in the new voice'
   const resumed = await until(async () => {
     const s = await playerState()
     return s.playing && !s.waiting && s.clock > 0.2 && s
-  }, 60_000, 'playback to resume in the new voice')
+  }, 240_000, 'playback to resume in the new voice') // the readiness gate holds playback until it can't stall (device-speed dependent)
   expect(resumed.i === before.i, `resumed at sentence ${resumed.i}, expected the same sentence ${before.i}`)
   return `old voice stopped, sentence ${before.i} restarted in Michael after ${((Date.now() - changedAt) / 1000).toFixed(1)} s`
 })

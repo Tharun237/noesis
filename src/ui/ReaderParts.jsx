@@ -23,7 +23,7 @@ export function Toc({ headings, offs, rate, active, onSeek, onClose }) {
               background: on ? T.surfaceHi : 'transparent', color: on ? T.text : T.sub, fontFamily: T.font, fontSize: 13.5, lineHeight: 1.4, cursor: 'pointer',
             }}>
             <span style={{ flex: 1, minWidth: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{h.text}</span>
-            {offs && <span style={{ fontFamily: T.mono, fontSize: 11, color: on ? T.accent : T.faint, flexShrink: 0 }}>{fmtTime(offs[h.i] / rate)}</span>}
+            {offs && <span style={{ fontFamily: T.mono, fontSize: 11, color: on ? T.lime : T.faint, flexShrink: 0 }}>{fmtTime(offs[h.i] / rate)}</span>}
           </button>
         )
       })}
@@ -143,7 +143,7 @@ export function JumpToNow({ active, bottom, onJump }) {
             background: T.bg, color: T.text, fontFamily: T.font, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
             boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
           }}>
-          <Icon name="waves" size={15} style={{ color: T.accent }} /> Back to now
+          <Icon name="waves" size={15} style={{ color: T.lime }} /> Back to now
         </motion.button>
       )}
     </AnimatePresence>

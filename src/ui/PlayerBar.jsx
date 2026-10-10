@@ -76,7 +76,7 @@ export function PlayerBar({ wide, full }) {
             <Cover d={d} w={34} h={44} />
             <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-              <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono }}>{voiceLabel}</span>
+              <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{voiceLabel}</span>
             </span>
           </button>
         ) : <SpeedMenu />}
@@ -164,7 +164,7 @@ function MoreMenu({ d }) {
 function MiniPlayer({ d, progress, voiceLabel, gate }) {
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
-      style={{ position: 'fixed', left: 8, right: 8, bottom: 'calc(env(safe-area-inset-bottom) + 8px)', zIndex: 30, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
+      style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
       <Progress value={progress} height={2} track={T.surface} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 8px 10px' }}>
         <button type="button" onClick={() => go('reader', d.id)}
@@ -172,7 +172,7 @@ function MiniPlayer({ d, progress, voiceLabel, gate }) {
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono }}>{voiceLabel} · {gate != null ? `ready in ${fmtWait(gate)}` : `${Math.round(progress * 100)}%`}</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{voiceLabel} · {gate != null ? `ready in ${fmtWait(gate)}` : `${Math.round(progress * 100)}%`}</span>
           </span>
         </button>
         <MiniTransport />
@@ -192,4 +192,5 @@ function MiniTransport() {
   )
 }
 
-export const playerHeight = (wide, full, active) => (!active ? 0 : wide ? T.playerHDesktop : full ? T.playerH : 80)
+// Space reserved at the bottom of the page: the player, plus the tab bar on phones outside the reader.
+export const playerHeight = (wide, full, active) => (wide ? (active ? T.playerHDesktop : 0) : full ? (active ? T.playerH : 0) : T.tabH + (active ? T.miniH : 0))

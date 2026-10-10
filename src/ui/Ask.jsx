@@ -93,7 +93,7 @@ export function AskPanel({ d, doc, onClose }) {
           <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
             Ask questions, get explanations of what you just heard, and hear the answers read aloud. This uses your own free Google Gemini key, which stays on this device.
           </div>
-          <Button kind="accent" icon="settings" onClick={() => go('settings')}>Add a free Gemini key</Button>
+          <Button kind="primary" icon="settings" onClick={() => go('settings')}>Add a free Gemini key</Button>
         </div>
       ) : (
         <>
