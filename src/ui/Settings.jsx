@@ -9,6 +9,7 @@ import { VOICES } from '../lib/voices.js'
 import { Button, IconButton, Segmented, Toggle, Field, Progress, inputStyle } from './kit.jsx'
 import { AccountCard } from './AccountCard.jsx'
 import { VoiceCard } from './VoiceCard.jsx'
+import { isMobile } from '../lib/engine.js'
 
 const DEVICE = { webgpu: 'WebGPU (graphics chip)', wasm: 'WebAssembly (processor)' }
 
@@ -72,8 +73,8 @@ function EngineCard() {
         {e.status === 'loading' && e.total > 0 && <Progress value={e.loaded / e.total} />}
         {e.status === 'error' && <div style={{ fontFamily: T.mono, fontSize: 12, color: T.danger }}>{e.error}</div>}
       </div>
-      <Field title="Compute" hint="Auto uses the graphics chip on computers and the compact build on phones. Changes apply after reloading the app.">
-        <Segmented value={pref} onChange={v => { settings.set({ engine: v }); toast('Reload Noesis to switch engines') }} size="sm"
+      <Field title="Compute" hint={isMobile() ? "Phones use the compact build: the graphics build is too large for a phone's memory and makes the whole phone lag." : 'Auto uses the graphics chip on computers. Changes apply after reloading the app.'}>
+        <Segmented value={isMobile() ? 'wasm' : pref} disabled={isMobile() ? ['auto', 'webgpu'] : []} onChange={v => { settings.set({ engine: v }); toast('Reload Noesis to switch engines') }} size="sm"
           options={[{ value: 'auto', label: 'Auto' }, { value: 'webgpu', label: 'WebGPU' }, { value: 'wasm', label: 'Compact' }]} />
       </Field>
       {e.status !== 'ready' && e.status !== 'loading' && (

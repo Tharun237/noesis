@@ -12,7 +12,9 @@ let opusOk = null
 async function pickDevice(pref, mobile) {
   if (pref === 'wasm') return 'wasm'
   // WebGPU wants the fp32 weights (~330 MB). On phones the 90 MB q8/WASM build is the better default.
-  if (pref === 'auto' && mobile) return 'wasm'
+  // Phones never use WebGPU: the 330 MB fp32 model (fp16 outputs NaN on WebGPU — measured) exhausts phone
+  // GPU memory and starves the UI of the GPU it renders with (tested 2026-10-10: lag, then the app crashed).
+  if (mobile) return 'wasm'
   try { if (navigator.gpu && (await navigator.gpu.requestAdapter())) return 'webgpu' } catch { /* no adapter */ }
   return 'wasm'
 }
