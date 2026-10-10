@@ -10,3 +10,5 @@ public/pdfjs
 .wrangler
 .dev.vars
 public/dict
+.qa-profile
+.qa-out

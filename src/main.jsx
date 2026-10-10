@@ -36,3 +36,6 @@ if ('launchQueue' in window) {
 }
 
 createRoot(document.getElementById('root')).render(<StrictMode><App /></StrictMode>)
+
+// Live updates: new versions install in the background and switch over at a safe moment.
+import('./lib/updates.js').then(m => m.startUpdates())

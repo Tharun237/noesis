@@ -172,7 +172,7 @@ function AppCard() {
       {evt && !installed && (
         <Button kind="primary" icon="install" onClick={async () => { evt.prompt(); const r = await evt.userChoice; if (r.outcome === 'accepted') ui.set({ installEvt: null }) }}>Install Noesis</Button>
       )}
-      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>Noesis {__APP_VERSION__} · free & open source (MIT) · voices by Kokoro-82M (Apache-2.0)</div>
+      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')} · free & open source (MIT) · voices by Kokoro-82M (Apache-2.0)</div>
     </Card>
   )
 }

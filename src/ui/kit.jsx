@@ -147,9 +147,28 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
 }
 
 // Popover menu anchored to its trigger.
+const MENU_W = 260
+const EDGE = 8
+
+// Popover menu anchored to its trigger. On open it measures the room around the trigger and
+// opens toward whichever side fits, so it never spills off-screen (e.g. the speed menu at the right edge).
 export function Menu({ trigger, items, align = 'right', up = false }) {
   const [open, setOpen] = useState(false)
+  const [place, setPlace] = useState({ side: align, up, maxH: 480 })
   const ref = useRef(null)
+  const toggle = () => {
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect()
+      const fitsLeft = r.left + MENU_W <= innerWidth - EDGE // menu's left edge on the trigger's left
+      const fitsRight = r.right - MENU_W >= EDGE
+      const side = align === 'left' ? (fitsLeft || !fitsRight ? 'left' : 'right') : (fitsRight || !fitsLeft ? 'right' : 'left')
+      const below = innerHeight - r.bottom - EDGE - 8
+      const above = r.top - EDGE - 8
+      const goUp = up ? above >= 200 || above > below : below < 200 && above > below
+      setPlace({ side, up: goUp, maxH: Math.max(160, goUp ? above : below) })
+    }
+    setOpen(o => !o)
+  }
   useEffect(() => {
     if (!open) return
     const close = e => { if (!ref.current?.contains(e.target)) setOpen(false) }
@@ -160,15 +179,16 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
   }, [open])
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      {trigger(() => setOpen(o => !o), open)}
+      {trigger(toggle, open)}
       <AnimatePresence>
         {open && (
-          <motion.div role="menu" initial={{ opacity: 0, y: up ? 6 : -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: up ? 6 : -6, scale: 0.97 }} transition={{ duration: T.dur.fast, ease: T.ease }}
+          <motion.div role="menu" initial={{ opacity: 0, y: place.up ? 6 : -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: place.up ? 6 : -6, scale: 0.97 }} transition={{ duration: T.dur.fast, ease: T.ease }}
             style={{
-              position: 'absolute', [align]: 0, [up ? 'bottom' : 'top']: 'calc(100% + 8px)', minWidth: 230, zIndex: 40,
+              position: 'absolute', [place.side]: 0, [place.up ? 'bottom' : 'top']: 'calc(100% + 8px)', minWidth: 230, maxWidth: `min(${MENU_W + 60}px, calc(100vw - ${EDGE * 2}px))`,
+              maxHeight: place.maxH, overflowY: 'auto', zIndex: 40,
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: T.r.lg, padding: 6,
-              boxShadow: '0 24px 60px rgba(0,0,0,0.85)', transformOrigin: `${align} ${up ? 'bottom' : 'top'}`,
+              boxShadow: '0 24px 60px rgba(0,0,0,0.85)', transformOrigin: `${place.side} ${place.up ? 'bottom' : 'top'}`,
             }}>
             {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : (
               <button key={i} role="menuitem" type="button" disabled={it.disabled}

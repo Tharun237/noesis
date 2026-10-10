@@ -1,9 +1,12 @@
 import { createStore } from './store.js'
 
+// A reload (live update, manual refresh, Android restoring the app) keeps you where you were.
+const restored = ['library', 'reader', 'settings'].includes(history.state?.view) ? history.state : { view: 'library' }
+
 // View state lives in history entries, so Android's back gesture closes sheets and leaves the reader.
 export const ui = createStore({
-  view: 'library', // library | reader | settings
-  docId: null,
+  view: restored.view, // library | reader | settings
+  docId: restored.docId || null,
   sheet: null, // add | null
   filter: 'queue', // queue | all | archived | <collection id>
   query: '',
@@ -14,7 +17,7 @@ export const ui = createStore({
   toast: null,
 })
 
-history.replaceState({ view: 'library' }, '')
+history.replaceState({ view: restored.view, docId: restored.docId || null }, '')
 
 export function go(view, docId = null) {
   const s = ui.get()

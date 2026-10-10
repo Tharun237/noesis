@@ -9,6 +9,7 @@ import { Library } from './ui/Library.jsx'
 import { Reader } from './ui/Reader.jsx'
 import { PlayerBar, playerHeight } from './ui/PlayerBar.jsx'
 import { Sheets } from './ui/Sheets.jsx'
+import { InstallPrompt } from './ui/InstallPrompt.jsx'
 
 const Settings = lazy(() => import('./ui/Settings.jsx').then(m => ({ default: m.Settings })))
 
@@ -57,6 +58,7 @@ export default function App() {
       </div>
       <PlayerBar wide={wide} full={full} />
       <Sheets wide={wide} />
+      <InstallPrompt wide={wide} full={full} />
       <AnimatePresence>
         {toastMsg && (
           <motion.div key={toastMsg} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={T.spring} role="status"

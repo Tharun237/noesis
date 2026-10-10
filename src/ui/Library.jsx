@@ -231,8 +231,13 @@ export function Cover({ d, w = 56, h = 74 }) {
 }
 
 export function StatusLine({ d }) {
+  const now = useStore(library, s => s.voicingNow)
   if (d.status === 'error') return <span style={{ color: T.danger }}>{d.error || 'Failed'}</span>
   if (d.status === 'ready') return null
+  if (d.status === 'voicing' && now !== d.id) {
+    const pct = Math.floor((d.done / Math.max(1, d.total)) * 100)
+    return <span style={{ color: T.sub }}>In line for audio{pct ? ` · ${pct}% ready` : ''}</span>
+  }
   const pct = d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
   const text = d.status === 'voicing' ? 'Generating audio' : d.stage || 'Waiting'
   return (

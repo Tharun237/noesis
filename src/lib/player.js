@@ -121,6 +121,7 @@ export async function open(id, { at, autoplay = true } = {}) {
   revoke(next); next = null
   const same = player.get().id === id
   player.set({ id, playing: autoplay })
+  heard = { id, voice: d.voice }
   setSession(d)
   const c = await loadDoc(id)
   if (!c) return // still being prepared — the reader shows progress
@@ -160,7 +161,22 @@ onRemotePos((id, v) => {
 })
 
 // A doc deleted on another device disappears here too: stop playing it.
-library.sub(() => { const { id } = player.get(); if (id && !getDoc(id)) stopIf(id) })
+// A voice change (here or synced from another device) takes effect immediately: drop the sentence
+// prefetched in the old voice and restart the current sentence, which voicing regenerates first.
+let heard = { id: null, voice: null }
+library.sub(() => {
+  const p = player.get()
+  if (!p.id) return
+  const d = getDoc(p.id)
+  if (!d) return stopIf(p.id)
+  if (heard.id === d.id && heard.voice !== d.voice) {
+    revoke(next)
+    next = null
+    if (p.playing || p.waiting) load(p.i, { autoplay: true })
+    else { revoke(current); current = null; audio.removeAttribute('src') }
+  }
+  heard = { id: d.id, voice: d.voice }
+})
 
 export const toggle = () => (player.get().playing ? pause() : play())
 export const nextSentence = () => load(player.get().i + 1, { dir: 1 })

@@ -42,7 +42,8 @@ export default defineConfig({
     react(),
     apiInDev,
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt', // we choose a safe moment to switch versions (src/lib/updates.js)
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'icon.svg'],
       manifest: {
         id: '/',
@@ -97,7 +98,7 @@ export default defineConfig({
       },
     }),
   ],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), __APP_BUILD__: JSON.stringify(new Date().toISOString()) },
   worker: { format: 'es' },
   server: { headers: isolation },
   preview: { headers: isolation },

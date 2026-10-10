@@ -14,7 +14,7 @@ import { touch, configureSync, startSync, downloadContent, deviceName } from './
 const COLLECTIONS_KEY = 'noesis.collections.v1'
 const loadCollections = () => { try { return JSON.parse(localStorage.getItem(COLLECTIONS_KEY) || '[]') } catch { return [] } }
 
-export const library = createStore({ docs: [], loaded: false, collections: loadCollections() })
+export const library = createStore({ docs: [], loaded: false, collections: loadCollections(), voicingNow: null })
 library.sub(() => localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(library.get().collections)))
 
 const cache = new Map() // id → { blocks, segs: [{t, b, k}], starts: [segIndex per block], durs: [sec, 0 = not voiced] }
@@ -108,7 +108,7 @@ export const kickPrep = makeLoop(async () => {
 export const kickVoice = makeLoop(async () => {
   if (engine.get().status === 'error') return false // wait for Settings → retry (which kicks)
   const job = await nextVoiceJob()
-  if (!job) return false
+  if (!job) { if (library.get().voicingNow) library.set({ voicingNow: null }); return false }
   await voiceOne(job.id, job.i)
   return true
 })
@@ -133,6 +133,7 @@ async function nextVoiceJob() {
 }
 
 async function voiceOne(id, i) {
+  if (library.get().voicingNow !== id) library.set({ voicingNow: id })
   const d = getDoc(id)
   const c = cache.get(id)
   const seg = c.segs[i]

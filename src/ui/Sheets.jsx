@@ -79,7 +79,8 @@ function AddForm({ wide }) {
     if (tab === 'file') src = { kind, name: file.name, blob: file }
     else if (tab === 'text') src = { kind: /^#{1,6}\s/m.test(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
     else src = { kind: 'link', name: url.trim(), url: url.trim() }
-    const id = await addDocument(src, { mode, voice, ai: ai && keyed })
+    const named = tab === 'text' && title.trim()
+    const id = await addDocument(src, { mode, voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}) })
     if (voice !== s.voice) settings.set({ voice })
     if (mode !== s.mode && keyed) settings.set({ mode })
     history.replaceState({ view: 'reader', docId: id }, '') // the sheet's history entry becomes the reader
