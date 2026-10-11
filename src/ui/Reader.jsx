@@ -200,7 +200,7 @@ export function Reader({ wide }) {
               <div style={{ minWidth: 0, display: 'grid', gap: 8 }}>
                 <h1 style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</h1>
                 <div style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
-                  {[d.author, d.chars ? fmtDur(docDuration(d)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai ? 'AI narration' : null].filter(Boolean).join(' · ')}
+                  {[d.author, d.chars ? fmtDur(docDuration(d)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
                 </div>
                 {playId !== id && (d.status === 'voicing' || d.status === 'ready') && (
                   <div><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></div>

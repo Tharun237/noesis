@@ -82,7 +82,7 @@ export function LibraryAsk({ wide }) {
           {passages.map(p => (
             <button key={`${p.doc}:${p.block}`} type="button" onClick={() => openPassage(p)}
               style={{ textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font, display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{p.title}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}><span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.lime, marginRight: 8 }}>[{p.n}]</span>{p.title}</span>
               <span style={{ fontSize: 13, color: T.sub, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.text}</span>
             </button>
           ))}
