@@ -68,6 +68,11 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
 
 ## Sprint 3: AI listening features
 
+Shipped 2026-10-11: items 10, 12 (by tap) and 14 (recap) as one-tap helpers in the Ask panel and the reader
+menu: Explain that, Recap so far, Skim this section (with a jump to the next section), and a welcome-back
+card after 8 hours away. Answers are spoken and the book carries on. Tested with a real NVIDIA key.
+Still open: 9, 11, 12 by voice, 13, the cards in 14.
+
 9. Equation and code breakdown mode (explain the idea before the symbols).
 10. Selective depth: skim a section as a one-minute summary, or read it word for word.
 11. Citation audio cards (10-second preview of a cited paper, then back).
@@ -76,6 +81,10 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
 14. "Where you left off" recaps; character and argument cards.
 
 ## Sprint 4: library intelligence and insight
+
+Shipped 2026-10-11: item 16, Ask your library (M12): keyword ranking on the device, the top passages go to
+the customer's AI, the answer cites numbered passages and each opens its book at that place. Without an AI
+key it still lists matching passages. Not yet: page and time references in the citation, spoken answers.
 
 15. Multi-paper audio briefing (3 to 5 PDFs: overlaps, conflicts, shared methods).
 16. Ask my entire library (cross-book answers with page and time references).
