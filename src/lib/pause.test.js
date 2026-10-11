@@ -29,3 +29,15 @@ test('an all-silent input is returned unchanged', () => {
   const pcm = new Float32Array(2205)
   assert.equal(padTail(pcm, RATE, 260), pcm)
 })
+
+test('a faint noise floor counts as silence (a neural voice never ends in digital zero)', () => {
+  const pcm = toneWithTail(500, 300)
+  const from = Math.round((500 * RATE) / 1000)
+  let seed = 1
+  for (let i = from; i < pcm.length; i++) {
+    seed = (seed * 1664525 + 1013904223) >>> 0
+    pcm[i] = (seed / 2 ** 32 - 0.5) * 0.004 // about 45 dB under the tone, with single samples above any per-sample line
+  }
+  assert.equal(padTail(pcm, RATE, 260), pcm)
+  assert.ok(Math.abs(trailingSeconds(pcm, RATE) * 1000 - 300) <= 10)
+})
