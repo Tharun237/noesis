@@ -120,6 +120,12 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
   }
 
   const quick = qk => ask(qk.q, { label: qk.label, aloud: true, skim: qk.skim })
+  // At an equation or a code listing, one more helper: the idea first, then the parts, in plain words.
+  const here = doc ? doc.blocks[doc.segs[Math.min(playId === d.id ? pi : d.pos || 0, doc.segs.length - 1)]?.b]?.k : null
+  const breakdown = here === 'math' || here === 'code'
+    ? { id: 'break', label: here === 'code' ? 'Walk through this code' : 'Break this equation down',
+        q: `I am at ${here === 'code' ? 'a code listing' : 'an equation'}. First say in one or two plain sentences what it is for and why it matters. Then walk through its parts in order, in plain words, without reading symbols aloud one by one. Under 140 words. Answer in the language of the document.` }
+    : null
   // Opened from a one-tap action elsewhere (the reader's menu, the welcome-back card): ask it at once.
   const ran = useRef(0)
   useEffect(() => {
@@ -192,7 +198,7 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 8, padding: '10px 12px 0', borderTop: `1px solid ${T.border}`, overflowX: 'auto', flexShrink: 0 }}>
-            {QUICK.map(qk => (
+            {[...(breakdown ? [breakdown] : []), ...QUICK].map(qk => (
               <button key={qk.id} type="button" disabled={busy || !doc} onClick={() => quick(qk)}
                 style={{ flexShrink: 0, height: 34, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: T.surface, color: T.text, fontFamily: T.font, fontSize: 13.5, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy || !doc ? 0.5 : 1 }}>
                 {qk.label}

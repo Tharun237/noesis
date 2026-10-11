@@ -21,6 +21,8 @@ export const db = {
   putDurs: (id, d) => set('durs:' + id, d, content),
   getChat: id => get('chat:' + id, content),
   putChat: (id, msgs) => set('chat:' + id, msgs, content),
+  getHistory: () => get('history', content),
+  putHistory: log => set('history', log, content),
   delContent: id => delMany(['src:' + id, 'doc:' + id, 'durs:' + id, 'chat:' + id, 'tr:' + id], content),
 
   // Finished translation chunks (Map chunkIndex → strings) so a restarted run

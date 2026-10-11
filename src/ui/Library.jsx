@@ -6,6 +6,7 @@ import { ui, go, openSheet } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
+import { historyStore, hasEntries } from '../lib/history.js'
 import { engine } from '../lib/tts.js'
 import { voiceName, VOICES } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
@@ -26,6 +27,7 @@ function LibraryAi({ hasBriefing }) {
       items={[
         { label: 'Ask your library', icon: 'sparkle', onClick: () => openSheet('libraryask') },
         ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'list', onClick: () => openSheet('briefing') }] : []),
+        { label: 'Your listening', icon: 'list', onClick: () => openSheet('listening') },
       ]} />
   )
 }
@@ -158,6 +160,7 @@ function DesktopHeader({ summary }) {
   const collections = useStore(library, s => s.collections)
   const hasDocs = useStore(library, s => s.docs.length > 0)
   const hasBriefing = useStore(library, s => s.docs.length >= 2)
+  const hasHistory = useStore(historyStore, s => hasEntries(s.log))
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
     <header style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
@@ -168,7 +171,7 @@ function DesktopHeader({ summary }) {
       <SearchBox value={query} width={220} />
       <SortMenu />
       <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
-      {hasDocs && <LibraryAi hasBriefing={hasBriefing} />}
+      {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
       <Button kind="primary" icon="plus" onClick={() => openSheet('add')}>Add document</Button>
     </header>
   )
@@ -218,6 +221,7 @@ function MobileHeader({ summary }) {
   const collections = useStore(library, s => s.collections)
   const hasDocs = useStore(library, s => s.docs.length > 0)
   const hasBriefing = useStore(library, s => s.docs.length >= 2)
+  const hasHistory = useStore(historyStore, s => hasEntries(s.log))
   const chips = [['queue', 'Queue'], ['all', 'All'], ['archived', 'Archived'], ...collections.map(c => [c.id, c.name])]
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
@@ -225,7 +229,7 @@ function MobileHeader({ summary }) {
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 56, padding: '0 10px 0 12px' }}>
           <div style={{ flex: 1 }}><Wordmark size={24} /></div>
-          {hasDocs && <LibraryAi hasBriefing={hasBriefing} />}
+          {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
           <SortMenu />
           <AccountChip compact />
         </div>
