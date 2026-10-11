@@ -12,16 +12,20 @@ import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
-import { Button, IconButton, Menu, Progress, Pulse, Sheet, fmtDur } from './kit.jsx'
+import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, fmtDur } from './kit.jsx'
+import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts.jsx'
 import { playerHeight } from './PlayerBar.jsx'
 
 // Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
 const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
+// Pages view (and its pdf.js engine) loads only when a PDF listener asks for it.
+const PageView = lazy(() => import('./PageView.jsx').then(m => ({ default: m.PageView })))
 
 const VISUAL_LABEL = { fig: 'Figure', table: 'Table', math: 'Equation', code: 'Code' }
 const HEADER_H = 57
+const SUBROW_H = 44 // second header row (Text | Pages) on documents that have pages
 
 export function Reader({ wide }) {
   const id = useStore(ui, s => s.docId)
@@ -43,8 +47,17 @@ export function Reader({ wide }) {
   const width = useStore(settings, s => s.readWidth)
   const justify = useStore(settings, s => s.justify)
   const words = useStore(settings, s => s.wordHighlight)
+  const readerView = useStore(settings, s => s.readerView || 'text')
+  const invertSetting = useStore(settings, s => s.invertPages)
+  // Inverting suits clean digital pages. A scan's paper tone turns muddy, so scans start un-inverted
+  // until the listener chooses (the setting is then a real true/false).
+  const invertPages = invertSetting ?? !d?.scanned
   const active = playId === id ? pi : -1
   const userScroll = useRef(0)
+  const [hasSource, setHasSource] = useState(null) // does this device hold the original file?
+  const [pdfFail, setPdfFail] = useState(false) // the PDF could not be opened as pages
+  const [visPage, setVisPage] = useState(1) // page on screen in Pages view
+  const [numPages, setNumPages] = useState(0)
 
   // (Re)load the listening text whenever the document gets (re)prepared.
   useEffect(() => {
@@ -54,10 +67,35 @@ export function Reader({ wide }) {
     return () => { live = false }
   }, [id, total, status === 'voicing' || status === 'ready'])
 
+  // Pages view needs the original file on this device (a synced document has no source here).
   useEffect(() => {
+    let live = true
+    setHasSource(null)
+    setPdfFail(false)
+    setVisPage(1)
+    setNumPages(0)
+    if (d?.kind !== 'pdf') { setHasSource(false); return }
+    db.getSource(id).then(src => live && setHasSource(!!src?.blob)).catch(() => live && setHasSource(false))
+    return () => { live = false }
+  }, [id, d?.kind])
+
+  const pagesAvailable = d?.kind === 'pdf' && hasSource === true
+  const view = pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
+  // Sentence i belongs to block segs[i].b, so its page is blocks[segs[i].b].p (1-based; older
+  // documents prepared before pages were linked have no p).
+  const activePage = view === 'pages' && doc && active >= 0 ? (doc.blocks[doc.segs[active]?.b]?.p ?? null) : null
+  const firstOfPage = useMemo(() => {
+    const m = new Map()
+    if (doc) doc.segs.forEach((s, i) => { const p = doc.blocks[s.b]?.p; if (typeof p === 'number' && !m.has(p)) m.set(p, i) })
+    return m
+  }, [doc])
+  const linked = firstOfPage.size > 0
+
+  useEffect(() => {
+    if (view !== 'text') return
     if (active < 0 || Date.now() - userScroll.current < 4000) return
     scrollToSentence(active)
-  }, [active, doc])
+  }, [active, doc, view])
 
   useEffect(() => { if (hit >= 0) scrollToSentence(hit) }, [hit])
 
@@ -83,6 +121,7 @@ export function Reader({ wide }) {
   const showToc = wide && tocOpen && headings.length > 1
   const askDocked = wide && panel === 'ask'
   const bottom = playerHeight(wide, true, !!playId)
+  const headH = HEADER_H + (pagesAvailable ? SUBROW_H : 0)
   const sheet = (name, title, body, w) => (
     <Sheet open={panel === name && !(name === 'ask' && wide)} onClose={() => setPanel(null)} wide={wide} title={title} width={w}>{body}</Sheet>
   )
@@ -100,14 +139,33 @@ export function Reader({ wide }) {
           {wide && <IconButton icon="bookmark" label="Bookmarks & notes" onClick={() => setPanel('marks')} />}
           <IconButton icon="sparkle" label="Ask about this document" active={panel === 'ask'} onClick={() => setPanel(panel === 'ask' ? null : 'ask')} />
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
-            items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']), ...docMenu(d)]} />
+            items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
+              ...(view === 'pages' ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
+              ...docMenu(d)]} />
         </div>
+        {pagesAvailable && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: SUBROW_H, padding: `0 ${wide ? 20 : 14}px 10px` }}>
+            <div style={{ width: 164, flexShrink: 0 }}>
+              <Segmented size="sm" value={view}
+                options={[{ value: 'text', label: 'Text' }, { value: 'pages', label: 'Pages' }]}
+                onChange={v => { setPdfFail(false); settings.set({ readerView: v }) }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : ''}
+            </div>
+          </div>
+        )}
+        {view === 'pages' && numPages > 0 && doc && !linked && (
+          <div style={{ padding: `0 ${wide ? 20 : 14}px 10px`, fontSize: 12, lineHeight: 1.45, color: T.sub }}>
+            Pages aren't linked to the audio for this document. Add it again to link them.
+          </div>
+        )}
         {searching && <SearchBar doc={doc} onHit={setHit} onClose={() => setSearching(false)} />}
       </header>
 
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         {showToc && (
-          <aside style={{ width: T.tocW, flexShrink: 0, position: 'sticky', top: HEADER_H, height: `calc(100dvh - ${HEADER_H + bottom}px)`, overflowY: 'auto', padding: '20px 10px 20px 14px', borderRight: `1px solid ${T.border}` }}>
+          <aside style={{ width: T.tocW, flexShrink: 0, position: 'sticky', top: headH, height: `calc(100dvh - ${headH + bottom}px)`, overflowY: 'auto', padding: '20px 10px 20px 14px', borderRight: `1px solid ${T.border}` }}>
             <div style={{ ...label, padding: '0 12px 10px' }}>Contents</div>
             <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} />
           </aside>
@@ -130,8 +188,18 @@ export function Reader({ wide }) {
 
             {d.status !== 'ready' && <Preparing d={d} doc={doc} pos={active >= 0 ? active : d.pos || 0} />}
             {(d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
+            {pdfFail && (
+              <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, margin: '0 0 24px' }}>This file can't be shown as pages on this device.</div>
+            )}
 
-            {doc && (
+            {view === 'pages' ? (
+              <Suspense fallback={null}>
+                <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
+                  onPages={setNumPages} onVisible={setVisPage}
+                  onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }}
+                  onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
+              </Suspense>
+            ) : doc && (
               <div ref={colRef} onClick={e => { if (window.getSelection()?.toString()) return; const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i) }}>
                 {chunks.map((ch, ci) => {
                   const hasActive = active >= ch.s0 && active < ch.s1
@@ -151,7 +219,7 @@ export function Reader({ wide }) {
       <AnimatePresence>
         {askDocked && (
           <motion.aside key="ask" initial={{ x: T.askW }} animate={{ x: 0 }} exit={{ x: T.askW }} transition={T.spring}
-            style={{ position: 'fixed', top: HEADER_H, right: 0, bottom, width: T.askW, zIndex: 18, background: T.bg, borderLeft: `1px solid ${T.border}` }}>
+            style={{ position: 'fixed', top: headH, right: 0, bottom, width: T.askW, zIndex: 18, background: T.bg, borderLeft: `1px solid ${T.border}` }}>
             <AskPanel d={d} doc={doc} onClose={() => setPanel(null)} />
           </motion.aside>
         )}

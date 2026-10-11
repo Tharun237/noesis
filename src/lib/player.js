@@ -368,7 +368,7 @@ function voiceChanged() {
   heard = now
   if (!changed) return
   // Audio in the previous voice must never resume: drop both stretches before playing on.
-  const resume = p.playing || p.waiting
+  const resume = p.playing || p.waiting || pendingStart // Play was pressed while audio was being prepared: it still stands
   stopOutput()
   revoke(next); revoke(current)
   next = current = null

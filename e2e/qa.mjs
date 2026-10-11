@@ -323,6 +323,20 @@ await step('add scanned PDF (Traction)', async () => {
   return `${d.total} sentences, note: ${d.note?.slice(0, 70)}`
 })
 
+await step('pages view shows the original PDF', async () => {
+  await page.evaluate(() => history.state.view !== 'library' && document.querySelector('button[aria-label="Back to library"]')?.click())
+  await sleep(500)
+  await page.locator('[role=button]').filter({ hasText: 'Traction' }).first().click()
+  await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
+  await click('tab', 'Pages')
+  await until(() => page.evaluate(() => {
+    const drawn = [...document.querySelectorAll('[data-testid="page-view"] canvas')].some(c => c.width > 100)
+    return drawn && document.body.innerText.includes('Page 1 of')
+  }), 30000, 'a drawn page and the page label')
+  await click('tab', 'Text')
+  await click('button', 'Back to library')
+})
+
 await step('add EPUB (generated)', async () => {
   const zip = new JSZip()
   zip.file('mimetype', 'application/epub+zip')

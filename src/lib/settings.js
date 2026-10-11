@@ -27,6 +27,8 @@ export const DEFAULTS = {
   justify: false,
   wordHighlight: true,
   tocOpen: true,
+  readerView: 'text', // text | pages (original PDF pages; only when the source file is on this device)
+  invertPages: null, // Pages view: true/false once chosen; null = automatic (invert clean digital pages, not scans)
 }
 
 function load() {

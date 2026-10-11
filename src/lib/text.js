@@ -122,7 +122,8 @@ function listenBlock(b) {
   const t = b.k === 'code' && !b.spoken ? 'A code listing appears here.' : cleanText(raw)
   if (!t || !/[\p{L}\d]/u.test(t)) return null
   const s = b.k === 'h' ? [t.replace(/\.$/, '')] : sentences(t)
-  return s.length ? { k: b.k, s } : null
+  if (!s.length) return null
+  return typeof b.page === 'number' ? { k: b.k, s, p: b.page } : { k: b.k, s }
 }
 export const toListening = blocks => blocks.map(listenBlock).filter(Boolean)
 

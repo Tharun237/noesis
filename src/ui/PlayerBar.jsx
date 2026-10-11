@@ -56,14 +56,14 @@ export function PlayerBar({ wide, full }) {
     <div style={{ display: 'grid', gap: 2 }}>
       {waiting && <div style={{ fontSize: 12, color: T.sub }}>Waiting for the next sentence to generate</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
-      <span style={{ minWidth: 52 }}>{fmtTime(shown)}</span>
+      <span style={{ minWidth: 52, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtTime(shown)}</span>
       <input type="range" min={0} max={Math.max(1, Math.floor(total))} step={1} value={Math.floor(shown)} aria-label="Position"
         disabled={!c}
         onChange={e => setDrag(+e.target.value)}
         onPointerUp={e => { seekTime(+e.currentTarget.value); setDrag(null) }}
         onKeyUp={e => { if (drag !== null) { seekTime(drag); setDrag(null) } }}
-        style={{ flex: 1, accentColor: T.accent, height: 20, cursor: 'pointer', margin: 0 }} />
-      <span style={{ minWidth: 60, textAlign: 'right' }}>-{fmtTime(remaining)}</span>
+        style={{ flex: 1, minWidth: 0, accentColor: T.accent, height: 20, cursor: 'pointer', margin: 0 }} />
+      <span style={{ minWidth: 60, textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>-{fmtTime(remaining)}</span>
       </div>
     </div>
   )

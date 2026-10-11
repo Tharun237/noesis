@@ -28,6 +28,40 @@ export async function renderPage(pdf, n, width, quality = 0.72) {
   return url
 }
 
+// -- page-view exports (used by src/ui/PageView.jsx; ingest logic stays here) ----------------
+// Height/width ratio of page n (1-based), for placeholders before anything is drawn.
+export async function pageRatio(pdf, n) {
+  const page = await pdf.getPage(n)
+  const v = page.getViewport({ scale: 1 })
+  page.cleanup()
+  return v.height / v.width
+}
+
+// Paint page n (1-based) into the given canvas. Pixel width = CSS width × min(devicePixelRatio, 2).
+// Calls onTask with the pdf.js render task so the caller can cancel it; resolves to the page's
+// height/width ratio so the placeholder can be refined to the page's true size.
+export async function paintPage(pdf, n, canvas, cssWidth, dpr, onTask) {
+  const page = await pdf.getPage(n)
+  const base = page.getViewport({ scale: 1 })
+  const px = Math.max(1, Math.round(cssWidth * Math.min(dpr || 1, 2)))
+  const viewport = page.getViewport({ scale: px / base.width })
+  canvas.width = Math.round(viewport.width)
+  canvas.height = Math.round(viewport.height)
+  const task = page.render({ canvas, viewport })
+  onTask?.(task)
+  try {
+    await task.promise
+  } finally {
+    page.cleanup()
+  }
+  return viewport.height / viewport.width
+}
+
+// Mirrors the cleanup in prepare() (src/lib/library.js): the loading task owns the worker-side document.
+export function closePdf(pdf) {
+  try { pdf?.loadingTask?.destroy?.() } catch { /* already destroyed */ }
+}
+
 // pdf.js text items → visual lines {text, y, size, x}
 function toLines(items) {
   const lines = []
