@@ -2,7 +2,23 @@
 // No AI, no server, no network. Pure functions only (safe to import in Node tests).
 
 // Words that look like names only because of their position or the calendar, plus generic headings.
+// Words that are capitalised or long without being a name or a term. Seen on a real library: the first
+// version filled the map with "In", "Why", "How", "Today", "something", "through", "getting".
+const GENERIC = `a an and are as at be but by for from has have he her his how i if in into is it its no not of on
+one or our she so than that their them then there these they those to too two up us was we were what when where
+which who why will with you your about above after again against all also although always among another any
+anyone anything around because become becomes before behind being below between both called cannot certain
+could different does doing done during each either enough especially even every everyone everything example
+first following further general getting given going however important including instead itself least likely
+little making many might more most much must never nothing number often other others perhaps please possible
+potential probably rather really second several should simply since some someone something sometimes still
+such taking themselves therefore thing things think though three through throughout today together toward
+towards under until using usually various whether while within without would years yourself don doesn didn
+isn wasn aren couldn shouldn wouldn here just like make made many new now only out over own same see than
+very well yet`.split(/\s+/)
+
 const STOP = new Set([
+  ...GENERIC,
   'the', 'this', 'however', 'chapter', 'figure', 'table', 'section', 'may',
   'january', 'february', 'march', 'april', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
@@ -79,7 +95,15 @@ export function conceptMap(docs, { maxConcepts = 40 } = {}) {
     all.push({ key, label, docs: e.docs, weight: e.total * Math.log(1 + N / e.docs.length) })
   }
   all.sort((a, b) => (b.docs.length > 1) - (a.docs.length > 1) || b.weight - a.weight || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-  const concepts = all.slice(0, maxConcepts)
+  // The map is about how documents CONNECT: every shared concept first, then at most three of each
+  // document's own, so one long book cannot fill the picture by itself.
+  const own = new Map()
+  const concepts = all.filter(c => {
+    if (c.docs.length > 1) return true
+    const id = c.docs[0].id
+    own.set(id, (own.get(id) || 0) + 1)
+    return own.get(id) <= 3
+  }).slice(0, maxConcepts)
 
   const index = new Map(docs.map((d, i) => [d.id, i]))
   const shared = docs.map(() => new Array(N).fill(0))
@@ -142,8 +166,8 @@ export function layout(concepts, docs, { width, height }) {
       moved = true
     }
     for (const p of pts) {
-      p.x = Math.min(width, Math.max(0, p.x))
-      p.y = Math.min(height, Math.max(0, p.y))
+      p.x = Math.min(width - 52, Math.max(52, p.x)) // room for half a label, so none is cut by the edge
+      p.y = Math.min(height - 14, Math.max(14, p.y))
     }
     if (!moved) break
   }
