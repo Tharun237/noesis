@@ -61,7 +61,25 @@ export function parseReply(text, expected) {
 // One AI request per chunk through the provider door: same prompt, same JSON-array
 // contract, same onRetry (seconds to wait, null when clear) for either provider.
 async function requestTexts({ prompt, signal, onRetry }) {
-  return aiText({ prompt, json: true, signal, onRetry })
+  return aiText({ prompt, json: true, schema: { type: 'ARRAY', items: { type: 'STRING' } }, shape: 'a JSON array of strings', signal, onRetry })
+}
+
+// A model sometimes slips letters of another alphabet into a translation (measured on NVIDIA, English to
+// Telugu: an Urdu word in Arabic script, and Bengali letters inside "TNT"). The voice of the target language
+// cannot say them, so the listener would hear a hole. Latin letters are allowed: names and units.
+const SCRIPT = { te: /\p{Script=Telugu}/u, hi: /\p{Script=Devanagari}/u, en: /\p{Script=Latin}/u }
+const LETTER = /[\p{L}\p{M}]/u
+const SAYABLE = /[\p{Script=Latin}\p{Script=Inherited}\p{Script=Common}]/u
+const foreign = (ch, lang) => LETTER.test(ch) && !SCRIPT[lang].test(ch) && !SAYABLE.test(ch)
+export function foreignLetters(text, lang) {
+  if (!SCRIPT[lang]) return 0
+  let n = 0
+  for (const ch of String(text)) if (foreign(ch, lang)) n++
+  return n
+}
+export function dropForeign(text, lang) {
+  if (!SCRIPT[lang]) return String(text)
+  return [...String(text)].filter(ch => !foreign(ch, lang)).join('').replace(/ {2,}/g, ' ')
 }
 
 // New blocks: one output block per input block, same order, same kind and page;
@@ -94,6 +112,15 @@ export async function translateBlocks(blocks, target, opts = {}) {
         const first = await requestTexts({ prompt: buildPrompt(texts.slice(0, mid), languageName), signal, onRetry })
         const second = await requestTexts({ prompt: buildPrompt(texts.slice(mid), languageName), signal, onRetry })
         strings = [...parseReply(first, mid), ...parseReply(second, texts.length - mid)]
+      }
+      // Letters of the wrong alphabet: ask once more, saying so. If they are still there, drop those letters:
+      // a missing word is a smaller loss than failing the whole book or a sound the voice cannot make.
+      if (strings.some(t => foreignLetters(t, target))) {
+        const again = await requestTexts({ prompt: `${buildPrompt(texts, languageName)}\n\nUse only ${languageName} script, Latin letters for names where needed, and digits. No other alphabet.`, signal, onRetry })
+        let second = null
+        try { second = parseReply(again, texts.length) } catch { /* the first answer stays; cleaned below */ }
+        if (second && second.reduce((a, t) => a + foreignLetters(t, target), 0) < strings.reduce((a, t) => a + foreignLetters(t, target), 0)) strings = second
+        strings = strings.map(t => dropForeign(t, target))
       }
     }
     results[ci] = strings

@@ -3,7 +3,7 @@ import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, toast, goBack, openSheet } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
-import { hasAiKey, isNvidiaKey, listAiModels } from '../lib/ai.js'
+import { AiCard } from './AiCard.jsx'
 import { deleteAllAudio } from '../lib/library.js'
 import { Button, IconButton, Segmented, Toggle, Field, inputStyle } from './kit.jsx'
 import { AccountCard } from './AccountCard.jsx'
@@ -49,7 +49,7 @@ export function Settings({ wide }) {
           <Toggle checked={s.archiveFinished} onChange={v => settings.set({ archiveFinished: v })} labelText="Archive documents when finished"
             hint="Keeps your queue to what you haven't heard yet." />
         </Card>
-        <AiCard />
+        <AiCard Card={Card} />
         <StorageCard />
         <DiagnosticsCard Card={Card} />
         <CreditsCard Card={Card} />
@@ -65,119 +65,6 @@ function Card({ title, children, right }) {
       <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ ...label, flex: 1 }}>{title}</div>{right}</div>
       {children}
     </section>
-  )
-}
-
-function AiCard() {
-  const provider = useStore(settings, s => s.aiProvider || 'gemini')
-  const gKey = useStore(settings, s => s.geminiKey)
-  const gModel = useStore(settings, s => s.geminiModel)
-  const nKey = useStore(settings, s => s.nvidiaKey)
-  const nModel = useStore(settings, s => s.nvidiaModel)
-  const ai = useStore(settings, s => s.aiNarration)
-  const [gDraft, setGDraft] = useState(gKey)
-  const [nDraft, setNDraft] = useState(nKey)
-  const [show, setShow] = useState(false)
-  const [models, setModels] = useState(null)
-  const [state, setState] = useState(null)
-
-  const nvidia = provider === 'nvidia'
-  const key = nvidia ? nKey : gKey
-  const model = nvidia ? nModel : gModel
-  const draft = nvidia ? nDraft : gDraft
-  const setDraft = nvidia ? setNDraft : setGDraft
-  const validLook = nvidia ? isNvidiaKey(draft) : draft.trim().length > 20
-
-  async function test(k = draft.trim(), auto = false) {
-    setState('testing')
-    try {
-      if (nvidia) {
-        settings.set({ nvidiaKey: k })
-        const list = await listAiModels()
-        setModels(list)
-      } else {
-        const { listModels } = await import('../lib/gemini.js')
-        const list = await listModels(k)
-        setModels(list.map(m => ({ id: m.id, name: m.label || m.id })))
-        settings.set({ geminiKey: k })
-      }
-      setState('ok')
-    } catch (e) {
-      const offline = !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed/i.test(e.message || '')
-      if (auto && offline) { setState(null); return }
-      setState(offline ? 'No connection. Your key is saved. Test again when online.' : e.message)
-    }
-  }
-  useEffect(() => {
-    setModels(null); setState(null)
-    const s = settings.get()
-    if (s.aiProvider === 'nvidia') { if (isNvidiaKey(s.nvidiaKey)) test(s.nvidiaKey.trim(), true) }
-    else if (s.geminiKey) test(s.geminiKey.trim(), true)
-  }, [provider]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (nvidia) { if (isNvidiaKey(nKey) && !models) test(nKey.trim(), true) }
-    else if (gKey && !models) test(gKey.trim(), true)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  return (
-    <Card title="AI" right={hasAiKey() && state === 'ok' ? <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.ok }}>connected</span> : null}>
-      <Segmented value={provider} onChange={v => settings.set({ aiProvider: v })}
-        options={[{ value: 'gemini', label: 'Gemini' }, { value: 'nvidia', label: 'NVIDIA' }]} />
-      {nvidia ? (
-        <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.55 }}>
-          Add your own free NVIDIA key to unlock <span style={{ color: T.text }}>summaries</span>, <span style={{ color: T.text }}>translation</span> and <span style={{ color: T.text }}>Ask</span>.
-          Free from build.nvidia.com with your own account.
-        </div>
-      ) : (
-        <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.55 }}>
-          Add your own free Google Gemini key to unlock <span style={{ color: T.text }}>summaries</span>, <span style={{ color: T.text }}>figure and table descriptions</span>, spoken math, and reading <span style={{ color: T.text }}>scanned PDFs</span>.
-          The key is stored only on this device and sent only to Google. Get one free at{' '}
-          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ color: T.accent }}>aistudio.google.com/apikey</a>.
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={draft} onChange={e => setDraft(e.target.value)} type={show ? 'text' : 'password'} placeholder={nvidia ? 'Paste your NVIDIA API key (nvapi-…)' : 'Paste your Gemini API key'} autoComplete="off" spellCheck={false}
-          style={{ ...inputStyle, flex: 1, fontFamily: T.mono, fontSize: 13 }} />
-        <IconButton icon="eye" active={show} label={show ? 'Hide key' : 'Show key'} onClick={() => setShow(!show)} size={46} />
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button kind="primary" onClick={() => test()} disabled={!validLook || state === 'testing'}>{state === 'testing' ? 'Checking…' : 'Save & test'}</Button>
-        {key && <Button kind="danger" onClick={() => {
-          if (nvidia) { settings.set({ nvidiaKey: '', nvidiaModel: '' }); setNDraft('') } else { settings.set({ geminiKey: '' }); setGDraft('') }
-          setModels(null); setState(null)
-        }}>Remove key</Button>}
-        {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: state === 'No connection. Your key is saved. Test again when online.' ? T.sub : T.danger }}>{state}</span>}
-      </div>
-      {nvidia && (
-        <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.55 }}>
-          NVIDIA does not accept requests straight from a browser, so your key and the text travel through Noesis&apos;s relay to reach NVIDIA. Nothing is stored.
-        </div>
-      )}
-      {models && (
-        nvidia ? (
-          <Field title="Model">
-            <select value={model} onChange={e => settings.set({ nvidiaModel: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-              <option value="" style={{ background: T.bg }}>Choose a model…</option>
-              {models.map(m => (
-                <option key={m.id} value={m.id} style={{ background: T.bg }}>{m.name}</option>
-              ))}
-            </select>
-          </Field>
-        ) : (
-          <Field title="Model" hint="gemini-flash-latest always points to Google's newest Flash model.">
-            <select value={model} onChange={e => settings.set({ geminiModel: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-              {[{ id: 'gemini-flash-latest', name: 'Gemini Flash (latest)' }, ...models.filter(m => m.id !== 'gemini-flash-latest')].map(m => (
-                <option key={m.id} value={m.id} style={{ background: T.bg }}>{m.name} · {m.id}</option>
-              ))}
-            </select>
-          </Field>
-        )
-      )}
-      {!nvidia && (
-        <Toggle checked={ai} onChange={v => settings.set({ aiNarration: v })} disabled={!hasKey()} labelText="AI narration for PDFs by default"
-          hint="Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests." />
-      )}
-    </Card>
   )
 }
 

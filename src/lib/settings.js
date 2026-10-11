@@ -6,7 +6,11 @@ import { createStore } from './store.js'
 const KEY = 'noesis.settings.v1'
 
 export const DEFAULTS = {
-  aiProvider: 'gemini', // gemini | nvidia — which provider AI text features use
+  aiProvider: 'gemini', // gemini | nvidia | custom (any OpenAI-compatible address): which provider AI text features use
+  customBase: '', // e.g. https://openrouter.ai/api/v1 or http://localhost:11434/v1
+  customKey: '',
+  customModel: '',
+  modelChecks: {}, // provider id → [{ id, s }] models that answered the last check, with seconds
   geminiKey: '',
   geminiModel: 'gemini-flash-latest',
   nvidiaKey: '',

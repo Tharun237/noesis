@@ -67,3 +67,15 @@ test('parseReply throws the exact message on a count mismatch', () => {
 test('parseReply throws the exact message on invalid JSON', () => {
   assert.throws(() => parseReply('not json at all', 3), new Error('The translation came back with 0 items instead of 3.'))
 })
+
+test('foreignLetters / dropForeign: letters the target voice cannot say (the real NVIDIA reply)', async () => {
+  const { foreignLetters, dropForeign } = await import('./translate.js')
+  const bad = 'విస్ఫోటం تقریباً 21,000 టన్ টিএনటీ‑కు సమాన శక్తి విడిచింది.'
+  assert.ok(foreignLetters(bad, 'te') > 5)
+  assert.equal(foreignLetters('1945లో, Robert Oppenheimer న్యూ మెక్సికోలో 21,000 టన్నులు.', 'te'), 0)
+  const cleaned = dropForeign(bad, 'te')
+  assert.equal(foreignLetters(cleaned, 'te'), 0)
+  assert.ok(cleaned.includes('విస్ఫోటం') && cleaned.includes('21,000') && !cleaned.includes('  '))
+  assert.equal(foreignLetters('नमस्ते दुनिया', 'hi'), 0)
+  assert.ok(foreignLetters('नमस्ते నమస్తే', 'hi') > 0)
+})

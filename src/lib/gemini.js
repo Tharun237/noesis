@@ -124,8 +124,9 @@ Write for the ear: clear, flowing sentences, no bullet symbols, no markdown. Use
 
 export async function summarize({ text, title, mode, key, model, signal, onRetry }) {
   // Summaries work with either provider: the prompt and the block output are unchanged,
-  // only the door (aiText) picks Gemini or NVIDIA from Settings.
-  const raw = await aiText({ prompt: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}`, json: true, signal, onRetry })
+  // only the door (aiText) picks the provider chosen in Settings.
+  const raw = await aiText({ prompt: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}`, json: true, schema: BLOCKS_SCHEMA,
+    shape: '{"blocks":[{"k":"h" for a heading or "p" for a paragraph,"text":"..."}]}', signal, onRetry })
   let s = String(raw).trim()
   const fence = s.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/)
   if (fence) s = fence[1].trim()
