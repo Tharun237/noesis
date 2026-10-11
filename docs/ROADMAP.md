@@ -70,14 +70,19 @@ Rules: one writer in the repo at a time; a task is done only when `npx vite buil
 22. For deaf and hard-of-hearing readers: kinetic prosody typography, haptic rhythm (Android only: iPhone
     browsers have no vibration API), RSVP high-speed reading.
 
-## Not possible as a web app (parked, with the reason)
+## Limits of a web app, and the way around each
 
-- **Apple Watch / Wear OS / Garmin apps.** These are native apps with their own stores and fees.
-- **Earbud noise-cancelling and sensor integration.** Browsers get no access to earbud sensors. A reduced
-  version (lower speed in noise, pause when you speak, using the phone microphone while the app is open) is
-  possible and is parked under Sprint 4.
-- **Word-by-word text inside the system notification.** The notification shows title, artist, artwork and
-  buttons only. Sentence-level is possible (item 2).
+- **Apple Watch / Wear OS / Garmin apps.** Native apps with their own stores and fees: parked.
+- **Earbud sensors and noise-cancelling.** Browsers cannot read earbud sensors. Approved 2026-10-11: build the
+  version that uses the phone microphone while the app is open (slow down and boost clarity in noise, pause
+  when the listener speaks). Sprint 4.
+- **Word-by-word text outside the app.** The system notification only has title, artist, artwork and buttons,
+  so the intent (see the words, control playback, without opening the app) is reached three other ways, each
+  to be proven on a real phone:
+  1. Notification text that moves with speech: the phrase being spoken, advancing every few words.
+  2. Lock-screen artwork drawn by the app: the current sentence typeset as the "cover".
+  3. A floating reader: the text with the lit word drawn to a small always-on-top window (picture-in-picture),
+     with play, pause and skip.
 
 ## Skills to create for Claude
 
@@ -86,10 +91,12 @@ Rules: one writer in the repo at a time; a task is done only when `npx vite buil
   business models for Noesis as a private, commercial product.
 - **Dynamic skill development**: when a situation needs a skill that does not exist, write it.
 
-## Decisions needed from Tharun
+## Decisions (Tharun, 2026-10-11)
 
-1. **Who pays for the AI?** Each user's own free Gemini key (zero cost, one setup step per user) or a shared
-   key on our server (smooth for users, real cost and abuse risk once there are customers).
-2. **Private and commercial.** The GitHub repository is public under the MIT licence today. Going private is
-   one command; say when. (The voices offered are already limited to licences that allow commercial use.)
-3. **iPhone.** Nothing has been tested on an iPhone. Is there one to test with?
+- **AI keys:** every customer brings their own (their own Google account for Gemini, or their own NVIDIA
+  account). Noesis never pays for or stores a shared key. The provider layer (item 7) offers both.
+- **Earbud-style awareness:** build the phone-microphone version.
+- **Words outside the app:** find a way (three approaches above).
+- **iPhone:** none available. Replicate with the WebKit engine in automated tests; this approximates Safari
+  but is not an iPhone (install flow, audio policies and background behaviour still need a real device).
+- **Open:** keep the code public under MIT, or make the repository private.
