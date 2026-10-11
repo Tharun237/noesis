@@ -585,9 +585,11 @@ export async function listenIn(id, target) {
     }
   }
   // Carry the place: the block number being read in the current document.
-  let block = 0
+  // A version that has no text yet (still translating, or failed) has no place to carry: leaving it must
+  // not move the other version back to its start.
   const c = await loadDoc(id)
-  if (c) block = c.segs[Math.min(cur?.pos || 0, c.segs.length - 1)]?.b ?? 0
+  if (!c?.segs?.length) return wantedId
+  const block = c.segs[Math.min(cur?.pos || 0, c.segs.length - 1)]?.b ?? 0
   const wanted = getDoc(wantedId)
   if (wanted && (wanted.status === 'voicing' || wanted.status === 'ready')) {
     const wc = await loadDoc(wantedId)
