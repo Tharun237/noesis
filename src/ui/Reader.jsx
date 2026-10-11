@@ -18,6 +18,7 @@ import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, fmtDur } f
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts.jsx'
+import { FocusView } from './FocusView.jsx'
 import { playerHeight } from './PlayerBar.jsx'
 
 // Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
@@ -42,6 +43,7 @@ export function Reader({ wide }) {
   const [hit, setHit] = useState(-1)
   const playId = useStore(player, s => s.id)
   const pi = useStore(player, s => s.i)
+  const isPlaying = useStore(player, s => s.playing)
   const rate = useStore(player, s => s.rate)
   const skip = useStore(settings, s => s.skipVisuals)
   const tocOpen = useStore(settings, s => s.tocOpen)

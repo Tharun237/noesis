@@ -45,6 +45,7 @@ export const DEFAULTS = {
   wordHighlight: true,
   tocOpen: true,
   readerView: 'text', // text | pages (original PDF pages; only when the source file is on this device)
+  focusWpm: 300, // Focus speed reader words per minute (200 to 900 in steps of 50)
   invertPages: null, // Pages view: true/false once chosen; null = automatic (invert clean digital pages, not scans)
 }
 
