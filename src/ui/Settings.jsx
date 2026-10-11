@@ -8,6 +8,7 @@ import { Button, IconButton, Toggle, Field, inputStyle } from './kit.jsx'
 import { AccountCard } from './AccountCard.jsx'
 import { VoiceCard } from './VoiceCard.jsx'
 import { DiagnosticsCard } from './Diagnostics.jsx'
+import { CreditsCard } from './Credits.jsx'
 
 
 export function Settings({ wide }) {
@@ -50,6 +51,7 @@ export function Settings({ wide }) {
         <GeminiCard />
         <StorageCard />
         <DiagnosticsCard Card={Card} />
+        <CreditsCard Card={Card} />
         <AppCard />
       </div>
     </div>
