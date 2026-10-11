@@ -74,7 +74,9 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
 Shipped 2026-10-11: items 10, 12 (by tap) and 14 (recap) as one-tap helpers in the Ask panel and the reader
 menu: Explain that, Recap so far, Skim this section (with a jump to the next section), and a welcome-back
 card after 8 hours away. Answers are spoken and the book carries on. Tested with a real NVIDIA key.
-Still open: 9, 11, 12 by voice, 13, the cards in 14.
+Item 9 in part: at an equation or code listing the Ask panel offers "Break this equation down" / "Walk
+through this code" (not yet tried on a real equation). Still open: 11, 12 by voice, 13, the cards in 14.
+The "Other" AI provider was walked for real on 2026-10-12 against a local OpenAI-compatible endpoint.
 
 9. Equation and code breakdown mode (explain the idea before the symbols).
 10. Selective depth: skim a section as a one-minute summary, or read it word for word.
@@ -85,6 +87,10 @@ Still open: 9, 11, 12 by voice, 13, the cards in 14.
 
 ## Sprint 4: library intelligence and insight
 
+Shipped 2026-10-12: item 17 in part (M14): a listening log on the device (time while sound really plays,
+per day and document; streak; most listened) under the library's AI menu, and "Hear your month". Verified:
+17 s of playback counted as 15 s and counting stops when paused. NOT run with a real model: the
+retrospective text itself (it uses the same path as the briefing, which was). No yearly view, no sync.
 Shipped 2026-10-12: item 15, Make a briefing (M13): 2 to 5 documents become one new document with headed
 parts (what each says, where they agree and disagree, shared methods, what to read first). Tested with a real
 NVIDIA key: about 2 s with a fast model; a reasoning model sat on "Writing the briefing" for over 2 minutes.
