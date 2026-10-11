@@ -87,6 +87,10 @@ The "Other" AI provider was walked for real on 2026-10-12 against a local OpenAI
 
 ## Sprint 4: library intelligence and insight
 
+Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
+follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
+Verified on a real document: the pivot stays at one x for every word, the place is saved. Not built: haptic
+rhythm. Muse hit its rate limit mid-task; Opus wired the view into the reader and fixed the pivot.
 Shipped 2026-10-12: item 17 in part (M14): a listening log on the device (time while sound really plays,
 per day and document; streak; most listened) under the library's AI menu, and "Hear your month". Verified:
 17 s of playback counted as 15 s and counting stops when paused. NOT run with a real model: the
