@@ -9,6 +9,7 @@ import { Button, IconButton, Pulse } from './kit.jsx'
 
 function fmtListened(s) {
   s = Math.max(0, Math.floor(s || 0))
+  if (s > 0 && s < 60) return 'under 1 min' // some listening is not none
   if (s < 3600) return `${Math.floor(s / 60)} min`
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)

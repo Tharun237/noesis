@@ -148,8 +148,12 @@ let started = false
 export function startHistory() {
   if (started) return
   started = true
+  // Nothing is counted or saved until the stored log has been read: a tick that ran first would write a
+  // nearly empty log over the real one.
+  let loaded = false
   db.getHistory().then(saved => {
     if (saved) historyStore.set({ log: saved })
+    loaded = true
   })
   // Documents finished before this feature existed are the baseline, never
   // back-filled: only a document that was unfinished here and becomes
@@ -181,11 +185,11 @@ export function startHistory() {
     }
     if (changed) {
       historyStore.set({ log })
-      lastSave = Date.now()
-      void db.putHistory(log)
+      if (loaded) { lastSave = Date.now(); void db.putHistory(log) }
     }
   })
   const tick = () => {
+    if (!loaded) return
     const p = player.get()
     if (p.playing && !p.waiting && p.id && (audioState().paused === false || (activeEngine() === 'system' && globalThis.speechSynthesis?.speaking))) {
       const d = getDoc(p.id)
@@ -201,7 +205,7 @@ export function startHistory() {
   }
   setInterval(tick, 5000)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
+    if (document.visibilityState === 'hidden' && loaded) {
       lastSave = Date.now()
       void db.putHistory(historyStore.get().log)
     }
