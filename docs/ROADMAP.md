@@ -47,9 +47,10 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
 
 5. **Original view.** The source page (PDF) beside or instead of the flowing text, following the playhead and
    highlighting the sentence being read; later the dual-pane "glass" view.
-6. **Languages.** BLOCKER found 2026-10-11: the pronunciation library in the app (`phonemizer` 1.2.1) holds
-   English only (measured: Hindi and Telugu text is rejected). A multilingual eSpeak-ng build has to replace it
-   first; evaluation in progress. eSpeak-ng is GPL-3.0: a licence question for a closed commercial app.
+6. **Languages.** In build as M7 (docs/specs/M7-languages.md; measurements in docs/research/languages.md).
+   The app's pronunciation library is English-only; a multilingual eSpeak build (24 MB, GPL-3.0, loaded only
+   for non-English documents) covers the rest. Telugu has two voices a paid product may use; Hindi has none
+   with a verified licence yet. Item 5 (sentence on the page) shipped 2026-10-11 as M6.
    Then: Translate a document into Hindi, Telugu and more (Piper has Hindi, Telugu, Malayalam,
    Marathi, Bengali, Urdu, Nepali voices, verified 2026-10-11). Natural translation that keeps names, terms,
    code and equations. Switch language mid-session without losing the place.
