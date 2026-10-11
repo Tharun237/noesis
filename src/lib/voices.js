@@ -7,18 +7,22 @@
 export const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/'
 
 export const VOICES = [
-  { id: 'en_GB-alba-medium', name: 'Alba', accent: 'UK', g: 'F', license: 'CC BY 4.0' },
-  { id: 'en_US-kristin-medium', name: 'Kristin', accent: 'US', g: 'F', license: 'Public domain' },
-  { id: 'en_GB-cori-medium', name: 'Cori', accent: 'UK', g: 'F', license: 'Public domain' },
-  { id: 'en_US-ljspeech-medium', name: 'LJ', accent: 'US', g: 'F', license: 'Public domain' },
-  { id: 'en_GB-northern_english_male-medium', name: 'Northern', accent: 'UK', g: 'M', license: 'CC BY-SA 4.0' },
-  { id: 'en_US-joe-medium', name: 'Joe', accent: 'US', g: 'M', license: 'CC0' },
-  { id: 'en_US-john-medium', name: 'John', accent: 'US', g: 'M', license: 'Public domain' },
-  { id: 'en_US-norman-medium', name: 'Norman', accent: 'US', g: 'M', license: 'Public domain' },
-  { id: 'en_US-bryce-medium', name: 'Bryce', accent: 'US', g: 'M', license: 'Public domain' },
-  { id: 'en_US-mike-medium', name: 'Mike', accent: 'US', g: 'M', license: 'CC0' },
+  { id: 'en_GB-alba-medium', name: 'Alba', accent: 'UK', g: 'F', license: 'CC BY 4.0', lang: 'en' },
+  { id: 'en_US-kristin-medium', name: 'Kristin', accent: 'US', g: 'F', license: 'Public domain', lang: 'en' },
+  { id: 'en_GB-cori-medium', name: 'Cori', accent: 'UK', g: 'F', license: 'Public domain', lang: 'en' },
+  { id: 'en_US-ljspeech-medium', name: 'LJ', accent: 'US', g: 'F', license: 'Public domain', lang: 'en' },
+  { id: 'en_GB-northern_english_male-medium', name: 'Northern', accent: 'UK', g: 'M', license: 'CC BY-SA 4.0', lang: 'en' },
+  { id: 'en_US-joe-medium', name: 'Joe', accent: 'US', g: 'M', license: 'CC0', lang: 'en' },
+  { id: 'en_US-john-medium', name: 'John', accent: 'US', g: 'M', license: 'Public domain', lang: 'en' },
+  { id: 'en_US-norman-medium', name: 'Norman', accent: 'US', g: 'M', license: 'Public domain', lang: 'en' },
+  { id: 'en_US-bryce-medium', name: 'Bryce', accent: 'US', g: 'M', license: 'Public domain', lang: 'en' },
+  { id: 'en_US-mike-medium', name: 'Mike', accent: 'US', g: 'M', license: 'CC0', lang: 'en' },
+  { id: 'te_IN-padmavathi-medium', name: 'Padmavathi', accent: 'Telugu', g: 'F', license: 'CC BY 4.0', lang: 'te' },
+  { id: 'te_IN-venkatesh-medium', name: 'Venkatesh', accent: 'Telugu', g: 'M', license: 'CC BY 4.0', lang: 'te' },
 ]
 export const DEFAULT_VOICE = VOICES[0].id
+export const voicesFor = lang => VOICES.filter(v => v.lang === lang)
+export const defaultVoiceFor = lang => voicesFor(lang)[0]?.id ?? null
 export const isVoice = id => VOICES.some(v => v.id === id)
 export const voiceName = id => (id ? (VOICES.find(v => v.id === id) || VOICES.find(v => v.id === fromKokoro(id)))?.name || id : '')
 

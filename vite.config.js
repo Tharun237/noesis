@@ -80,7 +80,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,mjs}'],
-        globIgnores: ['pdfjs/**', 'dict/**', 'ort/**'],
+        globIgnores: ['pdfjs/**', 'dict/**', 'ort/**', 'espeak/**'],
         importScripts: ['notify-sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
@@ -92,7 +92,7 @@ export default defineConfig({
           options: { cacheName: 'noesis-wasm' },
         }, {
           // pdf.js CMaps / standard fonts / image decoders (self-hosted under /pdfjs/), cached on first use.
-          urlPattern: ({ url }) => ['/pdfjs/', '/dict/', '/ort/'].some(p => url.pathname.startsWith(p)),
+          urlPattern: ({ url }) => ['/pdfjs/', '/dict/', '/ort/', '/espeak/'].some(p => url.pathname.startsWith(p)),
           handler: 'CacheFirst',
           options: { cacheName: 'noesis-pdfjs' },
         }],

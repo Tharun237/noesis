@@ -2,7 +2,7 @@ import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { activeEngine, hasSystemVoice, isMobile, systemVoices, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
-import { VOICES } from '../lib/voices.js'
+import { voicesFor } from '../lib/voices.js'
 import { Field, Segmented, inputStyle, IconButton } from './kit.jsx'
 
 export function speakSample(voice) {
@@ -54,7 +54,7 @@ export function VoiceCard({ Card }) {
           <>
             <Field title="Natural voice (default for new documents)">
               <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-                {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
+                {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
               </select>
             </Field>
             <Field title="Tone" hint="Changes how the voice is made. Audio you already have is made again from where you are listening.">

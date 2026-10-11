@@ -4,6 +4,7 @@ import * as ort from 'onnxruntime-web/wasm' // CPU build (11 MB): Piper is fast 
 import { phonemize } from 'phonemizer'
 import { encode } from './encode.js'
 import { voiceUrl } from './voices.js'
+import { ipaChars } from './ipa.js'
 import { padTail, trailingSeconds } from './pause.js'
 import { applyTone } from './tone.js'
 
@@ -74,15 +75,44 @@ async function load(id) {
 // Piper's input (rhasspy/piper): BOS "^", then each phoneme's id followed by the pad "_", then EOS "$".
 // Punctuation stays as its own phoneme because Piper uses it for pauses and intonation; the phonemizer
 // drops it, so text is split on punctuation and the marks are put back between phonemized chunks.
-const PUNCT = /([.,!?;:…—–"“”«»()¡¿])/
+// The dandas । ॥ end Hindi sentences; the voice maps hold no danda, so they use the id of ".".
+const PUNCT = /([.,!?;:…—–"“”«»()¡¿।॥])/
+
+// eSpeak-ng (for non-English voices) loads lazily, once, from the standalone static files
+// (public/espeak, copied by postinstall): like ORT's glue, it re-loads its data file by URL,
+// so it is imported by absolute URL, not bundled into this worker.
+let espeakSpeech = null
+let espeakLang = null
+async function espeakIpa(text, voice) {
+  if (!espeakSpeech) {
+    const url = new URL('/espeak/espeak-ng.js', self.location.origin).href // absolute: the dev server rewrites root-relative dynamic imports
+    const mod = await import(/* @vite-ignore */ url)
+    const created = await mod.default({ locateFile: path => new URL('/espeak/' + path, self.location.origin).href })
+    espeakSpeech = new created.eSpeakNGWorker()
+  }
+  if (espeakLang !== voice) {
+    const rc = espeakSpeech.set_voice(voice, '', 0, 0, 0)
+    if (rc !== 0) throw new Error(`eSpeak has no voice for language ${voice} (code ${rc})`)
+    espeakLang = voice
+  }
+  return espeakSpeech.synthesize_ipa(text).ipa
+}
+
 async function phonemeIds(text, cfg) {
   const map = cfg.phoneme_id_map
   const ids = [...map['^']]
   const push = ch => { if (map[ch]) ids.push(...map[ch], ...map['_']) }
+  const pushPunct = ch => {
+    if (ch === '।' || ch === '॥') { if (map['.']) ids.push(...map['.'], ...map['_']) }
+    else push(ch)
+  }
+  const espeakVoice = cfg.espeak?.voice || ''
+  const useEspeak = !espeakVoice.startsWith('en')
   for (const part of text.split(PUNCT)) {
     if (!part.trim()) continue
-    if (PUNCT.test(part)) { for (const ch of part) push(ch); push(' '); continue }
-    for (const ch of (await phonemize(part, cfg.espeak.voice)).join(' ')) push(ch)
+    if (PUNCT.test(part)) { for (const ch of part) pushPunct(ch); push(' '); continue }
+    const phones = useEspeak ? ipaChars(await espeakIpa(part, espeakVoice)) : (await phonemize(part, espeakVoice)).join(' ')
+    for (const ch of phones) push(ch)
   }
   ids.push(...map['$'])
   return ids

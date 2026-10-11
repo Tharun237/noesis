@@ -3,8 +3,9 @@ import { db, persistStorage } from './db.js'
 import { settings, hasKey } from './settings.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
-import { isVoice, fromKokoro } from './voices.js'
-import { activeEngine } from './engine.js'
+import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
+import { LANGS, detectLang } from './lang.js'
+import { activeEngine, hasSystemVoice } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
 import { cleanMeta } from '../ingest/meta.js'
@@ -41,7 +42,7 @@ const voicedSet = id => voiced.get(id) ?? voiced.set(id, new Set()).get(id)
 export const isVoiced = (id, i) => voicedSet(id).has(i)
 
 // What syncs between devices. Everything else on a doc (status, voicing progress, errors) is per-device.
-const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts']
+const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts']
 const POS_FIELDS = ['pos', 'posF', 'finished', 'lastPlayed']
 const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]))
 
@@ -236,6 +237,7 @@ async function nextVoiceJob() {
   const docs = library.get().docs.filter(d => d.status === 'voicing')
     .sort((a, b) => (b.id === p?.id) - (a.id === p?.id) || a.createdAt - b.createdAt)
   for (const d of docs) {
+    if (d.voice == null) continue // no natural voice for this language: the built-in voice speaks it, no generation
     const c = await loadDoc(d.id)
     if (!c) continue
     const set = voicedSet(d.id)
@@ -253,6 +255,7 @@ async function nextVoiceJob() {
 async function voiceOne(id, i) {
   if (library.get().voicingNow !== id) library.set({ voicingNow: id })
   const d = getDoc(id)
+  if (d.voice == null) return // no natural voice for this language: skip without an error, without spinning
   const c = cache.get(id)
   const seg = c.segs[i]
   const voice = isVoice(d.voice) ? d.voice : fromKokoro(d.voice) // a device not yet updated may sync a Kokoro voice
@@ -346,7 +349,11 @@ async function prepare(id) {
         onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }) })
     }
 
-    const listening = await toListeningAsync(blocks)
+    const lang = detectLang(blocks.map(b => b.text || '').join('\n'))
+    const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? 'en')
+    const voice = lang === curLang ? d.voice : defaultVoiceFor(lang)
+    const langNote = voice == null ? `No natural voice for ${LANGS[lang].name} yet. ${hasSystemVoice() ? "Your device's built-in voice reads this document." : 'This browser has no built-in voice to read it either.'}` : null
+    const listening = await toListeningAsync(blocks, lang)
     if (!listening.length) {
       throw new Error(parsed.pdf && !hasKey()
         ? 'No selectable text found (scanned PDF?). Add a free Gemini key in Settings to read scanned pages.'
@@ -360,7 +367,8 @@ async function prepare(id) {
     cache.delete(id)
     voiced.set(id, new Set())
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
-    patch(id, { status: 'voicing', stage: 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos: Math.min(d.pos || 0, total - 1), note, contentVer: Date.now() })
+    // settings.voice stays an English voice and is never changed here; only the document's own voice follows its lang.
+    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos: Math.min(d.pos || 0, total - 1), note: langNote ?? note, lang, voice, contentVer: Date.now() })
     kickVoice()
   } catch (e) {
     console.error(e)
@@ -415,7 +423,7 @@ async function retireKokoro(metas) {
   globalThis.caches?.delete('transformers-cache').catch(() => {})
   if (!isVoice(settings.get().voice)) settings.set({ voice: fromKokoro(settings.get().voice) })
   for (const d of metas) {
-    if (isVoice(d.voice)) continue
+    if (d.voice == null || isVoice(d.voice)) continue
     await resetAudio(d.id)
     patch(d.id, { voice: fromKokoro(d.voice) })
   }

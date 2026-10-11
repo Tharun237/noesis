@@ -11,7 +11,7 @@
     "preview": "vite preview --host",
     "test": "node --test src/lib/*.test.js src/ingest/*.test.js",
     "icons": "pwa-assets-generator",
-    "postinstall": "node -e \"const fs=require('fs');for (const d of ['wasm','cmaps','standard_fonts','iccs']) fs.cpSync('node_modules/pdfjs-dist/'+d,'public/pdfjs/'+d,{recursive:true});fs.mkdirSync('public/dict',{recursive:true});fs.copyFileSync('node_modules/dictionary-en/index.aff','public/dict/en.aff');fs.copyFileSync('node_modules/dictionary-en/index.dic','public/dict/en.dic');fs.mkdirSync('public/ort',{recursive:true});for (const f of ['ort-wasm-simd-threaded.mjs','ort-wasm-simd-threaded.wasm']) fs.copyFileSync('node_modules/onnxruntime-web/dist/'+f,'public/ort/'+f)\""
+    "postinstall": "node -e \"const fs=require('fs');for (const d of ['wasm','cmaps','standard_fonts','iccs']) fs.cpSync('node_modules/pdfjs-dist/'+d,'public/pdfjs/'+d,{recursive:true});fs.mkdirSync('public/dict',{recursive:true});fs.copyFileSync('node_modules/dictionary-en/index.aff','public/dict/en.aff');fs.copyFileSync('node_modules/dictionary-en/index.dic','public/dict/en.dic');fs.mkdirSync('public/ort',{recursive:true});for (const f of ['ort-wasm-simd-threaded.mjs','ort-wasm-simd-threaded.wasm']) fs.copyFileSync('node_modules/onnxruntime-web/dist/'+f,'public/ort/'+f);fs.mkdirSync('public/espeak',{recursive:true});for (const f of ['espeak-ng.js','espeak-ng.data']) fs.copyFileSync('node_modules/@echogarden/espeak-ng-emscripten/'+f,'public/espeak/'+f)\""
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
@@ -25,6 +25,7 @@
     "motion": "^14.1.0",
     "nspell": "^2.1.5",
     "onnxruntime-web": "1.22.0",
+    "@echogarden/espeak-ng-emscripten": "0.3.5",
     "pdfjs-dist": "^6.4.299",
     "phonemizer": "1.2.1",
     "react": "^19.3.0",

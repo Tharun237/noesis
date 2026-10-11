@@ -7,7 +7,7 @@ import { chromium } from 'playwright-core'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-export const APP_URL = 'https://noesis-777.pages.dev'
+export const APP_URL = process.env.NOESIS_URL || 'https://noesis-777.pages.dev' // NOESIS_URL=http://localhost:5180 to test before a deploy
 const AUDIO_FORMAT_PATH = fileURLToPath(new URL('../../src/lib/audio-format.js', import.meta.url))
 const RATE = 48000 // player.js frame counts are 48 kHz; the decoder resamples to this rate
 const PREP_TIMEOUT_MS = 5 * 60 * 1000 // the first run also downloads the ~63 MB voice

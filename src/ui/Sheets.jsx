@@ -7,7 +7,7 @@ import { settings, hasKey } from '../lib/settings.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection } from '../lib/library.js'
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
-import { VOICES, voiceName } from '../lib/voices.js'
+import { voiceName, voicesFor } from '../lib/voices.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
@@ -181,7 +181,7 @@ function AddForm({ wide }) {
       <Field title="Voice">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select value={voice} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
-            {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
+            {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
           </select>
           <PreviewButton voice={voice} busy={busy} setBusy={setBusy} />
         </div>
@@ -219,7 +219,7 @@ function VoicePicker() {
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>
       <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice downloads once on each device (about 63 MB).</div>
-      {VOICES.map(v => (
+      {voicesFor(d.lang || 'en').map(v => (
         <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
           <button type="button" onClick={() => { changeVoice(d.id, v.id); toast(`Switching to ${v.name}`); closeSheet() }}
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', fontFamily: T.font }}>

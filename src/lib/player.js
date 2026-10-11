@@ -4,7 +4,8 @@ import { db } from './db.js'
 import { recordToBlob } from './tts.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
-import { activeEngine, pickSystemVoice } from './engine.js'
+import { LANGS } from './lang.js'
+import { activeEngine, builtInOnly, pickSystemVoice } from './engine.js'
 import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches, ensureFresh } from './library.js'
 import { toast, openSheet } from './nav.js'
 import { wordWeights } from './words.js'
@@ -44,7 +45,7 @@ function playFailed(e) {
   toast(playError === 'NotAllowedError' ? 'Your browser held playback back. Tap play again.' : "This browser couldn't play the audio.")
 }
 
-const system = () => activeEngine() === 'system'
+const system = () => activeEngine() === 'system' || builtInOnly(getDoc(player.get().id))
 
 setPriority(() => { const p = player.get(); return p.id ? { id: p.id, i: p.i } : null })
 
@@ -199,8 +200,9 @@ function speak(c, i, autoplay, from = 0) {
   const text = full.slice(from)
   if (!text.trim()) return sentenceEnded()
   const u = new SpeechSynthesisUtterance(text)
-  const voice = pickSystemVoice()
-  if (voice) { u.voice = voice; u.lang = voice.lang }
+  const locale = LANGS[getDoc(player.get().id)?.lang || 'en']?.locale || 'en'
+  const voice = pickSystemVoice(locale)
+  if (voice) { u.voice = voice; u.lang = voice.lang } else { u.lang = locale }
   u.rate = player.get().rate
   const est = secPerChar(getDoc(player.get().id) || { vChars: 0 })
   u.onboundary = e => {

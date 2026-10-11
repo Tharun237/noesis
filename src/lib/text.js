@@ -1,4 +1,5 @@
 // Text normalisation for listening. Pure functions — no DOM — so they run in Node tests too.
+import { LANGS } from './lang.js'
 
 const LIGATURES = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' }
 
@@ -26,12 +27,12 @@ const CITATIONS = [
   /[¹²³⁰-⁹]+/g,                                 // superscript footnote marks
 ]
 
-export function cleanText(s) {
+export function cleanText(s, lang = 'en') {
   if (!s) return ''
   s = s.replace(/[ﬀ-ﬆ]/g, c => LIGATURES[c]).replace(/­/g, '')
   for (const re of CITATIONS) s = s.replace(re, '')
   s = s.replace(/\bhttps?\s?:\s?\/\/\S+|\bwww\.\S+|\bdoi:\s?\S+/gi, '') // OCR often writes "https ://"
-  for (const [re, to] of SPOKEN) s = s.replace(re, to)
+  if (lang === 'en') for (const [re, to] of SPOKEN) s = s.replace(re, to)
   return s.replace(/\s+([,.;:!?])/g, '$1').replace(/\s+/g, ' ').trim()
 }
 
@@ -80,7 +81,12 @@ export function spokenMath(tex) {
 // Each sentence is one synthesis call; very long ones are split at clause marks to bound memory and latency.
 const MAX = 280
 const MIN = 18
-const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' })
+const segmenters = new Map()
+function segmenterFor(lang) {
+  const locale = LANGS[lang]?.locale || 'en'
+  if (!segmenters.has(locale)) segmenters.set(locale, new Intl.Segmenter(locale, { granularity: 'sentence' }))
+  return segmenters.get(locale)
+}
 
 function splitLong(s) {
   if (s.length <= MAX) return [s]
@@ -101,14 +107,15 @@ function splitLong(s) {
   })
 }
 
-export function sentences(text) {
+export function sentences(text, lang = 'en') {
   const out = []
   let carry = ''
-  for (const { segment } of segmenter.segment(text)) {
+  for (const { segment } of segmenterFor(lang).segment(text)) {
     const s = (carry + segment).trim()
     if (!s) continue
     // Carry enumeration stubs ("1.", "2.3", "a)", "iv.") and unterminated fragments into the next sentence.
-    if (s.length < MIN && (/^\(?(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxIVX]+)[.)]?$/.test(s) || !/[.!?…"”')\]]$/.test(s))) { carry = s + ' '; continue }
+    // । and ॥ count as sentence ends, like . ! ? for English.
+    if (s.length < MIN && (/^\(?(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxIVX]+)[.)]?$/.test(s) || !/[.!?…"”')\]।॥]$/.test(s))) { carry = s + ' '; continue }
     carry = ''
     out.push(...splitLong(s))
   }
@@ -117,24 +124,24 @@ export function sentences(text) {
 }
 
 // Blocks → listening model. Block kinds: h (heading), p, fig, table, math, code.
-function listenBlock(b) {
-  const raw = b.k === 'math' && b.tex ? spokenMath(b.text) : b.text
-  const t = b.k === 'code' && !b.spoken ? 'A code listing appears here.' : cleanText(raw)
+function listenBlock(b, lang = 'en') {
+  const raw = b.k === 'math' && b.tex && lang === 'en' ? spokenMath(b.text) : b.text
+  const t = b.k === 'code' && !b.spoken ? 'A code listing appears here.' : cleanText(raw, lang)
   if (!t || !/[\p{L}\d]/u.test(t)) return null
-  const s = b.k === 'h' ? [t.replace(/\.$/, '')] : sentences(t)
+  const s = b.k === 'h' ? [t.replace(/\.$/, '')] : sentences(t, lang)
   if (!s.length) return null
   return typeof b.page === 'number' ? { k: b.k, s, p: b.page } : { k: b.k, s }
 }
-export const toListening = blocks => blocks.map(listenBlock).filter(Boolean)
+export const toListening = (blocks, lang = 'en') => blocks.map(b => listenBlock(b, lang)).filter(Boolean)
 
 // Let the screen draw and taps land between slices of a long job (a whole book is one such job).
 export const pause = () => (globalThis.scheduler?.yield ? globalThis.scheduler.yield() : new Promise(r => setTimeout(r)))
 
 // Same result as toListening, in slices: a whole book in one go froze the UI for half a second on a phone.
-export async function toListeningAsync(blocks, slice = 300) {
+export async function toListeningAsync(blocks, lang = 'en', slice = 300) {
   const out = []
   for (let i = 0; i < blocks.length; i++) {
-    const x = listenBlock(blocks[i])
+    const x = listenBlock(blocks[i], lang)
     if (x) out.push(x)
     if (i % slice === slice - 1) await pause()
   }
