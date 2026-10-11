@@ -4,6 +4,7 @@ import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf } from './ai.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
+import { takeRefs } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
 import { isCloudVoice, cloudVoiceInfo, loadCloudVoices } from './cloudvoice.js'
 import { LANGS, detectLang, isEnglish } from './lang.js'
@@ -119,7 +120,7 @@ export function loadDoc(id) {
         durs = stored?.length === segs.length ? stored : new Array(segs.length).fill(0)
         tails = new Array(segs.length).fill(0)
       }
-      const c = { blocks: doc.blocks, segs, starts, durs, tails }
+      const c = { blocks: doc.blocks, segs, starts, durs, tails, refs: doc.refs || [] }
       cache.set(id, c)
       return c
     })().finally(() => loading.delete(id)))
@@ -346,7 +347,7 @@ async function prepare(id) {
       const orig = await db.getDoc(refFrom)
       if (!orig?.blocks?.length) throw new Error('The original document was removed from this device.')
       const o = getDoc(refFrom)
-      fromOriginal = { blocks: orig.blocks.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p, data: b.d, src: b.x })), title: d.title, author: o?.author, cover: o?.cover }
+      fromOriginal = { blocks: orig.blocks.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p, data: b.d, src: b.x })), refs: orig.refs, title: d.title, author: o?.author, cover: o?.cover }
       patch(id, { kind: o?.kind || 'text' })
     }
     if (src.kind === 'link') {
@@ -363,6 +364,9 @@ async function prepare(id) {
       cover: parsed.cover || d.cover,
     })
     let blocks = parsed.blocks
+    // The reference list is never read aloud. It is kept beside the text, so a citation can be looked at.
+    let refs = parsed.refs || []
+    if (!refs.length) ({ blocks, refs } = takeRefs(blocks))
     let note = null
 
     if (d.ai && hasAiKey() && parsed.pdf) {
@@ -434,7 +438,7 @@ async function prepare(id) {
         : 'No readable text found in this document.')
     }
     await db.delAudio(id)
-    await db.putDoc(id, { blocks: listening })
+    await db.putDoc(id, refs.length ? { blocks: listening, refs } : { blocks: listening })
     const total = listening.reduce((a, b) => a + b.s.length, 0)
     const chars = listening.reduce((a, b) => a + b.s.reduce((x, t) => x + t.length, 0), 0)
     await db.putDurs(id, { durs: new Array(total).fill(0), tails: new Array(total).fill(0) })

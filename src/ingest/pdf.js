@@ -1,3 +1,4 @@
+import { splitRefs } from '../lib/citations.js'
 import { pause } from '../lib/text.js'
 import { cleanMeta } from './meta.js'
 import * as pdfjs from 'pdfjs-dist'
@@ -168,6 +169,7 @@ export async function readPdf(data, filename, onProgress) {
   const pageText = []
   let para = null
   let skipping = false
+  const refLines = [] // the reference list: never read aloud, kept so a citation can be looked up
   let tocPage = -1
   const flush = () => { if (para && para.text.trim()) blocks.push(para); para = null }
 
@@ -200,7 +202,8 @@ export async function readPdf(data, filename, onProgress) {
         else blocks.push({ k: 'h', text: l.text, page: pi, size: l.size })
         return
       }
-      if (skipping || tocPage === pi) return
+      if (skipping) { refLines.push(l.text); return }
+      if (tocPage === pi) return
       const prev = lines[i - 1]
       const gap = prev ? prev.y - l.y : Infinity
       const caption = CAPTION.exec(l.text)
@@ -234,6 +237,7 @@ export async function readPdf(data, filename, onProgress) {
     author,
     cover,
     blocks: kept.map(({ k, text, page }) => ({ k, text, page: page + 1 })),
+    refs: splitRefs(refLines),
     pdf,
     pageText,
     scanned: await isScanned(pdf),

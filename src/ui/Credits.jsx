@@ -73,6 +73,12 @@ export function CreditsCard({ Card }) {
             </div>
           ))}
         </div>
+
+        <div style={heading}>Paper summaries</div>
+        <p style={{ ...para, margin: '6px 0 0' }}>
+          When you look a cited paper up, its title, authors and summary come from <Out href="https://openalex.org">OpenAlex</Out>,
+          a free public index of research papers (<Out href={LICENCE_URL.CC0}>CC0</Out>).
+        </p>
       </details>
     </Card>
   )

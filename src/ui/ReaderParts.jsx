@@ -139,7 +139,7 @@ export function JumpToNow({ active, bottom, onJump }) {
         <motion.button type="button" onClick={onJump} aria-label="Scroll to what is playing"
           initial={{ opacity: 0, y: 12, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: 12, x: '-50%' }} transition={T.spring}
           style={{
-            position: 'fixed', left: '50%', bottom: bottom + 14, zIndex: 25, height: 38, padding: '0 16px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`,
+            position: 'fixed', left: '50%', bottom: `calc(var(--dock, ${bottom}px) + 14px)`, zIndex: 25, height: 38, padding: '0 16px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`,
             background: T.bg, color: T.text, fontFamily: T.font, fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
             boxShadow: '0 10px 30px rgba(0,0,0,0.7)',
           }}>

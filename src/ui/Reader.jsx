@@ -21,6 +21,7 @@ import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { wordWeights } from '../lib/words.js'
 import { numbersIn, columnsIn } from '../lib/sonify.js'
+import { findRef } from '../lib/citations.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, fmtDur } from './kit.jsx'
@@ -33,6 +34,7 @@ import { playerHeight } from './PlayerBar.jsx'
 // Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
 const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
 const Insights = lazy(() => import('./Insights.jsx').then(m => ({ default: m.Insights })))
+const CitationSheet = lazy(() => import('./Citations.jsx').then(m => ({ default: m.CitationSheet })))
 const BlockTool = lazy(() => import('./BlockTool.jsx').then(m => ({ default: m.BlockTool })))
 const FloatingReader = lazy(() => import('./FloatingReader.jsx').then(m => ({ default: m.FloatingReader })))
 function FloatingLazy() { return <Suspense fallback={null}><FloatingReader /></Suspense> }
@@ -67,6 +69,7 @@ export function Reader({ wide }) {
     return () => removeEventListener('popstate', onPop)
   }, [])
   const [tool, setTool] = useState(null) // the equation, table or figure a tool sheet is open on: { kind, bi }
+  const [citedOpen, setCitedOpen] = useState([]) // the entries the citation sheet was opened on (the voice moves on meanwhile)
   const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [voiceState, setVoiceState] = useState('off')
@@ -203,6 +206,14 @@ export function Reader({ wide }) {
   useEffect(() => { heights.current = new Map() }, [typo, doc, wide, width])
   const onHeight = useCallback((ci, h) => { heights.current.set(ci, h) }, [])
 
+  // The works cited in the paragraph being heard, as entries of this document's own reference list.
+  const cited = useMemo(() => {
+    const here = doc && doc.refs.length > 0 && active >= 0 && active < doc.segs.length // the voice can be past the end while a document is prepared again
+    const keys = (here && doc.blocks[doc.segs[active].b].c) || []
+    return [...new Set(keys.map(k => findRef(doc.refs, k)).filter(Boolean))]
+  }, [doc, active])
+
+  const citedLabel = cited.length === 1 ? '1 work cited here' : `${cited.length} works cited here`
   if (!d) return null
   const onSeek = i => { userScroll.current = 0; playId === id ? seekTo(i) : openPlayer(id, { at: i }) }
   const showToc = wide && tocOpen && headings.length > 1
@@ -248,6 +259,17 @@ export function Reader({ wide }) {
             <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : ''}
             </div>
+            {/* The works cited in the paragraph being heard. It lives here, not floating over the page: the bottom
+                of the screen already holds the player, the status pill and toasts. */}
+            <AnimatePresence>
+              {cited.length > 0 && (
+                <motion.button key="cited" type="button" aria-label={citedLabel} onClick={() => { setCitedOpen(cited); setPanel('cites') }} whileTap={{ scale: 0.96 }}
+                  initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={T.spring}
+                  style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <Icon name="link" size={13} style={{ color: T.lime }} />{view === 'pages' && !wide ? cited.length : citedLabel}
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
         )}
         {view === 'pages' && numPages > 0 && doc && !linked && (
@@ -346,6 +368,8 @@ export function Reader({ wide }) {
         )}
       </AnimatePresence>
 
+      {sheet('cites', 'Cited here', panel === 'cites' && citedOpen.length
+        ? <Suspense fallback={null}><CitationSheet refs={citedOpen} d={d} onClose={() => setPanel(null)} /></Suspense> : null, 560)}
       <JumpToNow active={active} bottom={bottom} onJump={() => { userScroll.current = 0; scrollToSentence(active) }} />
 
       {sheet('toc', 'Contents', <div style={{ padding: '20px 10px 24px' }}><div style={{ ...label, padding: '0 12px 12px' }}>Contents</div>

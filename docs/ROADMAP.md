@@ -110,7 +110,19 @@ way: imports threw a table's numbers away (they are kept now, as are equations a
 with a table or an equation but no heading was read as plain prose. Documents added before this keep their
 old form: add them again to get the table sound. Limits: the buttons are in the Text view only; a PDF table
 read without AI narration has no stored cells.
-Still not built: 11 citation cards, binaural study mode in 21, the spatial canvas in 18.
+Shipped 2026-10-12 (M24): item 11, citation cards. While a paragraph that cites something is being heard,
+the reader's header shows "2 works cited here"; the sheet lists each entry as the document's own reference
+list gives it, speaks it on request, and for an entry with a DOI or an arXiv number looks that exact paper
+up at OpenAlex (title, authors, the first two sentences of its summary, spoken on request). The book pauses
+and carries on when the sheet closes. Verified in the built app: marks and the list are not read aloud,
+the right paper came back, its summary was spoken, Back closed the sheet. Decided against searching by
+title: for "Attention is all you need" the index's top five did not include the paper (measured), and
+Semantic Scholar refused without a key; a wrong paper read aloud as the cited one is worse than none.
+Limits, said plainly: works from a PDF's or a pasted document's own reference list; a web page's list is
+still dropped at import; documents read by AI narration have no citation data; the PDF path is tested by
+unit tests of the list splitter, not yet on a real paper PDF; documents added before this need adding again.
+Still not built: the spatial canvas in 18 (a concept map that scrubs audio). Binaural study mode in 21 is
+covered by Focus sounds (Focus and Calm are binaural beats).
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
 Verified on a real document: the pivot stays at one x for every word, the place is saved. Not built: haptic

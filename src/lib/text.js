@@ -1,5 +1,6 @@
 // Text normalisation for listening. Pure functions — no DOM — so they run in Node tests too.
 import { LANGS } from './lang.js'
+import { citesIn } from './citations.js'
 
 const LIGATURES = { 'ﬀ': 'ff', 'ﬁ': 'fi', 'ﬂ': 'fl', 'ﬃ': 'ffi', 'ﬄ': 'ffl', 'ﬅ': 'st', 'ﬆ': 'st' }
 
@@ -132,6 +133,8 @@ function listenBlock(b, lang = 'en') {
   if (!s.length) return null
   const out = typeof b.page === 'number' ? { k: b.k, s, p: b.page } : { k: b.k, s }
   if (b.k === 'table' && b.data?.length) out.d = b.data // the table's cells (header row first), for the sound tool
+  const cites = b.k === 'p' ? citesIn(b.text || '') : []
+  if (cites.length) out.c = cites // the works this paragraph cites: '12' or 'smith2020' (see citations.js)
   const written = b.k === 'math' ? b.src || (b.tex ? b.text : '') : ''
   if (written) out.x = written // the equation as written (what is spoken is its wording), for the equation tool
   return out
