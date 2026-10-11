@@ -36,6 +36,8 @@ export function Reader({ wide }) {
   const total = d?.total
   const [doc, setDoc] = useState(null)
   const [panel, setPanel] = useState(null) // toc | type | marks | ask
+  const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
+  const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [searching, setSearching] = useState(false)
   const [hit, setHit] = useState(-1)
   const playId = useStore(player, s => s.id)
@@ -157,6 +159,9 @@ export function Reader({ wide }) {
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
             items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
               ...(view === 'pages' ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
+              { label: 'Explain what I just heard', icon: 'sparkle', onClick: () => quick('explain') },
+              { label: 'Skim this section', icon: 'sparkle', onClick: () => quick('skim') },
+              '-',
               { label: 'Listen in another language', icon: 'sparkle', onClick: () => openSheet('language', { docId: d.id }) },
               ...docMenu(d)]} />
         </div>
@@ -204,6 +209,7 @@ export function Reader({ wide }) {
             </div>
 
             {d.status !== 'ready' && <Preparing d={d} doc={doc} pos={active >= 0 ? active : d.pos || 0} />}
+            <WelcomeBack key={d.id} d={d} onRecap={() => quick('recap')} />
             {(d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
             {pdfFail && (
               <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, margin: '0 0 24px' }}>This file can't be shown as pages on this device.</div>
@@ -238,7 +244,7 @@ export function Reader({ wide }) {
         {askDocked && (
           <motion.aside key="ask" initial={{ x: T.askW }} animate={{ x: 0 }} exit={{ x: T.askW }} transition={T.spring}
             style={{ position: 'fixed', top: headH, right: 0, bottom, width: T.askW, zIndex: 18, background: T.bg, borderLeft: `1px solid ${T.border}` }}>
-            <AskPanel d={d} doc={doc} onClose={() => setPanel(null)} />
+            <AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} />
           </motion.aside>
         )}
       </AnimatePresence>
@@ -249,7 +255,7 @@ export function Reader({ wide }) {
         <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} onClose={() => setPanel(null)} /></div>, 480)}
       {sheet('type', 'Reading settings', <ReadingSettings wide={wide} />, 460)}
       {sheet('marks', 'Bookmarks & notes', <Marks d={d} doc={doc} offs={offs} rate={rate} onSeek={onSeek} onClose={() => setPanel(null)} />, 520)}
-      {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} /></div>)}
+      {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} /></div>)}
     </div>
   )
 }
@@ -339,6 +345,24 @@ const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, activ
   }
   return <div ref={ref} data-c={ci}>{out}</div>
 })
+
+// Back after a long gap: offer to hear where the book had got to. The gap is measured once, when the reader
+// opens, because listening itself keeps moving `lastPlayed`.
+const AWAY_MS = 8 * 3600 * 1000
+function WelcomeBack({ d, onRecap }) {
+  const keyed = useStore(settings, s => hasAiKey(s))
+  const [away] = useState(() => (d.lastPlayed && d.pos > 10 ? Date.now() - d.lastPlayed : 0))
+  const [gone, setGone] = useState(false)
+  if (!keyed || gone || away < AWAY_MS) return null
+  const days = Math.floor(away / 86400000)
+  return (
+    <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.55, margin: '0 0 24px', padding: '12px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ flex: 1, minWidth: 180 }}>Welcome back. You last listened {days >= 1 ? `${days} day${days === 1 ? '' : 's'} ago` : 'earlier today'}.</span>
+      <Button kind="accent" icon="sparkle" onClick={() => { setGone(true); onRecap() }}>Hear a recap</Button>
+      <Button onClick={() => setGone(true)}>Not now</Button>
+    </div>
+  )
+}
 
 // Notes about how a document was prepared; scanned books get a one-tap path to AI narration.
 function DocNote({ d }) {

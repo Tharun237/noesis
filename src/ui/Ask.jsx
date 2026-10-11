@@ -6,13 +6,30 @@ import { go } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey, providerName, contextChars } from '../lib/ai.js'
 import { db } from '../lib/db.js'
-import { player, pause } from '../lib/player.js'
+import { player, pause, play } from '../lib/player.js'
+import { detectLang } from '../lib/lang.js'
+import { voicesFor, defaultVoiceFor } from '../lib/voices.js'
 import { synthesize, recordToBlob } from '../lib/tts.js'
 import { sentences } from '../lib/text.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Pulse } from './kit.jsx'
 
 const STARTERS = ['Recap what I have heard so far.', 'Explain what I just heard, simply.', 'What are the key takeaways?', 'What should I pay attention to next?']
+
+// One-tap helpers: asked and answered aloud, so the listener need not look at the screen. The book pauses
+// for the answer and carries on afterwards.
+export const QUICK = [
+  { id: 'explain', label: 'Explain that', q: 'Explain what I just heard, simply, in under 90 words. Answer in the language of the document.' },
+  { id: 'recap', label: 'Recap so far', q: 'Recap what I have heard so far in under 100 words, so I can pick up where I left off. Answer in the language of the document.' },
+  { id: 'skim', label: 'Skim this section', q: 'I want to skip ahead. Summarise the rest of the section I am in, in under 120 words. Answer in the language of the document.', skim: true },
+]
+
+// An answer is spoken by a voice of the language it is written in: the document's own voice when that
+// matches, otherwise the first voice of that language (an English answer about a Telugu book, say).
+const voiceForText = (text, d) => {
+  const lang = detectLang(text)
+  return voicesFor(lang).some(v => v.id === d.voice) ? d.voice : defaultVoiceFor(lang) || d.voice
+}
 
 // Answers can be listened to in the document's own voice, so the user never has to switch to reading.
 const voiceOut = new Audio()
@@ -37,7 +54,7 @@ async function speak(text, voice, onState) {
 }
 const stopSpeaking = () => { speakToken++; voiceOut.pause() }
 
-export function AskPanel({ d, doc, onClose }) {
+export function AskPanel({ d, doc, onClose, auto, onSeek }) {
   useStore(settings)
   const keyed = hasAiKey()
   const playId = useStore(player, s => s.id)
@@ -54,12 +71,14 @@ export function AskPanel({ d, doc, onClose }) {
   useEffect(() => () => { abort.current?.abort(); stopSpeaking() }, [])
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' }) }, [msgs])
 
-  async function ask(question) {
+  // opts: { label } shows a short line instead of the full instruction; { aloud } speaks the answer when
+  // it is complete and then lets the book carry on; { skim } offers the jump to the next section.
+  async function ask(question, opts = {}) {
     if (!question.trim() || busy || !doc) return
     const { askContext, askStream } = await import('../lib/gemini.js')
     const at = playId === d.id ? pi : d.pos || 0
     const history = msgs.filter(m => !m.error)
-    const next = [...history, { role: 'user', text: question.trim() }, { role: 'model', text: '' }]
+    const next = [...history, { role: 'user', text: opts.label || question.trim() }, { role: 'model', text: '' }]
     setMsgs(next)
     setQ('')
     setBusy(true)
@@ -71,9 +90,17 @@ export function AskPanel({ d, doc, onClose }) {
         nowHearing: doc.segs[at]?.t, signal: abort.current.signal,
         onText: t => { answer += t; setMsgs(m => [...m.slice(0, -1), { role: 'model', text: answer }]) },
       })
-      const done = [...next.slice(0, -1), { role: 'model', text: answer }]
+      const done = [...next.slice(0, -1), { role: 'model', text: answer, ...(opts.skim ? { skim: true } : {}) }]
       setMsgs(done)
       db.putChat(d.id, done)
+      if (opts.aloud && answer.trim()) {
+        const k = done.length - 1
+        const wasPlaying = player.get().id === d.id && player.get().playing
+        setPreparingVoice(k)
+        speak(answer, voiceForText(answer, d), on => {
+          if (on) { setPreparingVoice(null); setSpeaking(k) } else { setSpeaking(null); setPreparingVoice(null); if (wasPlaying && !opts.skim) play() }
+        })
+      }
     } catch (e) {
       if (e.name !== 'AbortError') {
         const offline = !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed/i.test(e.message || '')
@@ -85,11 +112,26 @@ export function AskPanel({ d, doc, onClose }) {
             : "Couldn't get an answer. Try again.",
           error: true,
         }])
-        setQ(question.trim()) // keep the question for a retry
+        if (!opts.label) setQ(question.trim()) // keep a typed question for a retry
       }
     } finally {
       setBusy(false)
     }
+  }
+
+  const quick = qk => ask(qk.q, { label: qk.label, aloud: true, skim: qk.skim })
+  // Opened from a one-tap action elsewhere (the reader's menu, the welcome-back card): ask it at once.
+  const ran = useRef(0)
+  useEffect(() => {
+    if (!auto || !doc || !keyed || ran.current === auto.n) return
+    const qk = QUICK.find(x => x.id === auto.id)
+    if (qk) { ran.current = auto.n; quick(qk) }
+  }, [auto, doc, keyed]) // eslint-disable-line react-hooks/exhaustive-deps
+  const nextSection = () => {
+    const at = playId === d.id ? pi : d.pos || 0
+    const from = doc.segs[Math.min(at, doc.segs.length - 1)].b
+    const b = doc.blocks.findIndex((x, bi) => bi > from && x.k === 'h')
+    return b < 0 ? -1 : doc.starts[b]
   }
 
   return (
@@ -130,20 +172,34 @@ export function AskPanel({ d, doc, onClose }) {
                 }}>
                 {m.text || (busy && k === msgs.length - 1 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: T.sub }}><Pulse /> Thinking</span> : null)}
                 {m.role === 'model' && m.text && !m.error && !(busy && k === msgs.length - 1) && (
-                  <div style={{ marginTop: 6 }}>
+                  <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button type="button" onClick={() => {
                       if (speaking === k || preparingVoice === k) { stopSpeaking(); setSpeaking(null); setPreparingVoice(null) }
-                      else { setPreparingVoice(k); speak(m.text, d.voice, on => { if (on) { setPreparingVoice(null); setSpeaking(k) } else { setSpeaking(null); setPreparingVoice(null) } }) }
+                      else { setPreparingVoice(k); speak(m.text, voiceForText(m.text, d), on => { if (on) { setPreparingVoice(null); setSpeaking(k) } else { setSpeaking(null); setPreparingVoice(null) } }) }
                     }}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: 'transparent', color: speaking === k ? T.accent : T.sub, fontFamily: T.font, fontSize: 12, cursor: 'pointer' }}>
                       <Icon name={speaking === k ? 'stop' : 'speaker'} size={13} /> {preparingVoice === k ? 'Preparing the voice...' : speaking === k ? 'Stop' : 'Listen'}
                     </button>
+                    {m.skim && onSeek && doc && nextSection() >= 0 && (
+                      <button type="button" onClick={() => { stopSpeaking(); setSpeaking(null); setPreparingVoice(null); onSeek(nextSection()) }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 12px', borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, fontFamily: T.font, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                        Skip to the next section
+                      </button>
+                    )}
                   </div>
                 )}
               </motion.div>
             ))}
           </div>
-          <form onSubmit={e => { e.preventDefault(); ask(q) }} style={{ display: 'flex', gap: 8, padding: 12, borderTop: `1px solid ${T.border}` }}>
+          <div style={{ display: 'flex', gap: 8, padding: '10px 12px 0', borderTop: `1px solid ${T.border}`, overflowX: 'auto', flexShrink: 0 }}>
+            {QUICK.map(qk => (
+              <button key={qk.id} type="button" disabled={busy || !doc} onClick={() => quick(qk)}
+                style={{ flexShrink: 0, height: 34, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: T.surface, color: T.text, fontFamily: T.font, fontSize: 13.5, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy || !doc ? 0.5 : 1 }}>
+                {qk.label}
+              </button>
+            ))}
+          </div>
+          <form onSubmit={e => { e.preventDefault(); ask(q) }} style={{ display: 'flex', gap: 8, padding: 12 }}>
             <input value={q} onChange={e => setQ(e.target.value)} placeholder={doc ? 'Ask anything about this document' : 'Preparing the document…'} disabled={!doc}
               style={{ flex: 1, minWidth: 0, height: 44, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: T.surface, color: T.text, fontFamily: T.font, fontSize: 14.5, outline: 'none' }} />
             <IconButton icon="send" label="Send" onClick={() => ask(q)} size={44} style={{ background: q.trim() ? T.text : T.surfaceHi, color: q.trim() ? T.bg : T.faint }} />
