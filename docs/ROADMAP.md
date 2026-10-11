@@ -63,7 +63,11 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
     any provider whose model sees images (tested: NVIDIA `z-ai/glm-5.3-flash` read a 2-page scan in 3.6 s);
     Ask sends a window around the listener's place and long summaries are built part by part for smaller models.
 7. **AI provider layer.** SHIPPED 2026-10-11 (M9): Settings → AI lets the customer bring Gemini, NVIDIA (through a relay), or any OpenAI-compatible address; a model check finds the models that answer. Tested with a real NVIDIA key. Scanned-page reading is still Gemini-only.
-8. **Motion pass.** PARTLY DONE 2026-10-12: the status strip became a live island (a pill that widens into
+8. **Motion pass.** Navigation and motion rules applied 2026-10-12 (project skill `.claude/skills/motion/`, from
+   iart-ai/web-animation-skills): Back closes sheets, reader panels and the search instead of leaving the page;
+   leaving from a sheet no longer reopens it on Back; pages exit then enter with a frozen route; the player no
+   longer slides on every page change; reduced motion honoured. Regression tool: `node e2e/sweep.mjs`.
+   Earlier the same day: the status strip became a live island (a pill that widens into
    the full card and slides its text; transforms only). Press feedback, springs, sheet and page transitions
    already existed. Still open: a frame-by-frame study against the ACS categories page, desktop refinement.
    Original item: Frame-by-frame transitions modelled on the ACS categories page; premium phone feel
