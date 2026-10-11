@@ -26,7 +26,7 @@ function LibraryAi({ hasBriefing }) {
     <Menu trigger={t => <IconButton icon="sparkle" label="Ask your library" onClick={t} />}
       items={[
         { label: 'Ask your library', icon: 'sparkle', onClick: () => openSheet('libraryask') },
-        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'list', onClick: () => openSheet('briefing') }] : []),
+        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'list', onClick: () => openSheet('briefing') }, { label: 'Concept map', icon: 'grid', onClick: () => openSheet('conceptmap') }] : []),
         { label: 'Your listening', icon: 'list', onClick: () => openSheet('listening') },
       ]} />
   )

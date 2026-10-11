@@ -16,6 +16,7 @@ import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle } from './kit.jsx'
 import { LibraryAsk } from './LibraryAsk.jsx'
+import { ConceptMap } from './ConceptMap.jsx'
 import { Briefing } from './Briefing.jsx'
 import { Listening } from './Listening.jsx'
 
@@ -30,6 +31,7 @@ export function Sheets({ wide }) {
       <Sheet open={sheet === 'language'} onClose={closeSheet} wide={wide} title="Listen in another language" width={520}><LanguagePicker /></Sheet>
       <Sheet open={sheet === 'libraryask'} onClose={closeSheet} wide={wide} title="Ask your library"><LibraryAsk wide={wide} /></Sheet>
       <Sheet open={sheet === 'briefing'} onClose={closeSheet} wide={wide} title="Make a briefing"><Briefing wide={wide} /></Sheet>
+      <Sheet open={sheet === 'conceptmap'} onClose={closeSheet} wide={wide} title="Concept map" width={720}>{sheet === 'conceptmap' && <ConceptMap wide={wide} />}</Sheet>
       <Sheet open={sheet === 'listening'} onClose={closeSheet} wide={wide} title="Your listening"><Listening wide={wide} /></Sheet>
     </>
   )

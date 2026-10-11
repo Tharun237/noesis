@@ -9,7 +9,7 @@ import { toggleMark, setMarkNote } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
 import { parseCommand, speechSupported } from '../lib/voicecmd.js'
 import { VoiceControl, VoiceStatus } from './VoiceControl.jsx'
-import { floatingSupported } from '../lib/floating.js'
+import { floatingSupported, openFloating } from '../lib/floating.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { useRoute } from '../lib/route.js'
@@ -31,6 +31,9 @@ import { playerHeight } from './PlayerBar.jsx'
 
 // Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
 const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
+const Insights = lazy(() => import('./Insights.jsx').then(m => ({ default: m.Insights })))
+const FloatingReader = lazy(() => import('./FloatingReader.jsx').then(m => ({ default: m.FloatingReader })))
+function FloatingLazy() { return <Suspense fallback={null}><FloatingReader /></Suspense> }
 // Pages view (and its pdf.js engine) loads only when a PDF listener asks for it.
 const PageView = lazy(() => import('./PageView.jsx').then(m => ({ default: m.PageView })))
 
@@ -88,8 +91,9 @@ export function Reader({ wide }) {
     else if (c.cmd === 'ask' && c.arg) { setAskAuto({ q: c.arg, n: Date.now() }); setPanel('ask') }
   }
   const float = async () => {
-    const [{ openFloating }, { FloatingReader }] = await Promise.all([import('../lib/floating.js'), import('./FloatingReader.jsx')])
-    openFloating(() => <FloatingReader />)
+    // Opening the window has to happen inside the tap; only its contents are loaded on demand.
+    const win = openFloating(() => <FloatingLazy />)
+    await win
   }
   const [searching, setSearching] = useState(false)
   const [hit, setHit] = useState(-1)
@@ -215,6 +219,7 @@ export function Reader({ wide }) {
             items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
               ...(view === 'pages' ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
               ...(floatingSupported() ? [{ label: 'Float the words over other windows', icon: 'eye', onClick: float }, '-'] : []),
+              { label: 'Insights: emotional arc and hard words', icon: 'list', onClick: () => setPanel('insights') },
               { label: 'Explain what I just heard', icon: 'sparkle', onClick: () => quick('explain') },
               { label: 'Skim this section', icon: 'sparkle', onClick: () => quick('skim') },
               '-',
@@ -319,6 +324,9 @@ export function Reader({ wide }) {
         <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} onClose={() => setPanel(null)} /></div>, 480)}
       {sheet('type', 'Reading settings', <ReadingSettings wide={wide} />, 460)}
       {sheet('marks', 'Bookmarks & notes', <Marks d={d} doc={doc} offs={offs} rate={rate} onSeek={onSeek} onClose={() => setPanel(null)} />, 520)}
+      {sheet('insights', 'Insights', panel === 'insights' && doc ? <Suspense fallback={null}><Insights doc={doc} title={d.title}
+        onSeek={i => { setPanel(null); onSeek(i) }}
+        onAsk={word => { setAskAuto({ q: `Explain the word "${word}" as it is used in this document, in two plain sentences.`, n: Date.now() }); setPanel('ask') }} /></Suspense> : null, 560)}
       {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} /></div>)}
     </div>
   )
