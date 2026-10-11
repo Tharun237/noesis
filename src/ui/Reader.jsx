@@ -86,7 +86,7 @@ export function Reader({ wide }) {
   }, [id, d?.kind])
 
   const pagesAvailable = d?.kind === 'pdf' && hasSource === true
-  const view = pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
+  const view = readerView === 'focus' ? 'focus' : pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
   // Sentence i belongs to block segs[i].b, so its page is blocks[segs[i].b].p (1-based; older
   // documents prepared before pages were linked have no p).
   const activePage = view === 'pages' && doc && active >= 0 ? (doc.blocks[doc.segs[active]?.b]?.p ?? null) : null
@@ -141,7 +141,7 @@ export function Reader({ wide }) {
   const showToc = wide && tocOpen && headings.length > 1
   const askDocked = wide && panel === 'ask'
   const bottom = playerHeight(wide, true, !!playId)
-  const headH = HEADER_H + (pagesAvailable ? SUBROW_H : 0)
+  const headH = HEADER_H + SUBROW_H // every document has the view switch: Text, Focus, and Pages for a PDF on this device
   const sheet = (name, title, body, w) => (
     <Sheet open={panel === name && !(name === 'ask' && wide)} onClose={() => setPanel(null)} wide={wide} title={title} width={w}>{body}</Sheet>
   )
@@ -167,11 +167,11 @@ export function Reader({ wide }) {
               { label: 'Listen in another language', icon: 'sparkle', onClick: () => openSheet('language', { docId: d.id }) },
               ...docMenu(d)]} />
         </div>
-        {pagesAvailable && (
+        {d && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: SUBROW_H, padding: `0 ${wide ? 20 : 14}px 10px` }}>
-            <div style={{ width: 164, flexShrink: 0 }}>
+            <div style={{ width: pagesAvailable ? 240 : 164, flexShrink: 0 }}>
               <Segmented size="sm" value={view}
-                options={[{ value: 'text', label: 'Text' }, { value: 'pages', label: 'Pages' }]}
+                options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), { value: 'focus', label: 'Focus' }]}
                 onChange={v => { setPdfFail(false); settings.set({ readerView: v }) }} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -225,6 +225,8 @@ export function Reader({ wide }) {
                   onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }}
                   onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
               </Suspense>
+            ) : view === 'focus' ? (
+              doc && <FocusView doc={doc} active={active} onSeek={onSeek} playing={isPlaying && playId === id} />
             ) : doc && (
               <div ref={colRef} onClick={e => { if (window.getSelection()?.toString()) return; const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i) }}>
                 {chunks.map((ch, ci) => {

@@ -13,6 +13,8 @@ import { Button, IconButton } from './kit.jsx'
 
 // One word at a time. While the voice plays the word follows the speech;
 // otherwise this is a speed reader on a per-word timer.
+const PIVOT_AT = 38 // percent of the width: a little left of centre, because most of a word lies after its pivot
+
 export function FocusView({ doc, active, onSeek, playing }) {
   const id = useStore(ui, s => s.docId)
   const wpm = useStore(settings, s => s.focusWpm ?? 300)
@@ -199,12 +201,15 @@ export function FocusView({ doc, active, onSeek, playing }) {
   }
   const setWpm = v => settings.set({ focusWpm: Math.min(900, Math.max(200, v)) })
 
+  const fit = word.length > 14 ? Math.round(size * 14 / word.length) : size // a very long word is shown smaller rather than cut
   return (
     <div style={{ maxWidth: 640, margin: '10vh auto 0', padding: '0 20px 40px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'baseline', minHeight: 110 }}>
-        <div style={{ textAlign: 'right', fontFamily: T.font, fontWeight: 700, fontSize: size, lineHeight: 1.2, color: T.text, whiteSpace: 'pre' }}>{word.slice(0, pi)}</div>
-        <div style={{ textAlign: 'center', fontFamily: T.font, fontWeight: 700, fontSize: size, lineHeight: 1.2, color: T.lime, whiteSpace: 'pre' }}>{word.slice(pi, pi + 1) || ''}</div>
-        <div style={{ textAlign: 'left', fontFamily: T.font, fontWeight: 700, fontSize: size, lineHeight: 1.2, color: T.text, whiteSpace: 'pre' }}>{word.slice(pi + 1)}</div>
+      {/* The lime letter's left edge sits at one fixed spot (PIVOT_AT of the width) for every word: the part
+          before it is right-aligned up to that spot, the rest starts there. Words may run past the edges of
+          their halves; nothing moves the spot. */}
+      <div style={{ position: 'relative', height: 110, fontFamily: T.font, fontWeight: 700, fontSize: fit, lineHeight: '110px', whiteSpace: 'pre' }}>
+        <span style={{ position: 'absolute', right: `${100 - PIVOT_AT}%`, color: T.text }}>{word.slice(0, pi)}</span>
+        <span style={{ position: 'absolute', left: `${PIVOT_AT}%`, color: T.text }}><span data-pivot style={{ color: T.lime }}>{word.slice(pi, pi + 1)}</span>{word.slice(pi + 1)}</span>
       </div>
       <div style={{ marginTop: 26, fontSize: 14, lineHeight: 1.7, color: T.faint, textAlign: 'center' }}>
         {words.map((w, k) => (
@@ -212,12 +217,16 @@ export function FocusView({ doc, active, onSeek, playing }) {
         ))}
       </div>
       {!playing && (
-        <div style={{ marginTop: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <Button kind="primary" icon={run ? 'pause' : 'play'} onClick={toggleRun}>{run ? 'Pause' : 'Play'}</Button>
-          <IconButton icon="minus" label="Slower" onClick={() => setWpm(wpm - 50)} />
-          <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, minWidth: 74, textAlign: 'center' }}>{wpm} wpm</span>
-          <IconButton icon="plus" label="Faster" onClick={() => setWpm(wpm + 50)} />
-          <Button icon="prev" onClick={back}>Back a sentence</Button>
+        <div style={{ marginTop: 34, display: 'grid', justifyItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Button kind="primary" icon={run ? 'pause' : 'play'} onClick={toggleRun}>{run ? 'Stop reading' : 'Start reading'}</Button>
+            <Button icon="prev" onClick={back}>Back a sentence</Button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <IconButton icon="minus" label="Slower" onClick={() => setWpm(wpm - 50)} />
+            <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, minWidth: 104, textAlign: 'center' }}>{wpm} words a minute</span>
+            <IconButton icon="plus" label="Faster" onClick={() => setWpm(wpm + 50)} />
+          </div>
         </div>
       )}
     </div>
