@@ -20,3 +20,18 @@ The key itself is NOT in this repository. For testing it sits in the session scr
   the chunk is asked again. To build: a pure `foreignLetters(text, lang)` check in translate.js.
 - Speed: 16 s for two sentences on that model. A whole book needs a faster model; measure before promising.
 - Not measured: the 40-requests-a-minute limit, streaming, the TTS endpoints (magpie-tts-zeroshot).
+
+## Chat models on a free account, probed 2026-10-11 (same two-sentence Telugu translation)
+45 chat-looking models of the 80 listed were asked. 10 answered, 32 were refused (404, one 500, one 503),
+3 timed out at 45 s.
+- Fast and clean Telugu: `google/diffusiongemma-26b-a4b-it` (0.8 s), `nvidia/ising-calibration-1.5-31b` (1.5 s,
+  wraps its answer in a json code fence; it is a specialised model and answers small talk with a canned line).
+- Reasoning models (5 to 23 s; the reply was empty when given only 400 tokens because the thinking used them):
+  nemotron-3-super-120b, nemotron-3.5-lightning-30b, nemotron-3-nano-omni-30b, kimi-k3, nemotron-3-ultra-550b
+  (2 wrong-alphabet letters), gpt-oss-20b, glm-5.3-flash, muse-glimmer-30b.
+- `google/diffusiongemma-26b-a4b-it` returns an EMPTY reply to "Reply with the single word: ready" but answers
+  ordinary questions and translates well: a model check must ask something ordinary.
+- Through the app, with the real key, UI only (Settings → AI → NVIDIA → Add a document → Telugu): a 7-sentence
+  text came back in about 1 s, 0 wrong-alphabet letters.
+- Relay checks (wrangler pages dev): with key 200; no key 401; other path 404; foreign Origin 403; streaming
+  passes through as `data: {…}` lines ending `data: [DONE]`.

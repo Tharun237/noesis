@@ -54,7 +54,7 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
    Then: Translate a document into Hindi, Telugu and more (Piper has Hindi, Telugu, Malayalam,
    Marathi, Bengali, Urdu, Nepali voices, verified 2026-10-11). Natural translation that keeps names, terms,
    code and equations. Switch language mid-session without losing the place.
-7. **AI provider layer.** One interface for "ask a model", with the provider chosen in Settings.
+7. **AI provider layer.** SHIPPED 2026-10-11 (M9): Settings → AI lets the customer bring Gemini, NVIDIA (through a relay), or any OpenAI-compatible address; a model check finds the models that answer. Tested with a real NVIDIA key. Scanned-page reading is still Gemini-only.
 8. **Motion pass.** Frame-by-frame transitions modelled on the ACS categories page; premium phone feel
    (Dynamic-Island-style live status), desktop and phone, browser compatibility.
 
