@@ -63,7 +63,10 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
     any provider whose model sees images (tested: NVIDIA `z-ai/glm-5.3-flash` read a 2-page scan in 3.6 s);
     Ask sends a window around the listener's place and long summaries are built part by part for smaller models.
 7. **AI provider layer.** SHIPPED 2026-10-11 (M9): Settings → AI lets the customer bring Gemini, NVIDIA (through a relay), or any OpenAI-compatible address; a model check finds the models that answer. Tested with a real NVIDIA key. Scanned-page reading is still Gemini-only.
-8. **Motion pass.** Frame-by-frame transitions modelled on the ACS categories page; premium phone feel
+8. **Motion pass.** PARTLY DONE 2026-10-12: the status strip became a live island (a pill that widens into
+   the full card and slides its text; transforms only). Press feedback, springs, sheet and page transitions
+   already existed. Still open: a frame-by-frame study against the ACS categories page, desktop refinement.
+   Original item: Frame-by-frame transitions modelled on the ACS categories page; premium phone feel
    (Dynamic-Island-style live status), desktop and phone, browser compatibility.
 
 ## Sprint 3: AI listening features
@@ -82,6 +85,9 @@ Still open: 9, 11, 12 by voice, 13, the cards in 14.
 
 ## Sprint 4: library intelligence and insight
 
+Shipped 2026-10-12: item 15, Make a briefing (M13): 2 to 5 documents become one new document with headed
+parts (what each says, where they agree and disagree, shared methods, what to read first). Tested with a real
+NVIDIA key: about 2 s with a fast model; a reasoning model sat on "Writing the briefing" for over 2 minutes.
 Shipped 2026-10-11: item 16, Ask your library (M12): keyword ranking on the device, the top passages go to
 the customer's AI, the answer cites numbered passages and each opens its book at that place. Without an AI
 key it still lists matching passages. Not yet: page and time references in the citation, spoken answers.
