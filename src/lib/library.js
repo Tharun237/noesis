@@ -42,7 +42,7 @@ const voicedSet = id => voiced.get(id) ?? voiced.set(id, new Set()).get(id)
 export const isVoiced = (id, i) => voicedSet(id).has(i)
 
 // What syncs between devices. Everything else on a doc (status, voicing progress, errors) is per-device.
-const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts']
+const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts', 'target', 'from']
 const POS_FIELDS = ['pos', 'posF', 'finished', 'lastPlayed']
 const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]))
 
@@ -301,10 +301,17 @@ async function prepare(id) {
     patch(id, { status: 'reading', stage: 'Reading document', error: null, prep: 0 })
     let src = await db.getSource(id)
     if (!src) throw new Error('The original file is on the device you added it from. Re-process it there.')
+    // A translated version points at the original instead of copying its file.
+    const refFrom = src.kind === 'ref' ? src.from : null
+    if (refFrom) {
+      const origSrc = await db.getSource(refFrom)
+      if (!origSrc) throw new Error('The original document was removed from this device.')
+      src = origSrc
+    }
     if (src.kind === 'link') {
       patch(id, { stage: 'Fetching link' })
       src = await fetchUrl(src.url)
-      await db.putSource(id, src)
+      if (!refFrom) await db.putSource(id, src)
       patch(id, { kind: src.kind, url: src.url })
     }
     parsed = await parseSource(src, stepped(id))
@@ -349,6 +356,23 @@ async function prepare(id) {
         onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }) })
     }
 
+    if (d.target && LANGS[d.target] && detectLang(blocks.map(b => b.text || '').join('\n')) !== d.target) {
+      if (!hasKey()) throw new Error('Translation needs a free Gemini key. Add one in Settings.')
+      const languageName = LANGS[d.target].name
+      const stage = `Translating into ${languageName}`
+      patch(id, { status: 'narrating', stage, prep: 0 })
+      const { translateBlocks } = await import('./translate.js')
+      const stored = await db.getTranslation(id)
+      const saved = stored instanceof Map ? stored : new Map()
+      blocks = await translateBlocks(blocks, d.target, {
+        key: s.geminiKey, model: s.geminiModel,
+        onProgress: stepped(id),
+        onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }),
+        saved,
+        onChunk: (index, strings) => { saved.set(index, strings); return db.putTranslation(id, saved) },
+      })
+    }
+
     const lang = detectLang(blocks.map(b => b.text || '').join('\n'))
     const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? 'en')
     const voice = lang === curLang ? d.voice : defaultVoiceFor(lang)
@@ -364,11 +388,23 @@ async function prepare(id) {
     const total = listening.reduce((a, b) => a + b.s.length, 0)
     const chars = listening.reduce((a, b) => a + b.s.reduce((x, t) => x + t.length, 0), 0)
     await db.putDurs(id, { durs: new Array(total).fill(0), tails: new Array(total).fill(0) })
+    await db.delTranslation(id)
     cache.delete(id)
     voiced.set(id, new Set())
+    // A version switch carries the place by block number: first sentence of that block.
+    let pos = Math.min(d.pos || 0, total - 1)
+    let startPatch = {}
+    const startBlock = getDoc(id)?.startBlock
+    if (startBlock != null && listening.length) {
+      const starts = []
+      let at = 0
+      for (const b of listening) { starts.push(at); at += b.s.length }
+      pos = starts[Math.min(startBlock, starts.length - 1)]
+      startPatch = { startBlock: null }
+    }
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
     // settings.voice stays an English voice and is never changed here; only the document's own voice follows its lang.
-    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos: Math.min(d.pos || 0, total - 1), note: langNote ?? note, lang, voice, contentVer: Date.now() })
+    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, voice, contentVer: Date.now() })
     kickVoice()
   } catch (e) {
     console.error(e)
@@ -512,11 +548,45 @@ export async function addDocument(src, overrides = {}) {
     pos: 0, finished: false, archived: false, collections: [], marks: [], cover: null, error: null, note: null,
     ...overrides,
   }
+  if (!LANGS[meta.target]) delete meta.target
   await db.putSource(id, src)
   await db.putMeta(meta)
   library.set(st => ({ docs: [meta, ...st.docs] }))
   kickPrep()
   return id
+}
+
+// The reader's language switch. Returns the wanted document's id; does not navigate.
+// Deleting an original never touches its translated versions (deleteDoc is per-id).
+export async function listenIn(id, target) {
+  const cur = getDoc(id)
+  const rootId = cur?.from || id
+  const root = getDoc(rootId) || cur
+  let wantedId
+  if (target === root?.lang) {
+    wantedId = rootId
+  } else {
+    const existing = library.get().docs.find(x => x.from === rootId && x.target === target)
+    if (existing) wantedId = existing.id
+    else {
+      wantedId = await addDocument({ kind: 'ref', from: rootId },
+        { target, title: root?.title || 'Untitled', renamed: true, mode: 'full', from: rootId })
+    }
+  }
+  // Carry the place: the block number being read in the current document.
+  let block = 0
+  const c = await loadDoc(id)
+  if (c) block = c.segs[Math.min(cur?.pos || 0, c.segs.length - 1)]?.b ?? 0
+  const wanted = getDoc(wantedId)
+  if (wanted && (wanted.status === 'voicing' || wanted.status === 'ready')) {
+    const wc = await loadDoc(wantedId)
+    if (wc) {
+      patch(wantedId, { pos: wc.starts[Math.min(block, wc.starts.length - 1)], startBlock: null })
+      return wantedId
+    }
+  }
+  patch(wantedId, { startBlock: block })
+  return wantedId
 }
 
 export async function changeVoice(id, voice) {

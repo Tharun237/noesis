@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { motion, AnimatePresence } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go, goBack } from '../lib/nav.js'
+import { ui, go, goBack, openSheet } from '../lib/nav.js'
 import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
@@ -156,6 +156,7 @@ export function Reader({ wide }) {
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
             items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
               ...(view === 'pages' ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
+              { label: 'Listen in another language', icon: 'sparkle', onClick: () => openSheet('language', { docId: d.id }) },
               ...docMenu(d)]} />
         </div>
         {pagesAvailable && (

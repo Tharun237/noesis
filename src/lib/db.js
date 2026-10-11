@@ -21,7 +21,13 @@ export const db = {
   putDurs: (id, d) => set('durs:' + id, d, content),
   getChat: id => get('chat:' + id, content),
   putChat: (id, msgs) => set('chat:' + id, msgs, content),
-  delContent: id => delMany(['src:' + id, 'doc:' + id, 'durs:' + id, 'chat:' + id], content),
+  delContent: id => delMany(['src:' + id, 'doc:' + id, 'durs:' + id, 'chat:' + id, 'tr:' + id], content),
+
+  // Finished translation chunks (Map chunkIndex → strings) so a restarted run
+  // continues where it left off instead of translating twice.
+  getTranslation: id => get('tr:' + id, content),
+  putTranslation: (id, map) => set('tr:' + id, map, content),
+  delTranslation: id => del('tr:' + id, content),
 
   akey: (id, i) => id + ':' + i,
   getAudio: (id, i) => get(id + ':' + i, audio),
