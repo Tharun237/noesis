@@ -224,10 +224,14 @@ export async function listAiModels() {
   return ((await res.json()).data || []).map(m => ({ id: m.id, name: m.id })).sort((a, b) => a.id.localeCompare(b.id))
 }
 
+// A question a model answers in a few words. (Measured: one NVIDIA model returns an empty reply to
+// "Reply with the single word: ready" yet translates well, so the check asks something ordinary.)
+const CHECK_QUESTION = 'What is two plus two? Answer in one short sentence.'
+
 // Does the chosen model answer, and how fast? One tiny request. → { seconds } or throws with the reason.
 export async function testModel() {
   const t0 = performance.now()
-  await aiText({ prompt: 'Reply with the single word: ready' })
+  await aiText({ prompt: CHECK_QUESTION })
   return { seconds: (performance.now() - t0) / 1000 }
 }
 
@@ -244,11 +248,13 @@ export async function checkModels(ids, { onProgress, signal } = {}) {
     const t0 = performance.now()
     const res = await fetch(`${p.base}/chat/completions`, {
       method: 'POST', headers: openaiHeaders(p), signal: AbortSignal.any([AbortSignal.timeout(CHECK_TIMEOUT_MS), ...(signal ? [signal] : [])]),
-      body: JSON.stringify({ model: ids[i], max_tokens: 8, temperature: 0, stream: false, messages: [{ role: 'user', content: 'Say: ready' }] }),
+      body: JSON.stringify({ model: ids[i], max_tokens: 40, temperature: 0, stream: false, messages: [{ role: 'user', content: CHECK_QUESTION }] }),
     }).catch(() => null) // unreachable, refused, or slower than the limit: all mean "not usable now"
     if (res?.status === 429 && !again) { again = true; i--; await sleep(20_000); continue } // the account's limit: wait, ask once more
     again = false
-    if (res?.ok) working.push({ id: ids[i], s: Math.round((performance.now() - t0) / 100) / 10 })
+    // Answering means words came back: the reply itself, or the thinking of a reasoning model that ran out of room.
+    const m = res?.ok ? (await res.json().catch(() => null))?.choices?.[0]?.message : null
+    if (m && (m.content || m.reasoning_content || m.reasoning)) working.push({ id: ids[i], s: Math.round((performance.now() - t0) / 100) / 10 })
     onProgress?.({ checked: i + 1, total: ids.length, working: working.length })
     await sleep(CHECK_GAP_MS)
   }
