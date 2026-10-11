@@ -4,7 +4,7 @@ import { settings, hasKey } from './settings.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
-import { LANGS, detectLang } from './lang.js'
+import { LANGS, detectLang, isEnglish } from './lang.js'
 import { activeEngine, hasSystemVoice } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
@@ -302,11 +302,16 @@ async function prepare(id) {
     let src = await db.getSource(id)
     if (!src) throw new Error('The original file is on the device you added it from. Re-process it there.')
     // A translated version points at the original instead of copying its file.
+    // It is made from the original's prepared text, not by reading the file again: no second pass of
+    // page reading or AI narration, and block n here is block n there, which is how the place is carried.
     const refFrom = src.kind === 'ref' ? src.from : null
+    let fromOriginal = null
     if (refFrom) {
-      const origSrc = await db.getSource(refFrom)
-      if (!origSrc) throw new Error('The original document was removed from this device.')
-      src = origSrc
+      const orig = await db.getDoc(refFrom)
+      if (!orig?.blocks?.length) throw new Error('The original document was removed from this device.')
+      const o = getDoc(refFrom)
+      fromOriginal = { blocks: orig.blocks.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p })), title: d.title, author: o?.author, cover: o?.cover }
+      patch(id, { kind: o?.kind || 'text' })
     }
     if (src.kind === 'link') {
       patch(id, { stage: 'Fetching link' })
@@ -314,7 +319,7 @@ async function prepare(id) {
       if (!refFrom) await db.putSource(id, src)
       patch(id, { kind: src.kind, url: src.url })
     }
-    parsed = await parseSource(src, stepped(id))
+    parsed = fromOriginal || await parseSource(src, stepped(id))
     await pause()
     patch(id, {
       title: d.renamed ? d.title : parsed.title || d.title,
@@ -356,7 +361,11 @@ async function prepare(id) {
         onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }) })
     }
 
-    if (d.target && LANGS[d.target] && detectLang(blocks.map(b => b.text || '').join('\n')) !== d.target) {
+    // Already in the wanted language? Script tells Telugu and Hindi apart; for English the words must agree
+    // too, or a French book (Latin letters) would pass as English and never be translated.
+    const before = blocks.map(b => b.text || '').join('\n')
+    const already = detectLang(before) === d.target && (d.target !== 'en' || isEnglish(before))
+    if (d.target && LANGS[d.target] && !already) {
       if (!hasKey()) throw new Error('Translation needs a free Gemini key. Add one in Settings.')
       const languageName = LANGS[d.target].name
       const stage = `Translating into ${languageName}`
@@ -373,7 +382,9 @@ async function prepare(id) {
       })
     }
 
-    const lang = detectLang(blocks.map(b => b.text || '').join('\n'))
+    const finalText = blocks.map(b => b.text || '').join('\n')
+    const lang = detectLang(finalText)
+    const foreign = lang === 'en' && !isEnglish(finalText) // Latin letters, but not English: no voice of its own yet
     const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? 'en')
     const voice = lang === curLang ? d.voice : defaultVoiceFor(lang)
     const langNote = voice == null ? `No natural voice for ${LANGS[lang].name} yet. ${hasSystemVoice() ? "Your device's built-in voice reads this document." : 'This browser has no built-in voice to read it either.'}` : null
@@ -404,7 +415,7 @@ async function prepare(id) {
     }
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
     // settings.voice stays an English voice and is never changed here; only the document's own voice follows its lang.
-    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, voice, contentVer: Date.now() })
+    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, foreign, voice, contentVer: Date.now() })
     kickVoice()
   } catch (e) {
     console.error(e)
@@ -563,14 +574,14 @@ export async function listenIn(id, target) {
   const rootId = cur?.from || id
   const root = getDoc(rootId) || cur
   let wantedId
-  if (target === root?.lang) {
+  if (target === root?.lang && !root?.foreign) {
     wantedId = rootId
   } else {
     const existing = library.get().docs.find(x => x.from === rootId && x.target === target)
     if (existing) wantedId = existing.id
     else {
       wantedId = await addDocument({ kind: 'ref', from: rootId },
-        { target, title: root?.title || 'Untitled', renamed: true, mode: 'full', from: rootId })
+        { target, title: `${root?.title || 'Untitled'} (${LANGS[target].name})`, renamed: true, mode: 'full', from: rootId })
     }
   }
   // Carry the place: the block number being read in the current document.
