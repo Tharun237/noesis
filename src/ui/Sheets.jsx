@@ -101,6 +101,10 @@ function AddForm({ wide }) {
   const [url, setUrl] = useState(prefill?.url || '')
   const [mode, setMode] = useState(keyed ? s.mode : 'full')
   const [target, setTarget] = useState(undefined)
+  // The voice list follows the language chosen to listen in: choosing Telugu must not leave an English voice showing.
+  const voiceLang = target || 'en'
+  const langVoices = voicesFor(voiceLang)
+  const picked = langVoices.some(v => v.id === voice) ? voice : langVoices[0]?.id
   const [voice, setVoice] = useState(s.voice)
   const [ai, setAi] = useState(keyed && s.aiNarration)
   const [busy, setBusy] = useState(null)
@@ -123,7 +127,7 @@ function AddForm({ wide }) {
     else if (tab === 'text') src = { kind: /^#{1,6}\s/m.test(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
     else src = { kind: 'link', name: url.trim(), url: url.trim() }
     const named = tab === 'text' && title.trim()
-    const id = await addDocument(src, { mode, voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })
+    const id = await addDocument(src, { mode, voice: picked || voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })
     if (voice !== s.voice) settings.set({ voice })
     if (mode !== s.mode && keyed) settings.set({ mode })
     history.replaceState({ view: 'reader', docId: id, depth: history.state?.depth || 1 }, '') // the sheet's history entry becomes the reader
@@ -186,13 +190,15 @@ function AddForm({ wide }) {
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: T.sub }}>{systemVoiceLabel(pickSystemVoice())}</div>
         </Field>
       ) : (
-      <Field title="Voice">
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <select value={voice} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
-            {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
-          </select>
-          <PreviewButton voice={voice} busy={busy} setBusy={setBusy} />
-        </div>
+      <Field title="Voice" hint={langVoices.length ? null : `No natural voice for ${LANGS[voiceLang].name} yet. Your device's built-in voice reads it.`}>
+        {langVoices.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select value={picked} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
+              {langVoices.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
+            </select>
+            {voiceLang === 'en' && <PreviewButton voice={picked} busy={busy} setBusy={setBusy} />}
+          </div>
+        )}
       </Field>
       )}
 
