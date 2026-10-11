@@ -49,7 +49,7 @@ export function speechSupported() {
 
 // Continuous recognition, final results only. The browser ends a session after silence, so while the
 // listener is still wanted it starts a new one, at most once a second.
-export function createListener({ lang = 'en-US', onCommand, onHeard, onState }) {
+export function createListener({ lang = 'en-US', onCommand, onHeard, onInterim, onState }) {
   let rec = null
   let wanted = false
   let lastStart = 0
@@ -83,11 +83,11 @@ export function createListener({ lang = 'en-US', onCommand, onHeard, onState }) 
     lastStart = Date.now()
     r.lang = lang
     r.continuous = true
-    r.interimResults = false
+    r.interimResults = true // the words are shown while they are being said
     r.onstart = () => report('listening')
     r.onresult = e => {
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (!e.results[i].isFinal) continue
+        if (!e.results[i].isFinal) { if (onInterim) onInterim(e.results[i][0].transcript.trim()); continue }
         const text = e.results[i][0].transcript.trim()
         if (!text) continue
         if (onHeard) onHeard(text)

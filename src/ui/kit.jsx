@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion, AnimatePresence, useDragControls } from 'motion/react'
 import { T, label } from '../theme.js'
 import { Icon } from './icons.jsx'
 
@@ -114,6 +114,9 @@ export function Pulse({ color = T.lime }) {
 
 // Bottom sheet on phones, centred dialog on wide screens. Escape and backdrop close it.
 export function Sheet({ open, onClose, children, wide, width = 560, title }) {
+  // On a phone the sheet is pulled down by its handle to close, like every native sheet. Only the handle
+  // starts the drag, so scrolling the sheet's contents is never mistaken for it.
+  const pull = useDragControls()
   useEffect(() => {
     if (!open) return
     const k = e => e.key === 'Escape' && onClose()
@@ -131,13 +134,19 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
             animate={wide ? { opacity: 1, y: 0, scale: 1 } : { y: 0 }}
             exit={wide ? { opacity: 0, y: 12, scale: 0.98 } : { y: '100%' }}
             transition={T.spring}
+            drag={wide ? false : 'y'} dragControls={pull} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
+            onDragEnd={(e, info) => { if (info.offset.y > 110 || info.velocity.y > 600) onClose() }}
             style={{
               width: wide ? width : '100%', maxWidth: '100%', maxHeight: wide ? 'calc(100dvh - 48px)' : '92dvh', overflowY: 'auto',
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: wide ? T.r.xl : `${T.r.xl}px ${T.r.xl}px 0 0`,
               borderBottom: wide ? undefined : 'none', paddingBottom: wide ? 0 : 'env(safe-area-inset-bottom)',
               boxShadow: '0 30px 80px rgba(0,0,0,0.8)',
             }}>
-            {!wide && <div style={{ width: 40, height: 4, borderRadius: 4, background: T.surfaceTop, margin: '10px auto 0' }} />}
+            {!wide && (
+              <div onPointerDown={e => pull.start(e)} aria-hidden="true" style={{ padding: '10px 0 12px', margin: '0 auto -12px', width: 120, cursor: 'grab', touchAction: 'none' }}>
+                <div style={{ width: 40, height: 4, borderRadius: 4, background: T.surfaceTop, margin: '0 auto' }} />
+              </div>
+            )}
             {children}
           </motion.div>
         </motion.div>

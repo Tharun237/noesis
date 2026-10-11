@@ -18,6 +18,16 @@ import { ActivityStrip, useActivity, ACTIVITY_H } from './ui/Activity.jsx'
 
 const Settings = lazy(() => import('./ui/Settings.jsx').then(m => ({ default: m.Settings })))
 
+// A page moves the way the customer is going. Going deeper, the new page arrives from the right and the old
+// one leaves to the left; going back (the Back button, Android's back gesture) it is the mirror image, so
+// the screen follows the thumb. Between tabs there is no direction: a short rise. `custom` carries the
+// direction to the page that is leaving, which can no longer receive props (motion.dev, AnimatePresence).
+const PAGE = {
+  enter: dir => ({ opacity: 0, x: dir * 28, y: dir ? 0 : 8 }),
+  show: { opacity: 1, x: 0, y: 0, transition: { duration: 0.24, ease: T.ease } },
+  exit: dir => ({ opacity: 0, x: dir * -20, transition: { duration: 0.12, ease: 'easeIn' } }),
+}
+
 export default function App() {
   const wide = useWidth() >= T.split
   const view = useStore(ui, s => s.view)
@@ -51,6 +61,14 @@ export default function App() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
   const route = useMemo(() => ({ view, docId }), [view, docId])
+  // Which way the customer is travelling: deeper (1), back (-1), or sideways between tabs (0). Read from
+  // the depth the navigation code keeps in each history entry.
+  const trip = useRef({ key: view + (docId || ''), depth: history.state?.depth || 0, dir: 0 })
+  if (trip.current.key !== view + (docId || '')) {
+    const depth = history.state?.depth || 0
+    trip.current = { key: view + (docId || ''), depth, dir: Math.sign(depth - trip.current.depth) }
+  }
+  const dir = trip.current.dir
 
   const full = view === 'reader'
   const dock = playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
@@ -61,10 +79,8 @@ export default function App() {
       <div style={{ paddingBottom: dock + lift }}>
         {/* The old page fades out quickly (ease-in), then the new one rises in (ease-out): one page at a time.
             The leaving page keeps its own route through context, so it never flashes the next page's content. */}
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={view + (docId || '')} initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: T.ease } }}
-            exit={{ opacity: 0, transition: { duration: 0.11, ease: 'easeIn' } }}>
+        <AnimatePresence mode="wait" initial={false} custom={dir}>
+          <motion.div key={view + (docId || '')} custom={dir} variants={PAGE} initial="enter" animate="show" exit="exit">
             <Route.Provider value={route}>
               {view === 'library' && <Library wide={wide} />}
               {view === 'reader' && <Reader wide={wide} />}

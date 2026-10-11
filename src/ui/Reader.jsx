@@ -8,7 +8,7 @@ import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, 
 import { toggleMark, setMarkNote } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
 import { parseCommand, speechSupported } from '../lib/voicecmd.js'
-import { VoiceControl, VoiceStatus } from './VoiceControl.jsx'
+import { VoiceControl, VoiceHud } from './VoiceControl.jsx'
 import { floatingSupported, openFloating } from '../lib/floating.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
@@ -67,28 +67,33 @@ export function Reader({ wide }) {
   const [heard, setHeard] = useState('')
   // What the microphone heard. While the book is playing through a loudspeaker the microphone hears the
   // book too, and the book says "stop" and "next" all the time: then a command must start with "Noesis".
+  const [done, setDone] = useState(null) // what was done with the last thing heard: { text, ok, at }
+  const [saying, setSaying] = useState('') // the words as they are being heard
+  const did = (text, ok = true) => setDone({ text, ok, at: Date.now() })
   const onHeard = said => {
     setHeard(said)
+    setSaying(said)
     const m = said.trim().match(WAKE)
     const p = player.get()
-    if (p.playing && p.id === id && !m) return
     const c = parseCommand(m ? said.trim().slice(m[0].length) : said)
-    if (!c) return
+    if (!c) return did('Not a command. Nothing was done.', false)
+    if (p.playing && p.id === id && !m) return did('The book is playing: say “Noesis” first, then the command.', false)
     const at = p.id === id ? p.i : d?.pos || 0
-    if (c.cmd === 'play') (p.id === id ? play() : openPlayer(id, { at }).then(play))
-    else if (c.cmd === 'pause') pause()
-    else if (c.cmd === 'back') prevSentence()
-    else if (c.cmd === 'next') nextSentence()
-    else if (c.cmd === 'slower') setRate(Math.max(0.5, Math.round((p.rate - 0.1) * 10) / 10))
-    else if (c.cmd === 'faster') setRate(Math.min(3, Math.round((p.rate + 0.1) * 10) / 10))
+    if (c.cmd === 'play') { p.id === id ? play() : openPlayer(id, { at }).then(play); did('Playing') }
+    else if (c.cmd === 'pause') { pause(); did('Paused') }
+    else if (c.cmd === 'back') { prevSentence(); did('Back one sentence') }
+    else if (c.cmd === 'next') { nextSentence(); did('Next sentence') }
+    else if (c.cmd === 'slower') { const r = Math.max(0.5, Math.round((p.rate - 0.1) * 10) / 10); setRate(r); did(`Slower: ${r}×`) }
+    else if (c.cmd === 'faster') { const r = Math.min(3, Math.round((p.rate + 0.1) * 10) / 10); setRate(r); did(`Faster: ${r}×`) }
     else if (c.cmd === 'bookmark') {
       // The bookmark keeps the last few sentences as its note, so "what was I marking?" has an answer later.
       if (!(d.marks || []).some(x => x.i === at)) toggleMark(id, at)
       if (doc) setMarkNote(id, at, doc.segs.slice(Math.max(0, at - 2), at + 1).map(x => x.t).join(' '))
-      toast('Bookmarked, with the last few sentences')
+      did('Bookmarked, with the last few sentences')
     }
-    else if (c.cmd === 'explain' || c.cmd === 'recap' || c.cmd === 'skim') quick(c.cmd)
-    else if (c.cmd === 'ask' && c.arg) { setAskAuto({ q: c.arg, n: Date.now() }); setPanel('ask') }
+    else if (c.cmd === 'explain' || c.cmd === 'recap' || c.cmd === 'skim') { quick(c.cmd); did({ explain: 'Explaining what you just heard', recap: 'Recapping so far', skim: 'Skimming this section' }[c.cmd]) }
+    else if (c.cmd === 'ask' && c.arg) { setAskAuto({ q: c.arg, n: Date.now() }); setPanel('ask'); did(`Asking: ${c.arg}`) }
+    else did('Not a command. Nothing was done.', false)
   }
   const float = async () => {
     // Opening the window has to happen inside the tap; only its contents are loaded on demand.
@@ -213,7 +218,7 @@ export function Reader({ wide }) {
           {!wide && headings.length > 1 && <IconButton icon="toc" label="Contents" onClick={() => setPanel('toc')} />}
           <IconButton icon="type" label="Reading settings" onClick={() => setPanel('type')} />
           {wide && <IconButton icon="bookmark" label="Bookmarks & notes" onClick={() => setPanel('marks')} />}
-          {speechSupported() && <VoiceControl onState={setVoiceState} onHeard={onHeard} />}
+          {speechSupported() && <VoiceControl onState={st => { setVoiceState(st); if (st !== 'listening') { setSaying(''); setDone(null) } }} onHeard={onHeard} onInterim={setSaying} />}
           <IconButton icon="sparkle" label="Ask about this document" active={panel === 'ask'} onClick={() => setPanel(panel === 'ask' ? null : 'ask')} />
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
             items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
@@ -241,12 +246,6 @@ export function Reader({ wide }) {
         {view === 'pages' && numPages > 0 && doc && !linked && (
           <div style={{ padding: `0 ${wide ? 20 : 14}px 10px`, fontSize: 12, lineHeight: 1.45, color: T.sub }}>
             Pages aren't linked to the audio for this document. Add it again to link them.
-          </div>
-        )}
-        {voiceState !== 'off' && (
-          <div style={{ padding: `0 ${wide ? 20 : 14}px 10px`, display: 'grid', gap: 4 }}>
-            <VoiceStatus state={voiceState} heard={heard} />
-            {voiceState === 'listening' && <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>While the book is playing, start with its name: “Noesis, pause.” The microphone hears the book too.</div>}
           </div>
         )}
         {searching && <SearchBar doc={doc} onHit={setHit} onClose={() => setSearching(false)} />}
@@ -324,6 +323,7 @@ export function Reader({ wide }) {
         <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} onClose={() => setPanel(null)} /></div>, 480)}
       {sheet('type', 'Reading settings', <ReadingSettings wide={wide} />, 460)}
       {sheet('marks', 'Bookmarks & notes', <Marks d={d} doc={doc} offs={offs} rate={rate} onSeek={onSeek} onClose={() => setPanel(null)} />, 520)}
+      <VoiceHud state={voiceState} words={saying} done={done} bottom={bottom} playing={isPlaying && playId === id} />
       {sheet('insights', 'Insights', panel === 'insights' && doc ? <Suspense fallback={null}><Insights doc={doc} title={d.title}
         onSeek={i => { setPanel(null); onSeek(i) }}
         onAsk={word => { setAskAuto({ q: `Explain the word "${word}" as it is used in this document, in two plain sentences.`, n: Date.now() }); setPanel('ask') }} /></Suspense> : null, 560)}

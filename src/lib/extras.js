@@ -11,12 +11,19 @@ export function startExtras() {
   if (started) return
   started = true
   let prev = { id: null, i: -1, sounding: false }
-  const sounding = () => { const p = player.get(); return !!p.id && p.playing && !p.waiting }
+  // "Sounding" means the customer pressed play and has not paused. The short waits between stretches of
+  // audio, or while the next sentence is still being made, are part of listening: the focus sound must not
+  // dip and swell with them (it did, in the first version).
+  const sounding = () => { const p = player.get(); return !!p.id && p.playing }
+  let stopTimer = 0
+  let previewTimer = 0
   const applySound = () => {
     const s = settings.get()
     const mode = s.ambientMode || 'off'
     ambient.set({ mode, volume: s.ambientVolume ?? 0.5 })
-    ambient.playing(mode !== 'off' && sounding())
+    clearTimeout(stopTimer)
+    if (mode !== 'off' && sounding()) { clearTimeout(previewTimer); ambient.playing(true) }
+    else stopTimer = setTimeout(() => { if (!(settings.get().ambientMode !== 'off' && sounding())) ambient.playing(false) }, 1200)
   }
   player.sub(() => {
     const p = player.get()
@@ -41,5 +48,11 @@ export function startExtras() {
     if (s.ambientMode === lastMode && s.ambientVolume === lastVol) return
     lastMode = s.ambientMode; lastVol = s.ambientVolume
     applySound()
+    // Chosen while nothing is playing: let it be heard for a few seconds, or the choice is made blind.
+    if (!sounding() && (s.ambientMode || 'off') !== 'off') {
+      clearTimeout(stopTimer); clearTimeout(previewTimer)
+      ambient.playing(true)
+      previewTimer = setTimeout(() => { if (!sounding()) ambient.playing(false) }, 4000)
+    }
   })
 }
