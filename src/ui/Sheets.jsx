@@ -101,11 +101,11 @@ function AddForm({ wide }) {
   const [url, setUrl] = useState(prefill?.url || '')
   const [mode, setMode] = useState(keyed ? s.mode : 'full')
   const [target, setTarget] = useState(undefined)
+  const [voice, setVoice] = useState(s.voice)
   // The voice list follows the language chosen to listen in: choosing Telugu must not leave an English voice showing.
   const voiceLang = target || 'en'
   const langVoices = voicesFor(voiceLang)
   const picked = langVoices.some(v => v.id === voice) ? voice : langVoices[0]?.id
-  const [voice, setVoice] = useState(s.voice)
   const [ai, setAi] = useState(keyed && s.aiNarration)
   const [busy, setBusy] = useState(null)
   const [over, setOver] = useState(false)
