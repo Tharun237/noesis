@@ -14,3 +14,7 @@ public/ort
 .qa-profile
 .qa-out
 .qa-profile-prod
+
+# Listening test toolkit: generated audio/reports and the Whisper model cache
+tools/listen/out/
+tools/listen/.cache/
