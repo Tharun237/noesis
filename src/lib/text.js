@@ -114,8 +114,8 @@ export function sentences(text, lang = 'en') {
     const s = (carry + segment).trim()
     if (!s) continue
     // Carry enumeration stubs ("1.", "2.3", "a)", "iv.") and unterminated fragments into the next sentence.
-    // । and ॥ count as sentence ends, like . ! ? for English.
-    if (s.length < MIN && (/^\(?(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxIVX]+)[.)]?$/.test(s) || !/[.!?…"”')\]।॥]$/.test(s))) { carry = s + ' '; continue }
+    // । and ॥ count as sentence ends, like . ! ? for English. So do 。 ！ ？ and ؟.
+    if (s.length < MIN && (/^\(?(?:\d+(?:\.\d+)*|[a-zA-Z]|[ivxIVX]+)[.)]?$/.test(s) || !/[.!?…"”')\]।॥。！？؟]$/.test(s))) { carry = s + ' '; continue }
     carry = ''
     out.push(...splitLong(s))
   }

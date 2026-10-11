@@ -130,6 +130,12 @@ async function speak({ text, voice: id, pause = 'sentence', tone = 'natural' }) 
   if (cfg.num_speakers > 1) feeds.sid = new ort.Tensor('int64', BigInt64Array.from([0n]), [1])
   const pcm = (await session.run(feeds)).output.data
   const rate = cfg.audio.sample_rate
+  return finish(pcm, rate, pause, tone)
+}
+
+// The tail every voice shares: natural pause → trailing silence → tone → encoding.
+// Cloud voices arrive as samples and run exactly this; on-device voices run it after inference.
+async function finish(pcm, rate, pause = 'sentence', tone = 'natural') {
   const padded = padTail(pcm, rate, PAUSE_MS[pause] ?? PAUSE_MS.sentence)
   const tail = trailingSeconds(padded, rate)
   const shaped = applyTone(padded, rate, tone)
@@ -144,6 +150,11 @@ self.onmessage = ({ data }) => {
   queue = queue.then(async () => {
     try {
       if (data.type === 'load') { await load(data.voice); postMessage({ type: 'ready', id: data.id }) }
+      else if (data.type === 'encode') {
+        const rec = await finish(data.pcm, data.rate, data.pause, data.tone)
+        const transfer = [rec.data?.buffer, rec.bytes?.buffer].filter(Boolean)
+        postMessage({ type: 'audio', id: data.id, rec }, transfer)
+      }
       else if (data.type === 'speak') {
         const rec = await speak(data)
         const transfer = [rec.data?.buffer, rec.bytes?.buffer].filter(Boolean)

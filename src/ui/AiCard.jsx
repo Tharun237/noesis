@@ -5,6 +5,7 @@ import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings, hasKey } from '../lib/settings.js'
 import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels } from '../lib/ai.js'
+import { loadCloudVoices } from '../lib/cloudvoice.js'
 import { Button, IconButton, Segmented, Toggle, Field, inputStyle } from './kit.jsx'
 
 const KEY = { gemini: 'geminiKey', nvidia: 'nvidiaKey', custom: 'customKey' }
@@ -75,6 +76,7 @@ export function AiCard({ Card }) {
   }
   function save() {
     settings.set({ [KEY[id]]: draft.trim(), ...(id === 'custom' ? { customBase: cleanBase(base) } : {}) })
+    if (id === 'nvidia' && isNvidiaKey(draft)) void loadCloudVoices({ force: true }).catch(e => console.warn('NVIDIA voice list not loaded:', e?.message || e))
     load()
   }
   // Another provider: its own key, address and model list.

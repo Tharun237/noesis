@@ -5,6 +5,7 @@ import { hasAiKey, providerName } from './ai.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
+import { isCloudVoice, cloudVoiceInfo, loadCloudVoices } from './cloudvoice.js'
 import { LANGS, detectLang, isEnglish } from './lang.js'
 import { activeEngine, hasSystemVoice } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
@@ -267,8 +268,38 @@ async function voiceOne(id, i) {
   let rec
   const warm = engine.get().status === 'ready' && engine.get().voice === voice // the first call also downloads the voice
   const t0 = performance.now()
+  const cloud = isCloudVoice(voice)
+  const onRetry = !cloud ? undefined : v => {
+    if (!getDoc(id)) return
+    if (v === 'offline') patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
+    else if (v == null) patch(id, { stage: 'Generating audio' })
+    else patch(id, { stage: `NVIDIA's free quota is limiting requests. Retrying in about ${v} s.` })
+  }
   try {
-    rec = await synthesize(seg.t, voice, pauseKind, tone)
+    if (cloud) {
+      // A network or quota failure must never mark the sentence as failed: wait and try again.
+      // Only a real refusal (bad key, text rejected) leaves this loop for the failure path below.
+      for (;;) {
+        try {
+          rec = await synthesize(seg.t, voice, pauseKind, tone, { onRetry })
+          break
+        } catch (e) {
+          if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
+          const status = e?.status
+          const msg = String(e?.message || '')
+          const refusal = status === 401 || status === 403 || status === 404 || status === 400 ||
+            /did not accept the key/i.test(msg)
+          if (refusal) throw e
+          if (/limiting requests/i.test(msg)) { /* stage already says so via onRetry; keep waiting */ }
+          else patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
+          await new Promise(r => setTimeout(r, 5000))
+          const still = getDoc(id)
+          if (!still || (isVoice(still.voice) ? still.voice : fromKokoro(still.voice)) !== voice) return
+        }
+      }
+    } else {
+      rec = await synthesize(seg.t, voice, pauseKind, tone)
+    }
     if (warm && rec.dur > 0.5) recordSpeed(rec.dur / ((performance.now() - t0) / 1000))
   } catch (e) {
     if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
@@ -383,9 +414,11 @@ async function prepare(id) {
     }
 
     const finalText = blocks.map(b => b.text || '').join('\n')
-    const lang = detectLang(finalText)
+    // A translated document (or one already in the target language) keeps its target language,
+    // not a new detection.
+    const lang = (d.target && LANGS[d.target]) ? d.target : detectLang(finalText)
     const foreign = lang === 'en' && !isEnglish(finalText) // Latin letters, but not English: no voice of its own yet
-    const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? 'en')
+    const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? (isCloudVoice(d.voice) ? cloudVoiceInfo(d.voice).lang : 'en'))
     const voice = lang === curLang ? d.voice : defaultVoiceFor(lang)
     const langNote = voice == null ? `No natural voice for ${LANGS[lang].name} yet. ${hasSystemVoice() ? "Your device's built-in voice reads this document." : 'This browser has no built-in voice to read it either.'}` : null
     const listening = await toListeningAsync(blocks, lang)
@@ -438,6 +471,8 @@ export async function boot() {
   persistStorage()
   kickPrep()
   kickVoice()
+  // NVIDIA voices, if the customer saved a key: refresh the list at most once a day.
+  void loadCloudVoices().catch(e => console.warn('NVIDIA voice list not loaded:', e?.message || e))
   configureSync(syncHooks)
   for (const d of metas) {
     if (d.status === 'syncing') fetchSynced(d.id) // resume interrupted downloads

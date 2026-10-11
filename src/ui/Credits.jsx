@@ -49,6 +49,10 @@ export function CreditsCard({ Card }) {
               </span>
             </div>
           ))}
+          <div style={row}>
+            <span style={{ fontWeight: 600 }}>NVIDIA Magpie voices (online, with the customer&apos;s NVIDIA key)</span>
+            <span style={faint}><Out href="https://build.nvidia.com/nvidia/magpie-tts-multilingual">build.nvidia.com/nvidia/magpie-tts-multilingual</Out></span>
+          </div>
         </div>
 
         <div style={heading}>Pronunciation</div>

@@ -49,9 +49,11 @@ between two runs is the evidence.
 - The thresholds for clicks, gaps, flatness and roominess are guesses that have not been checked against
   human listening (list in `tools/listen/README.md`, "Guesses, to calibrate"). When Tharun says how something
   sounded, record it there beside the number: that is the calibration.
-- Transcription is Whisper base, English only (`onnx-community/whisper-base.en`). For another language the WER
-  column is meaningless until `transcribe.mjs` is given a multilingual model, and small Whisper models are
-  weak on Telugu. Signal metrics (joins, clipping, levels) work for any language.
+- Transcription is trustworthy for English only (Whisper base, English). For other languages the tools
+  switch to multilingual Whisper small, and on 2026-10-11 that was NOT reliable: it wrote Telugu speech in
+  Hindi script and then repeated one word, and returned two syllables for 8.7 s of Hindi. So for Hindi,
+  Telugu and the rest, WER means nothing yet; only the signal metrics (joins, clipping, levels) count, and a
+  person has to listen. `node tools/listen/hear.mjs file.wav "expected text"` checks any WAV the same way.
 - It runs desktop Chrome. It says nothing about a phone's speaker, Bluetooth, or background playback.
 - Each run uses a fresh browser profile and downloads the voice again (about 63 MB).
 

@@ -15,6 +15,8 @@ export const DEFAULTS = {
   geminiModel: 'gemini-flash-latest',
   nvidiaKey: '',
   nvidiaModel: '', // no default invented: the customer picks one from the list their key returns
+  nvidiaVoices: {}, // lang → [full NVIDIA voice names], from /api/nvidia-tts/list_voices
+  nvidiaVoicesAt: 0, // when the voice list was last fetched (once a day at most)
   voice: 'en_GB-alba-medium', // default voice for new documents (voices.js)
   voiceTone: 'natural', // natural | clear | warm | bright — generation-time equalizer (tone.js)
   speed: 1,

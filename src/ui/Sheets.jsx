@@ -10,10 +10,13 @@ import { library, addDocument, changeVoice, addCollection, toggleInCollection, l
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
 import { voiceName, voicesFor } from '../lib/voices.js'
+import { isCloudVoice } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle } from './kit.jsx'
+
+const CLOUD_TRUTH = "Made online by NVIDIA: the text travels through Noesis's relay to NVIDIA. The audio is kept on this device and plays offline."
 
 export function Sheets({ wide }) {
   const sheet = useStore(ui, s => s.sheet)
@@ -184,8 +187,13 @@ function AddForm({ wide }) {
       </Field>
 
       <Field title="Language" hint={keyed ? null : 'Translation needs a free AI key. Add one in Settings.'}>
-        <Segmented value={target || 'orig'} onChange={v => setTarget(v === 'orig' ? undefined : v)} disabled={keyed ? [] : ['en', 'te', 'hi']} size="sm"
-          options={[{ value: 'orig', label: 'Original' }, { value: 'en', label: 'English' }, { value: 'te', label: 'Telugu' }, { value: 'hi', label: 'Hindi' }]} />
+        <select value={target || 'orig'} onChange={e => setTarget(e.target.value === 'orig' ? undefined : e.target.value)}
+          style={{ ...inputStyle, appearance: 'auto' }} aria-label="Language">
+          <option value="orig" style={{ background: T.bg }}>Original</option>
+          {Object.entries(LANGS).filter(([code]) => voicesFor(code).length > 0 || code === 'hi').map(([code, l]) => (
+            <option key={code} value={code} style={{ background: T.bg }} disabled={!keyed && code !== 'orig'}>{l.name}</option>
+          ))}
+        </select>
       </Field>
 
       {activeEngine(s) === 'system' ? (
@@ -193,11 +201,11 @@ function AddForm({ wide }) {
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: T.sub }}>{systemVoiceLabel(pickSystemVoice())}</div>
         </Field>
       ) : (
-      <Field title="Voice" hint={langVoices.length ? null : `No natural voice for ${LANGS[voiceLang].name} yet. Your device's built-in voice reads it.`}>
+      <Field title="Voice" hint={picked && isCloudVoice(picked) ? CLOUD_TRUTH : langVoices.length ? null : `No natural voice for ${LANGS[voiceLang].name} yet. Your device's built-in voice reads it.`}>
         {langVoices.length > 0 && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select value={picked} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
-              {langVoices.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
+              {langVoices.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.cloud ? v.accent : `${v.accent} ${v.g === 'F' ? 'female' : 'male'}`}</option>)}
             </select>
             {voiceLang === 'en' && <PreviewButton voice={picked} busy={busy} setBusy={setBusy} />}
           </div>
@@ -236,13 +244,16 @@ function VoicePicker() {
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>
       <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice downloads once on each device (about 63 MB).</div>
+      {d.voice && isCloudVoice(d.voice) && (
+        <div style={{ padding: '0 12px 14px', fontSize: 12.5, color: T.sub, lineHeight: 1.55 }}>{CLOUD_TRUTH}</div>
+      )}
       {voicesFor(d.lang || 'en').map(v => (
         <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
           <button type="button" onClick={() => { changeVoice(d.id, v.id); toast(`Switching to ${v.name}`); closeSheet() }}
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', fontFamily: T.font }}>
             <span style={{ width: 18, color: T.accent }}>{v.id === d.voice && <Icon name="check" size={17} />}</span>
             <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{v.name}</span>
-            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.accent} · {v.g}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.cloud ? v.accent : `${v.accent} · ${v.g}`}</span>
           </button>
           <PreviewButton voice={v.id} busy={busy} setBusy={setBusy} />
         </div>
@@ -277,7 +288,7 @@ function LanguagePicker() {
       </div>
       <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Uses your AI key. A long book takes several minutes the first time.</div>
       <div style={{ display: 'grid', gap: 2 }}>
-        {Object.entries(LANGS).map(([code, l]) => (
+        {Object.entries(LANGS).filter(([code]) => voicesFor(code).length > 0 || code === 'hi').map(([code, l]) => (
           <button key={code} type="button" disabled={!keyed || !!busy} onClick={() => choose(code)}
             style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', border: 'none', borderRadius: T.r.sm, background: code === d.lang ? T.surfaceHi : 'transparent', color: T.text, opacity: !keyed ? 0.4 : 1, cursor: !keyed ? 'not-allowed' : 'pointer', fontFamily: T.font, fontSize: 15, textAlign: 'left' }}>
             <span style={{ width: 18, color: T.accent }}>{code === d.lang && <Icon name="check" size={17} />}</span>

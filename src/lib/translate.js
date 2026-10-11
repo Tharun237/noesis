@@ -67,7 +67,13 @@ async function requestTexts({ prompt, signal, onRetry }) {
 // A model sometimes slips letters of another alphabet into a translation (measured on NVIDIA, English to
 // Telugu: an Urdu word in Arabic script, and Bengali letters inside "TNT"). The voice of the target language
 // cannot say them, so the listener would hear a hole. Latin letters are allowed: names and units.
-const SCRIPT = { te: /\p{Script=Telugu}/u, hi: /\p{Script=Devanagari}/u, en: /\p{Script=Latin}/u }
+const SCRIPT = {
+  te: /\p{Script=Telugu}/u, hi: /\p{Script=Devanagari}/u, en: /\p{Script=Latin}/u,
+  es: /\p{Script=Latin}/u, fr: /\p{Script=Latin}/u, de: /\p{Script=Latin}/u, it: /\p{Script=Latin}/u,
+  pt: /\p{Script=Latin}/u, vi: /\p{Script=Latin}/u,
+  ar: /\p{Script=Arabic}/u, ko: /\p{Script=Hangul}/u, zh: /\p{Script=Han}/u,
+  ja: /(?:\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana})/u,
+}
 const LETTER = /[\p{L}\p{M}]/u
 const SAYABLE = /[\p{Script=Latin}\p{Script=Inherited}\p{Script=Common}]/u
 const foreign = (ch, lang) => LETTER.test(ch) && !SCRIPT[lang].test(ch) && !SAYABLE.test(ch)

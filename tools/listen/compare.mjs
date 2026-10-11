@@ -4,9 +4,10 @@
 // (harbour -> harbor, realise -> realize): Whisper writes American, and a spelling is not a mispronunciation.
 // Both sides get the same treatment, so punctuation and spelling never count as errors.
 
+// Marks (\p{M}) stay inside words: Indic vowel signs are marks, not letters.
 export function normalise(text) {
   return text.normalize('NFKC').toLowerCase().replace(/['’]/g, '').replace(/%/g, ' percent ')
-    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean)
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean)
     .map(w => w.replace(/(..)our$/, '$1or').replace(/is(e[sd]?|ing|ation)$/, 'iz$1'))
 }
 

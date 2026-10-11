@@ -3,7 +3,10 @@ import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { activeEngine, hasSystemVoice, isMobile, systemVoices, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { voicesFor } from '../lib/voices.js'
+import { isCloudVoice } from '../lib/cloudvoice.js'
 import { Field, Segmented, inputStyle, IconButton } from './kit.jsx'
+
+const CLOUD_TRUTH = "Made online by NVIDIA: the text travels through Noesis's relay to NVIDIA. The audio is kept on this device and plays offline."
 
 export function speakSample(voice) {
   speechSynthesis.cancel()
@@ -52,9 +55,9 @@ export function VoiceCard({ Card }) {
         ? <Field title="Built-in voice"><SystemVoiceSelect /></Field>
         : (
           <>
-            <Field title="Natural voice (default for new documents)">
+            <Field title="Natural voice (default for new documents)" hint={isCloudVoice(s.voice) ? CLOUD_TRUTH : null}>
               <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-                {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
+                {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.cloud ? v.accent : `${v.accent} ${v.g === 'F' ? 'female' : 'male'}`}</option>)}
               </select>
             </Field>
             <Field title="Tone" hint="Changes how the voice is made. Audio you already have is made again from where you are listening.">

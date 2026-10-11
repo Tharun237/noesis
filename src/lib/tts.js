@@ -1,9 +1,11 @@
 import { createStore } from './store.js'
 import { settings } from './settings.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
+import { isCloudVoice, cloudSynthesize } from './cloudvoice.js'
 
 // The on-device voice engine (Piper, tts.worker.js). The worker starts on first use; each voice is one
 // download, cached on the device. status: idle | loading (downloading/opening `voice`) | ready | error
+// A cloud voice (nv:…) needs no download: loadEngine reads ready for it at once.
 export const engine = createStore({ status: 'idle', voice: null, loaded: 0, total: 0, opening: false, error: null })
 
 let worker = null
@@ -37,6 +39,11 @@ function call(msg) {
 }
 
 export function loadEngine(voice = settings.get().voice) {
+  if (isCloudVoice(voice)) {
+    loading = null
+    engine.set({ status: 'ready', voice, loaded: 0, total: 0, opening: false, error: null })
+    return Promise.resolve()
+  }
   const s = engine.get()
   if (s.status === 'ready' && s.voice === voice) return Promise.resolve()
   if (loading?.voice === voice) return loading.promise
@@ -48,8 +55,12 @@ export function loadEngine(voice = settings.get().voice) {
   return promise
 }
 
-export async function synthesize(text, voice, pause = 'sentence', tone = settings.get().voiceTone || 'natural') {
+export async function synthesize(text, voice, pause = 'sentence', tone = settings.get().voiceTone || 'natural', opts = {}) {
   await loadEngine(voice)
+  if (isCloudVoice(voice)) {
+    const { pcm, rate } = await cloudSynthesize(text, voice, { signal: opts.signal, onRetry: opts.onRetry })
+    return (await call({ type: 'encode', pcm, rate, pause, tone })).rec
+  }
   return (await call({ type: 'speak', text, voice, pause, tone })).rec
 }
 

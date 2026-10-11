@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { capture } from './capture.mjs'
 import { writeWav } from './wav.mjs'
 import * as sig from './signal.mjs'
-import { transcribe } from './transcribe.mjs'
+import { transcribe, whisperLanguage } from './transcribe.mjs'
 import { compare } from './compare.mjs'
 import { VOICES } from '../../src/lib/voices.js'
 
@@ -64,7 +64,7 @@ async function measure(voice, text) {
     roominess: sig.roominess(st.pcm, st.rate),
     brightness: sig.brightness(st.pcm, st.rate),
   }
-  const tr = await transcribe(st.pcm, st.rate)
+  const tr = await transcribe(st.pcm, st.rate, whisperLanguage(text))
   const cmp = compare(text, tr.text)
   return {
     voice,
