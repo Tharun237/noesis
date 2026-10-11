@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { T } from '../theme.js'
 import { useWidth } from '../lib/store.js'
-import { library } from '../lib/library.js'
+import { library, loadDoc } from '../lib/library.js'
+import { openPassage } from '../lib/libraryask.js'
 import { db } from '../lib/db.js'
 import { pause } from '../lib/text.js'
-import { go, closeSheet } from '../lib/nav.js'
+import { closeSheet } from '../lib/nav.js'
 import { conceptMap, layout } from '../lib/concepts.js'
 import { IconButton, Pulse, Appear } from './kit.jsx'
 
@@ -18,6 +19,13 @@ const textOf = doc => (doc ? doc.blocks.map(b => b.s.join(' ')).join('\n') : '')
 const clip = t => (t.length > TITLE_MAX ? t.slice(0, TITLE_MAX - 1) + '…' : t)
 const caption = { fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase' }
 const note = { fontSize: 14, color: T.sub, lineHeight: 1.55 }
+
+// The map moves the audio: a document under a concept opens at the place the concept first comes up.
+async function hearConcept(docId, key) {
+  const c = await loadDoc(docId)
+  const block = c ? c.blocks.findIndex(b => b.s.join(' ').toLowerCase().includes(key)) : -1
+  openPassage({ doc: docId, block: Math.max(0, block) })
+}
 
 export function ConceptMap({ wide }) {
   const width = useWidth()
@@ -113,8 +121,9 @@ export function ConceptMap({ wide }) {
       {sel && (
         <Appear key={sel.key} style={{ display: 'grid', gap: 8 }}>
           <div style={{ ...caption, color: T.lime }}>{sel.label}</div>
+          <div style={{ fontSize: 13, color: T.sub }}>Each document opens where this first comes up.</div>
           {sel.docs.map(d => (
-            <button key={d.id} type="button" onClick={() => go('reader', d.id)}
+            <button key={d.id} type="button" onClick={() => hearConcept(d.id, sel.key)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text }}>{titles.get(d.id)}</span>
               <span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.sub }}>{d.count}</span>

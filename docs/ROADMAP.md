@@ -121,8 +121,10 @@ Semantic Scholar refused without a key; a wrong paper read aloud as the cited on
 Limits, said plainly: works from a PDF's or a pasted document's own reference list; a web page's list is
 still dropped at import; documents read by AI narration have no citation data; the PDF path is tested by
 unit tests of the list splitter, not yet on a real paper PDF; documents added before this need adding again.
-Still not built: the spatial canvas in 18 (a concept map that scrubs audio). Binaural study mode in 21 is
-covered by Focus sounds (Focus and Calm are binaural beats).
+Item 18, the map that moves the audio, first version: on the concept map a document under a concept opens
+at the place the concept first comes up (verified: opened at the sentence of the first mention; Back returns
+to the library). Not built: dragging across the map to scrub, positions for every mention. Binaural study
+mode in 21 is covered by Focus sounds (Focus and Calm are binaural beats).
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
 Verified on a real document: the pivot stays at one x for every word, the place is saved. Not built: haptic
