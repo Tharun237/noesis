@@ -35,3 +35,22 @@ The key itself is NOT in this repository. For testing it sits in the session scr
   text came back in about 1 s, 0 wrong-alphabet letters.
 - Relay checks (wrangler pages dev): with key 200; no key 401; other path 404; foreign Origin 403; streaming
   passes through as `data: {…}` lines ending `data: [DONE]`.
+
+## Voices (measured by Opus with the real key, 2026-10-11, after Haiku found the route)
+- Hosted Magpie multilingual TTS answers over plain HTTPS (no gRPC):
+  `https://877104f7-e885-42b9-8de8-f6e4c6303969.invocation.api.nvcf.nvidia.com/v1/audio/`
+  - `GET list_voices` → 200. Reply shape: one object whose single key is the comma-joined language list
+    ("en-US,es-US,fr-FR,de-DE,zh-CN,vi-VN,it-IT,hi-IN,ja-JP,ko-KR,ar-AR,pt-BR") holding `{ voices: [names] }`,
+    86 names such as `Magpie-Multilingual.EN-US.Mia`, `…EN-US.Mia.Calm` (emotion variants have a 4th part),
+    `Magpie-Multilingual.HI-IN.Sofia`.
+  - `POST synthesize`, multipart fields `text`, `language=hi-IN`, `voice=Magpie-Multilingual.HI-IN.Sofia`,
+    `encoding=LINEAR_PCM`, `sample_rate_hz=22050` → 200 `audio/wav`, RIFF WAVE 16-bit mono 22050 Hz,
+    8.68 s of speech for two Hindi sentences, returned in 1.29 s.
+  - Browser preflight (OPTIONS with an Origin) → 401 and no allow-origin header: a relay is needed.
+- No Telugu: `language=te-IN` → 400 "Voice … for language te-IN not found" (Haiku's call).
+- Hindi voices (Haiku's reading of the list): Leo, Pascal, Siwei, Sofia.
+- Haiku's reading of NVIDIA's pages, NOT verified by Opus: the model page says "ready for commercial use"
+  under the NVIDIA Open Model License; the shared limit is "up to 40 rpm, 10,000 requests per day";
+  `magpie-tts-zeroshot` is restricted ("Apply for access"); `chatterbox-multilingual-tts` is gRPC only.
+- Not checked: whether the Hindi audio says the right words (no multilingual transcriber in tools/listen
+  yet), and how it sounds.
