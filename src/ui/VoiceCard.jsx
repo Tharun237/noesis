@@ -6,7 +6,7 @@ import { cleanBase } from '../lib/ai.js'
 import { activeEngine, hasSystemVoice, isMobile, systemVoices, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { voicesFor } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth, parseVoiceNames, fetchOwnSpeech, encodeWav, explainVoiceError, ownHost } from '../lib/cloudvoice.js'
-import { Field, Segmented, Button, inputStyle, IconButton } from './kit.jsx'
+import { Field, Segmented, Button, inputStyle, IconButton, Appear } from './kit.jsx'
 
 export function speakSample(voice) {
   speechSynthesis.cancel()
@@ -90,8 +90,8 @@ export function OwnVoiceService() {
       </Field>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button kind="primary" onClick={test} disabled={!ready || state === 'testing'}>{state === 'testing' ? 'Testing…' : 'Test'}</Button>
-        {state === 'ok' && <span style={{ fontSize: 12.5, color: T.ok }}>This voice service answers.</span>}
-        {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: T.danger }}>{state}</span>}
+        {state === 'ok' && <Appear as="span" style={{ fontSize: 12.5, color: T.ok }}>This voice service answers.</Appear>}
+        {state && state !== 'ok' && state !== 'testing' && <Appear as="span" style={{ fontSize: 12.5, color: T.danger }}>{state}</Appear>}
       </div>
       </div>
     </details>

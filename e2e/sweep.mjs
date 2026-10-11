@@ -43,8 +43,7 @@ const watch = () => page.evaluate(() => {
   }
   requestAnimationFrame(loop)
 })
-const stop = async () => { await page.waitForFunction(() => window.__rec?.done, null, { timeout: 5000 }).catch(() => {}); return page.evaluate(() => { const r = window.__rec; return { frames: r.frames, tabTop: [...r.tabTop], playerTop: [...r.playerTop], over: r.over, dialogs: [...r.dialogs], scrollJumps: r.scrollYs.filter((y, i, a) => i && Math.abs(y - a[i - 1]) > 40).length } }) }
-const report = []
+const stop = async () => { await page.waitForFunction(() => window.__rec?.done, null, { timeout: 5000 }).catch(() => {}); return page.evaluate(() => { const r = window.__rec; if (!r) return null; return { frames: r.frames, tabTop: [...r.tabTop], playerTop: [...r.playerTop], over: r.over, dialogs: [...r.dialogs], scrollJumps: r.scrollYs.filter((y, i, a) => i && Math.abs(y - a[i - 1]) > 40).length } }) }
 let n = 0
 const step = async (name, act, { shot } = {}) => {
   n++
@@ -53,17 +52,18 @@ const step = async (name, act, { shot } = {}) => {
   let failed = null
   try { await act() } catch (e) { failed = String(e.message).split('\n')[0].slice(0, 120) }
   if (shot) { await sleep(110); await page.screenshot({ path: `${OUT}/sw-${String(n).padStart(2, '0')}-mid.png` }) }
-  const r = await stop()
+  const r = (await stop()) || { lost: true, tabTop: [], playerTop: [], over: 0, scrollJumps: 0 }
   if (shot) await page.screenshot({ path: `${OUT}/sw-${String(n).padStart(2, '0')}-end.png` })
   const state = await page.evaluate(() => ({ view: history.state?.view, sheet: history.state?.sheet || null, depth: history.state?.depth, dialogs: document.querySelectorAll('[role=dialog]').length, menus: document.querySelectorAll('[role=menu]').length }))
   const flags = []
   if (failed) flags.push('ACTION FAILED: ' + failed)
+  if (r.lost) flags.push('THE PAGE WAS REPLACED (a reload, or Back left the app)')
   if (r.tabTop.length > 1) flags.push('tab bar moved ' + r.tabTop.join('/'))
   if (r.playerTop.length > 2) flags.push('player moved ' + r.playerTop.join('/'))
   if (r.over > 0) flags.push('sideways overflow ' + r.over + 'px')
   if (r.scrollJumps > 1) flags.push('scroll jumped ' + r.scrollJumps + ' times')
   if (errs.length > before) flags.push(...errs.slice(before))
-  report.push({ n, name, state, flags })
+  console.log(`${String(n).padStart(2)} ${name.padEnd(36)} → ${state.view}${state.sheet ? '+' + state.sheet : ''} d${state.depth} dlg${state.dialogs} menu${state.menus}${flags.length ? '   !! ' + flags.join(' | ') : ''}`)
 }
 const card = t => page.locator('[role=button]').filter({ hasText: t }).first()
 const btn = name => page.getByRole('button', { name, exact: true }).first()
@@ -75,10 +75,11 @@ await step('open the document menu', () => btn('Document menu').click(), { shot:
 await step('choose Listen in another language', () => page.locator('[role=menu]').getByText('Listen in another language').click(), { shot: true })
 await step('close that sheet with Back', () => page.goBack())
 await step('open Ask', () => btn('Ask about this document').click())
-await step('close Ask', () => page.locator('[role=dialog] button[aria-label="Close"]').last().click())
+// on a wide screen Ask is docked beside the text (not a dialog, not a history entry)
+await step('close Ask', () => page.locator(WIDE ? 'aside button[aria-label="Close"]' : '[role=dialog] button[aria-label="Close"]').last().click())
 await step('reading settings', () => btn('Reading settings').click(), { shot: true })
 await step('close reading settings with Back', () => page.goBack())
-await step('open Ask, then Back', async () => { await btn('Ask about this document').click(); await sleep(500); await page.goBack() })
+await step(WIDE ? 'open Ask, then close it from the header' : 'open Ask, then Back', async () => { await btn('Ask about this document').click(); await sleep(500); await (WIDE ? btn('Ask about this document').click() : page.goBack()) })
 await step('rapid: back, open, back, open', async () => { await btn('Back to library').click(); await sleep(60); await card('Dad joke').click(); await sleep(60); await page.goBack(); await sleep(60); await card('Dad joke').click(); await sleep(900) })
 await step('one page on screen after the rapid taps', async () => { const n = await page.locator('button[aria-label="Back to library"]').count(); const lib = await page.getByText('YOUR LIBRARY').count(); if (n !== 1 || lib !== 0) throw new Error('stranded page: reader headers ' + n + ', library headers ' + lib) })
 await step('switch to Focus', () => page.getByRole('tab', { name: 'Focus', exact: true }).click(), { shot: true })
@@ -109,5 +110,4 @@ await step('close the card menu', () => page.keyboard.press('Escape'))
 const id = await mod('/src/lib/library.js', "(m.library.get().docs.find(d => d.title === 'Sweep test document') || {}).id")
 if (id) await mod('/src/lib/library.js', `m.deleteDoc(${JSON.stringify(id)})`)
 await mod('/src/lib/player.js', 'm.pause()')
-for (const r of report) console.log(`${String(r.n).padStart(2)} ${r.name.padEnd(36)} → ${r.state.view}${r.state.sheet ? '+' + r.state.sheet : ''} d${r.state.depth} dlg${r.state.dialogs} menu${r.state.menus}${r.flags.length ? '   !! ' + r.flags.join(' | ') : ''}`)
 await ctx.close()

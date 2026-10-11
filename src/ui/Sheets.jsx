@@ -14,7 +14,7 @@ import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
-import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle } from './kit.jsx'
+import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle, Appear } from './kit.jsx'
 import { LibraryAsk } from './LibraryAsk.jsx'
 import { ConceptMap } from './ConceptMap.jsx'
 import { Briefing } from './Briefing.jsx'
@@ -160,7 +160,7 @@ function AddForm({ wide }) {
       ]} />
 
       {tab === 'file' && (
-        <label onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
+        <Appear><label onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
           onDrop={e => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]) }}
           style={{
             position: 'relative', display: 'grid', placeItems: 'center', gap: 10, padding: '34px 20px', borderRadius: T.r.lg, cursor: 'pointer', textAlign: 'center',
@@ -171,20 +171,20 @@ function AddForm({ wide }) {
           <motion.div animate={{ y: over ? -4 : 0 }} transition={T.spring}><Icon name={file ? 'check' : 'upload'} size={26} style={{ color: file ? T.accent : T.sub }} /></motion.div>
           <div style={{ fontSize: 15, fontWeight: 600, color: T.text, wordBreak: 'break-all' }}>{file ? file.name : wide ? 'Drop a file here, or click to choose' : 'Tap to choose a file'}</div>
           <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{file ? `${(file.size / 1048576).toFixed(1)} MB · ${kind?.toUpperCase()}` : 'PDF · EPUB · DOCX · HTML · MD · TXT'}</div>
-        </label>
+        </label></Appear>
       )}
       {tab === 'text' && (
-        <div style={{ display: 'grid', gap: 10 }}>
+        <Appear style={{ display: 'grid', gap: 10 }}>
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title (optional)" style={inputStyle} />
           <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Paste any text. Markdown works too." rows={wide ? 9 : 7} autoFocus
             style={{ ...inputStyle, height: 'auto', padding: 14, lineHeight: 1.55, resize: 'vertical' }} />
-        </div>
+        </Appear>
       )}
       {tab === 'link' && (
-        <Field hint="Web articles, PDFs, EPUBs, and arXiv links (Noesis fetches the paper itself, not the abstract page).">
+        <Appear><Field hint="Web articles, PDFs, EPUBs, and arXiv links (Noesis fetches the paper itself, not the abstract page).">
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://" inputMode="url" autoFocus type="url"
             onKeyDown={e => e.key === 'Enter' && submit()} style={inputStyle} />
-        </Field>
+        </Field></Appear>
       )}
 
       <Field title="Listen to" hint={keyed ? null : 'Summaries need a free AI key. Add one in Settings.'}>

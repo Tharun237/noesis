@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion, AnimatePresence, useScroll } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet } from '../lib/nav.js'
@@ -50,10 +50,13 @@ export function Reader({ wide }) {
   const total = d?.total
   const [doc, setDoc] = useState(null)
   const [panel, setPanelState] = useState(null) // toc | type | marks | ask
-  // On a phone a panel is a sheet over the page: it is a history entry, so Back closes it instead of leaving
-  // the document. On a wide screen panels sit beside the text and are not modal: no history entry.
+  // A panel shown as a sheet over the page is a history entry, on any screen: Back closes it instead of
+  // leaving the document. Only Ask on a wide screen is different: it sits beside the text and is not modal.
   const setPanel = name => {
-    if (wide) return setPanelState(name)
+    if (wide && name === 'ask') {
+      if (history.state?.panel) history.replaceState({ ...history.state, panel: null }, '') // came from a sheet (Insights)
+      return setPanelState('ask')
+    }
     if (name) { pushPanel(name); setPanelState(name) } else if (history.state?.panel) popPanel(); else setPanelState(null)
   }
   useEffect(() => {
@@ -201,6 +204,7 @@ export function Reader({ wide }) {
   const onSeek = i => { userScroll.current = 0; playId === id ? seekTo(i) : openPlayer(id, { at: i }) }
   const showToc = wide && tocOpen && headings.length > 1
   const askDocked = wide && panel === 'ask'
+  const dock = (showToc ? 1 : 0) + (askDocked ? 2 : 0)
   const bottom = playerHeight(wide, true, !!playId)
   const headH = HEADER_H + SUBROW_H // every document has the view switch: Text, Focus, and Pages for a PDF on this device
   const sheet = (name, title, body, w) => (
@@ -255,18 +259,23 @@ export function Reader({ wide }) {
             </motion.div>
           )}
         </AnimatePresence>
+        {view !== 'focus' && <ReadLine />}
       </header>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative' }}>
+        <AnimatePresence initial={false} mode="popLayout">
         {showToc && (
-          <aside style={{ width: T.tocW, flexShrink: 0, position: 'sticky', top: headH, height: `calc(100dvh - ${headH + bottom}px)`, overflowY: 'auto', padding: '20px 10px 20px 14px', borderRight: `1px solid ${T.border}` }}>
+          <motion.aside key="toc" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20, transition: { duration: 0.12, ease: 'easeIn' } }} transition={{ duration: 0.22, ease: T.ease }}
+            style={{ width: T.tocW, flexShrink: 0, position: 'sticky', top: headH, height: `calc(100dvh - ${headH + bottom}px)`, overflowY: 'auto', padding: '20px 10px 20px 14px', borderRight: `1px solid ${T.border}` }}>
             <div style={{ ...label, padding: '0 12px 10px' }}>Contents</div>
             <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} />
-          </aside>
+          </motion.aside>
         )}
+        </AnimatePresence>
 
         <article style={{ flex: 1, minWidth: 0, padding: wide ? `48px 32px ${120 + bottom}px` : `28px 20px ${100 + bottom}px`, marginRight: askDocked ? T.askW : 0 }}>
-          <div style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
+          {/* When a side panel opens or closes, the text glides to its new place instead of jumping (measured only then). */}
+          <motion.div layout={wide ? 'position' : false} layoutDependency={dock} transition={{ layout: T.settle }} style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', marginBottom: 36 }}>
               <motion.div initial={{ scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.settle} style={{ flexShrink: 0, transformOrigin: '0 100%' }}>
                 <Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} />
@@ -316,7 +325,7 @@ export function Reader({ wide }) {
             )}
             </motion.div>
             </AnimatePresence>
-          </div>
+          </motion.div>
         </article>
       </div>
 
@@ -342,6 +351,13 @@ export function Reader({ wide }) {
       {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} /></div>)}
     </div>
   )
+}
+
+// A hairline under the header that fills as the page is read: where am I in this document. It is tied to
+// the scroll itself, so it costs no renders.
+function ReadLine() {
+  const { scrollYProgress } = useScroll()
+  return <motion.div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, background: T.text, opacity: 0.5, scaleX: scrollYProgress, transformOrigin: '0 50%' }} />
 }
 
 // -- windowed rendering -----------------------------------------------------------------

@@ -5,7 +5,7 @@ import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { useHistory, summarise, makeRetrospective } from '../lib/history.js'
 import { go, closeSheet } from '../lib/nav.js'
-import { Button, IconButton, Pulse } from './kit.jsx'
+import { Button, IconButton, Pulse, Appear, Count } from './kit.jsx'
 
 function fmtListened(s) {
   s = Math.max(0, Math.floor(s || 0))
@@ -15,6 +15,9 @@ function fmtListened(s) {
   const m = Math.floor((s % 3600) / 60)
   return `${h} h ${m} min`
 }
+
+const fmtWhole = n => String(Math.round(n))
+const fmtDays = n => (Math.round(n) === 1 ? '1 day' : `${Math.round(n)} days`)
 
 const fmtSince = since => {
   const [y, m, d] = since.split('-').map(Number)
@@ -48,12 +51,12 @@ export function Listening({ wide }) {
   }
 
   const rows = [
-    ['Today', fmtListened(summary.today)],
-    ['Last 7 days', fmtListened(summary.week)],
-    ['This month', fmtListened(summary.month)],
-    ['Total', fmtListened(summary.total)],
-    ['Finished this month', String(summary.finishedThisMonth)],
-    ['Day streak', summary.streak === 1 ? '1 day' : `${summary.streak} days`],
+    ['Today', summary.today, fmtListened],
+    ['Last 7 days', summary.week, fmtListened],
+    ['This month', summary.month, fmtListened],
+    ['Total', summary.total, fmtListened],
+    ['Finished this month', summary.finishedThisMonth, fmtWhole],
+    ['Day streak', summary.streak, fmtDays],
   ]
 
   return (
@@ -63,10 +66,10 @@ export function Listening({ wide }) {
         <IconButton icon="close" label="Close" onClick={closeSheet} />
       </div>
       <div style={{ display: 'grid', gap: 10 }}>
-        {rows.map(([k, v]) => (
+        {rows.map(([k, v, f]) => (
           <div key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
             <div style={{ flex: 1, fontSize: 14, color: T.sub }}>{k}</div>
-            <div style={{ fontFamily: T.mono, fontSize: 14, color: T.text }}>{v}</div>
+            <div style={{ fontFamily: T.mono, fontSize: 14, color: T.text }}><Count value={v} format={f} /></div>
           </div>
         ))}
       </div>
@@ -88,10 +91,10 @@ export function Listening({ wide }) {
         <Button kind="primary" full onClick={submit} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15 }}>Hear your month</Button>
         {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
       </div>
-      {!keyed && <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>A retrospective needs an AI key. Add one in Settings.</div>}
-      {keyed && !enough && <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Listen for a little longer first.</div>}
-      {busy && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing your retrospective</div>}
-      {error && <div style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</div>}
+      {!keyed && <Appear style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>A retrospective needs an AI key. Add one in Settings.</Appear>}
+      {keyed && !enough && <Appear style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Listen for a little longer first.</Appear>}
+      {busy && <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing your retrospective</Appear>}
+      {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
     </div>
   )
 }

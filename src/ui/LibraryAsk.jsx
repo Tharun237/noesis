@@ -5,7 +5,7 @@ import { settings } from '../lib/settings.js'
 import { hasAiKey, providerName } from '../lib/ai.js'
 import { askLibrary, openPassage } from '../lib/libraryask.js'
 import { go, closeSheet } from '../lib/nav.js'
-import { Button, IconButton, Pulse, inputStyle } from './kit.jsx'
+import { Button, IconButton, Pulse, inputStyle, Appear } from './kit.jsx'
 
 export function LibraryAsk({ wide }) {
   useStore(settings)
@@ -66,18 +66,18 @@ export function LibraryAsk({ wide }) {
         {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
       </form>
       {busy && stage === 'reading' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading your library: {done} of {total}</div>
+        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading your library: {done} of {total}</Appear>
       )}
       {busy && stage === 'asking' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Asking {providerName()}</div>
+        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Asking {providerName()}</Appear>
       )}
-      {error && <div style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</div>}
-      {answer && <div style={{ fontSize: 14.5, color: T.text, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{answer}</div>}
+      {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
+      {answer && <Appear style={{ fontSize: 14.5, color: T.text, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{answer}</Appear>}
       {searched && !busy && passages.length === 0 && (
-        <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>Nothing in your library matches that.</div>
+        <Appear style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>Nothing in your library matches that.</Appear>
       )}
       {passages.length > 0 && (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <Appear style={{ display: 'grid', gap: 8 }}>
           <div style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{keyed ? 'Passages' : 'Passages that match'}</div>
           {passages.map(p => (
             <button key={`${p.doc}:${p.block}`} type="button" onClick={() => openPassage(p)}
@@ -86,7 +86,7 @@ export function LibraryAsk({ wide }) {
               <span style={{ fontSize: 13, color: T.sub, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.text}</span>
             </button>
           ))}
-        </div>
+        </Appear>
       )}
     </div>
   )

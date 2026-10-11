@@ -6,7 +6,7 @@ import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels } from '../lib/ai.js'
 import { loadCloudVoices } from '../lib/cloudvoice.js'
-import { Button, IconButton, Segmented, Toggle, Field, inputStyle } from './kit.jsx'
+import { Button, IconButton, Segmented, Toggle, Field, inputStyle, Appear } from './kit.jsx'
 
 const KEY = { gemini: 'geminiKey', nvidia: 'nvidiaKey', custom: 'customKey' }
 const MODEL = { gemini: 'geminiModel', nvidia: 'nvidiaModel', custom: 'customModel' }
@@ -125,7 +125,7 @@ export function AiCard({ Card }) {
           settings.set({ [KEY[id]]: '', ...(openai ? { [MODEL[id]]: '' } : {}), ...(id === 'custom' ? { customBase: '' } : {}) })
           setDraft(''); setBase(''); setModels(null); setState(null); setProbe(null)
         }}>Remove</Button>}
-        {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: state === OFFLINE ? T.sub : T.danger }}>{state}</span>}
+        {state && state !== 'ok' && state !== 'testing' && <Appear as="span" style={{ fontSize: 12.5, color: state === OFFLINE ? T.sub : T.danger }}>{state}</Appear>}
       </div>
 
       {id === 'gemini' && models && (

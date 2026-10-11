@@ -6,7 +6,7 @@ import { hasAiKey } from '../lib/ai.js'
 import { library } from '../lib/library.js'
 import { makeBriefing } from '../lib/briefing.js'
 import { go, closeSheet } from '../lib/nav.js'
-import { Button, IconButton, Pulse } from './kit.jsx'
+import { Button, IconButton, Pulse, Appear } from './kit.jsx'
 
 export function Briefing({ wide }) {
   useStore(settings)
@@ -83,15 +83,15 @@ export function Briefing({ wide }) {
         {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
       </div>
       {busy && wait != null && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Retrying in about {wait} s</div>
+        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Retrying in about {wait} s</Appear>
       )}
       {busy && wait == null && stage?.step === 'reading' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading {stage.n} of {stage.total}: {stage.title}</div>
+        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading {stage.n} of {stage.total}: {stage.title}</Appear>
       )}
       {busy && wait == null && stage?.step === 'writing' && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing the briefing</div>
+        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing the briefing</Appear>
       )}
-      {error && <div style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</div>}
+      {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
     </div>
   )
 }

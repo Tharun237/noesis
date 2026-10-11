@@ -122,13 +122,15 @@ function Sidebar() {
   const [naming, setNaming] = useState(false)
   const count = f => docs.filter(d => (f === 'all' ? true : f === 'archived' ? d.archived : f === 'queue' ? !d.archived : d.collections.includes(f))).length
   return (
-    <aside style={{ width: T.sidebarW, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '24px 14px', position: 'sticky', top: 0, height: '100dvh', display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <aside style={{ width: T.sidebarW, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '24px 14px', position: 'sticky', top: 0, height: 'calc(100dvh - var(--dock, 0px))', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <Wordmark />
       <div style={{ ...label, padding: '28px 12px 8px' }}>Library</div>
       <SidebarItem id="queue" icon="list" name="Queue" filter={filter} count={count('queue')} />
       <SidebarItem id="all" icon="grid" name="All" filter={filter} count={count('all')} />
       <SidebarItem id="archived" icon="archive" name="Archived" filter={filter} count={count('archived')} />
       <div style={{ ...label, padding: '24px 12px 8px' }}>Collections</div>
+      {/* A long list of collections scrolls here, so the account and Settings below never leave the screen. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
       {collections.map(c => (
         <SidebarItem key={c.id} id={c.id} icon="folder" name={c.name} filter={filter} count={count(c.id)}
           onRemove={() => { if (confirm(`Delete the collection "${c.name}"? Documents stay in your library.`)) { removeCollection(c.id); ui.set({ filter: 'queue' }) } }} />
@@ -146,7 +148,7 @@ function Sidebar() {
           <Icon name="plus" size={17} /> New collection
         </button>
       )}
-      <div style={{ flex: 1 }} />
+      </div>
       <div style={{ padding: '0 2px 8px' }}><AccountChip /></div>
       <button type="button" onClick={() => go('settings')}
         style={{ display: 'flex', alignItems: 'center', gap: 12, height: 40, padding: '0 12px', border: 'none', borderRadius: T.r.sm, background: 'transparent', color: T.sub, fontFamily: T.font, fontSize: 14, cursor: 'pointer' }}>

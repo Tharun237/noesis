@@ -276,6 +276,8 @@ await step('rename, collection, archive from the card menu', async () => {
   await page.getByRole('menuitem', { name: 'Move to queue' }).click()
   expect(!(await docBy('Renamed by QA')).archived, 'still archived')
   await page.getByRole('button', { name: /^Queue/ }).click()
+  // leave no shelves behind: every run made one, and they piled up in the test profile
+  await app("m.lib.library.get().collections.filter(c => c.name === 'QA shelf').forEach(c => m.lib.removeCollection(c.id))")
 })
 
 // ── every input type ──────────────────────────────────────────────────────────────

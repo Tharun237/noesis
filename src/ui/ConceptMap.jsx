@@ -6,7 +6,7 @@ import { db } from '../lib/db.js'
 import { pause } from '../lib/text.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { conceptMap, layout } from '../lib/concepts.js'
-import { IconButton, Pulse } from './kit.jsx'
+import { IconButton, Pulse, Appear } from './kit.jsx'
 
 const H = 420
 const SIZE_MIN = 11
@@ -75,12 +75,12 @@ export function ConceptMap({ wide }) {
         <IconButton icon="close" label="Close" onClick={closeSheet} />
       </div>
       {!result && !error && (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading your library: {done} of {total}</div>
+        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading your library: {done} of {total}</Appear>
       )}
-      {error && <div style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</div>}
-      {result && docs.length < 2 && <div style={note}>Add at least two documents to see how they connect.</div>}
+      {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
+      {result && docs.length < 2 && <Appear style={note}>Add at least two documents to see how they connect.</Appear>}
       {mapped && (
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Concept map of your library"
+        <Appear><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Concept map of your library"
           style={{ width: '100%', height: H, display: 'block' }}>
           {concepts.map((c, i) => c.docs.map(d => {
             const a = pos.concepts[i]
@@ -105,13 +105,13 @@ export function ConceptMap({ wide }) {
                 style={{ cursor: 'pointer' }} onClick={() => setPicked(c.key === picked ? null : c.key)}>{c.label}</text>
             )
           })}
-        </svg>
+        </svg></Appear>
       )}
       {mapped && !concepts.some(c => c.docs.length > 1) && (
-        <div style={note}>These documents do not share any names or terms yet.</div>
+        <Appear style={note}>These documents do not share any names or terms yet.</Appear>
       )}
       {sel && (
-        <div style={{ display: 'grid', gap: 8 }}>
+        <Appear key={sel.key} style={{ display: 'grid', gap: 8 }}>
           <div style={{ ...caption, color: T.lime }}>{sel.label}</div>
           {sel.docs.map(d => (
             <button key={d.id} type="button" onClick={() => go('reader', d.id)}
@@ -120,7 +120,7 @@ export function ConceptMap({ wide }) {
               <span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.sub }}>{d.count}</span>
             </button>
           ))}
-        </div>
+        </Appear>
       )}
     </div>
   )

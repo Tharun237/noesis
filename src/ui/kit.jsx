@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence, useDragControls } from 'motion/react'
+import { motion, AnimatePresence, useDragControls, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { T, label } from '../theme.js'
 import { Icon } from './icons.jsx'
+import { reducedMotion } from '../lib/motion.js'
 
 // Shared primitives. Motion is transform/opacity only (GPU-composited); no layout properties animate.
 
@@ -105,6 +106,22 @@ export function Progress({ value, height = 3, color = T.accent, track = T.surfac
   )
 }
 
+// Anything that arrives after the screen is already showing (an answer, an error, a status line) eases in:
+// the eye is told something new is here, instead of the layout just jumping.
+export function Appear({ as = 'div', children, style }) {
+  const M = motion[as]
+  return <M initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: T.ease }} style={style}>{children}</M>
+}
+
+// A number that counts up to its value when it appears and glides when it changes, so a total reads as
+// something that was added up. Written straight to the page (no renders).
+export function Count({ value, format = Math.round }) {
+  const n = useSpring(0, { visualDuration: 0.7, bounce: 0 })
+  const text = useTransform(n, v => format(v))
+  useEffect(() => { reducedMotion() ? n.jump(value) : n.set(value) }, [n, value])
+  return <motion.span>{text}</motion.span>
+}
+
 export function Pulse({ color = T.lime }) {
   return (
     <motion.span animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -117,6 +134,10 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
   // On a phone the sheet is pulled down by its handle to close, like every native sheet. Only the handle
   // starts the drag, so scrolling the sheet's contents is never mistaken for it.
   const pull = useDragControls()
+  // The dark behind the sheet lightens as the sheet is pulled away: the page underneath is coming back.
+  // (While the sheet is arriving its position is a percentage, not pixels: the dark stays full.)
+  const y = useMotionValue(0)
+  const dim = useTransform(y, v => (typeof v === 'number' ? 1 - Math.min(0.6, Math.max(0, v) / 420) : 1))
   useEffect(() => {
     if (!open) return
     const k = e => e.key === 'Escape' && onClose()
@@ -128,7 +149,8 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
       {open && (
         <motion.div key="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: T.dur.fast }}
           onClick={onClose}
-          style={{ position: 'fixed', inset: 0, background: T.scrim, zIndex: 50, display: 'flex', alignItems: wide ? 'center' : 'flex-end', justifyContent: 'center', padding: wide ? 24 : 0 }}>
+          style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: wide ? 'center' : 'flex-end', justifyContent: 'center', padding: wide ? 24 : 0 }}>
+          <motion.div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: T.scrim, opacity: wide ? 1 : dim }} />
           <motion.div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}
             initial={wide ? { opacity: 0, y: 16, scale: 0.98 } : { y: '100%' }}
             animate={wide ? { opacity: 1, y: 0, scale: 1 } : { y: 0 }}
@@ -137,6 +159,7 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
             drag={wide ? false : 'y'} dragControls={pull} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
             onDragEnd={(e, info) => { if (info.offset.y > 110 || info.velocity.y > 600) onClose() }}
             style={{
+              y, position: 'relative',
               width: wide ? width : '100%', maxWidth: '100%', maxHeight: wide ? 'calc(100dvh - 48px)' : '92dvh', overflowY: 'auto',
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: wide ? T.r.xl : `${T.r.xl}px ${T.r.xl}px 0 0`,
               borderBottom: wide ? undefined : 'none', paddingBottom: wide ? 0 : 'env(safe-area-inset-bottom)',

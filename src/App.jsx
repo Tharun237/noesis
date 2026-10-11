@@ -79,7 +79,7 @@ export default function App() {
       {/* A page slides a little as it arrives or leaves. `clip` keeps that from widening the screen (on a
           phone a wider page makes the whole view rescale and every fixed bar jump); unlike `hidden` it does
           not create a scroll box, so sticky headers keep working. */}
-      <div style={{ paddingBottom: dock + lift, overflowX: 'clip' }}>
+      <div style={{ paddingBottom: dock + lift, overflowX: 'clip', '--dock': `${dock + lift}px` }}>
         {/* The old page fades out quickly (ease-in), then the new one rises in (ease-out): one page at a time.
             The leaving page keeps its own route through context, so it never flashes the next page's content. */}
         <AnimatePresence mode="wait" initial={false} custom={dir}>
