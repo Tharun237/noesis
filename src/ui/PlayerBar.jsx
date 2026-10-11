@@ -71,7 +71,7 @@ export function PlayerBar({ wide, full }) {
   if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} waiting={waiting} left={left} sleepLine={sleepLine} />
 
   return (
-    <motion.div {...playerEnter()}
+    <motion.div layoutRoot {...playerEnter()}
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 30, background: T.bg, borderTop: `1px solid ${T.border}`,
         padding: `10px ${wide ? 24 : 16}px calc(env(safe-area-inset-bottom) + 10px)`, display: 'grid', gap: wide ? 6 : 10,
@@ -82,7 +82,7 @@ export function PlayerBar({ wide, full }) {
         {wide ? (
           <button type="button" onClick={() => go('reader', id)}
             style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', padding: 0 }}>
-            <Cover d={d} w={34} h={44} />
+            <Cover d={d} w={34} h={44} layoutId="player-cover" />
             <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
               <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{voiceLabel}</span>
@@ -115,7 +115,7 @@ function Transport({ size = 58 }) {
 
 function PlayButton({ playing, waiting, size }) {
   return (
-    <motion.button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} whileTap={{ scale: 0.9 }} transition={T.spring}
+    <motion.button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} whileTap={{ scale: 0.9 }} transition={T.press}
       style={{ width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
       {waiting && (
         <span data-spin style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
@@ -199,14 +199,14 @@ function PlayerLeft() {
 
 function MiniPlayer({ d, progress, voiceLabel, gate, waiting, left, sleepLine }) {
   return (
-    <motion.div {...playerEnter()}
+    <motion.div layoutRoot {...playerEnter()}
       style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
       <PlayerLeft />
       <Progress value={progress} height={2} track={T.surface} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 8px 10px' }}>
         <button type="button" onClick={() => go('reader', d.id)}
           style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, border: 'none', background: 'transparent', color: T.text, padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-          <Cover d={d} w={36} h={46} />
+          <Cover d={d} w={36} h={46} layoutId="player-cover" />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
             <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting ? 'waiting for the next sentence' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>

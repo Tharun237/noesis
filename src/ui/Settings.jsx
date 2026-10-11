@@ -1,3 +1,4 @@
+import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
@@ -64,10 +65,11 @@ export function Settings({ wide }) {
 
 function Card({ title, children, right }) {
   return (
-    <section style={{ padding: 20, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gap: 18 }}>
+    <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '0px 0px -40px 0px' }} transition={{ duration: 0.24, ease: T.ease }}
+      style={{ padding: 20, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gap: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ ...label, flex: 1 }}>{title}</div>{right}</div>
       {children}
-    </section>
+    </motion.section>
   )
 }
 

@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet, closeSearch } from '../lib/nav.js'
@@ -21,6 +21,15 @@ const MODE = { long: 'Long summary', short: 'Short summary' }
 
 // What the customer's AI can do across the whole library, behind one button: the header stays the same
 // width on a phone however many of these there are.
+// The large title scrolls away with the list; its name then appears in the bar, tied to the scroll itself
+// (no React renders), so the customer always knows which shelf they are on.
+function BarTitle({ name }) {
+  const { scrollY } = useScroll()
+  const opacity = useTransform(scrollY, [84, 124], [0, 1])
+  const y = useTransform(scrollY, [84, 124], [6, 0])
+  return <motion.span aria-hidden style={{ opacity, y, fontSize: 15, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</motion.span>
+}
+
 function LibraryAi({ hasBriefing }) {
   return (
     <Menu trigger={t => <IconButton icon="sparkle" label="Ask your library" onClick={t} />}
@@ -66,10 +75,10 @@ export function Library({ wide }) {
         {loaded && total === 0 ? <EmptyState wide={wide} /> : (
           <>
             <div style={{
-              display: 'grid', gap: wide ? 8 : 2, padding: wide ? 0 : '0 8px',
+              display: 'grid', gap: wide ? 8 : 2, padding: wide ? 0 : '0 8px', position: 'relative',
               gridTemplateColumns: wide && view === 'grid' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
             }}>
-              <AnimatePresence initial={false}>
+              <AnimatePresence initial={false} mode="popLayout">
                 {docs.map(d => <DocCard key={d.id} d={d} playing={d.id === playingId} />)}
               </AnimatePresence>
             </div>
@@ -228,7 +237,10 @@ function MobileHeader({ summary }) {
     <div>
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 56, padding: '0 10px 0 12px' }}>
-          <div style={{ flex: 1 }}><Wordmark size={24} /></div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <Wordmark size={24} />
+            <BarTitle name={name} />
+          </div>
           {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
           <SortMenu />
           <AccountChip compact />
@@ -268,14 +280,18 @@ function MobileHeader({ summary }) {
 const HUES = ['#AAFF00', '#00E5FF', '#00D4A8', '#2288FF', '#6EE7B7']
 const hueOf = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return HUES[h % HUES.length] }
 
-export function Cover({ d, w = 56, h = 74 }) {
+// `layoutId` makes the cover a shared element: the same cover moving and growing between two places.
+export function Cover({ d, w = 56, h = 74, layoutId }) {
+  const Img = layoutId ? motion.img : 'img'
+  const Box = layoutId ? motion.div : 'div'
+  const shared = layoutId ? { layoutId, transition: T.settle } : {}
   const box = { width: w, height: h, borderRadius: Math.max(T.r.xs, w * 0.06), flexShrink: 0, border: `1px solid ${T.border}` }
-  if (d.cover) return <img src={d.cover} alt="" width={w} height={h} style={{ ...box, objectFit: 'cover', display: 'block' }} />
+  if (d.cover) return <Img {...shared} src={d.cover} alt="" width={w} height={h} style={{ ...box, objectFit: 'cover', display: 'block' }} />
   const hue = hueOf(d.title)
   const big = w >= 80 // room to set the title; smaller covers carry the initial, like a monogram
   const initial = (d.title.match(/[\p{L}\d]/u) || ['N'])[0].toUpperCase()
   return (
-    <div aria-hidden style={{
+    <Box {...shared} aria-hidden style={{
       ...box, position: 'relative', overflow: 'hidden',
       background: `radial-gradient(130% 95% at 15% 0%, ${hue}B3 0%, ${hue}33 42%, transparent 72%), radial-gradient(80% 60% at 100% 100%, ${hue}2E 0%, transparent 70%), #000`,
     }}>
@@ -288,7 +304,7 @@ export function Cover({ d, w = 56, h = 74 }) {
       ) : (
         <span style={{ position: 'absolute', left: w * 0.1, bottom: h * 0.02, fontFamily: T.serif, fontWeight: 600, fontSize: h * (w >= 48 ? 0.5 : 0.56), lineHeight: 1, color: T.text }}>{initial}</span>
       )}
-    </div>
+    </Box>
   )
 }
 
@@ -326,14 +342,14 @@ function queuedText(id, qkey) {
   return at < 0 ? 'Queued' : `Queued, ${ord(at + 1)} in line`
 }
 
-const DocCard = memo(function DocCard({ d, playing }) {
+const DocCard = memo(function DocCard({ d, playing, ref }) {
   const listened = d.total ? (d.finished ? 1 : d.pos / d.total) : 0
   const dur = d.chars ? fmtDur(docDuration(d)) : null
   const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
   return (
-    <motion.div layout="position" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: T.dur.base, ease: T.ease }}
+    <motion.div ref={ref} layout="position" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.14, ease: 'easeIn' } }}
+      transition={{ duration: 0.22, ease: T.ease, layout: T.settle }}
       style={{ position: 'relative', borderRadius: T.r.md, overflow: 'hidden' }}>
       <div role="button" tabIndex={0} onClick={() => { go('reader', d.id); if (!working || d.status === 'voicing') openPlayer(d.id, { autoplay: false }) }}
         onKeyDown={e => e.key === 'Enter' && e.currentTarget.click()}

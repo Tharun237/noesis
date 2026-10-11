@@ -20,7 +20,7 @@ export function Button({ children, onClick, kind = 'ghost', icon, disabled, full
   }
   return (
     <motion.button type={type} title={title} onClick={onClick} disabled={disabled} whileTap={disabled ? undefined : { scale: 0.96 }}
-      transition={T.spring} style={{ ...base, ...kinds[kind], ...style }}>
+      transition={T.press} style={{ ...base, ...kinds[kind], ...style }}>
       {icon && <Icon name={icon} size={17} />}
       {children}
     </motion.button>
@@ -29,7 +29,7 @@ export function Button({ children, onClick, kind = 'ghost', icon, disabled, full
 
 export function IconButton({ icon, onClick, label: aria, size = 40, iconSize = 20, active, style, fill }) {
   return (
-    <motion.button type="button" aria-label={aria} title={aria} onClick={onClick} whileTap={{ scale: 0.9 }} transition={T.spring}
+    <motion.button type="button" aria-label={aria} title={aria} onClick={onClick} whileTap={{ scale: 0.9 }} transition={T.press}
       style={{
         width: size, height: size, borderRadius: T.r.pill, border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer',
         background: active ? T.accentSoft : 'transparent', color: active ? T.accent : T.text, flexShrink: 0, padding: 0, ...style,

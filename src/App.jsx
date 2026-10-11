@@ -74,7 +74,7 @@ export default function App() {
   const dock = playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
   const lift = activity ? ACTIVITY_H : 0
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion="user" transition={{ duration: T.dur.fast, ease: T.ease }}>
     <div style={{ fontFamily: T.font, color: T.text, background: T.bg, minHeight: '100dvh', WebkitFontSmoothing: 'antialiased' }}>
       {/* A page slides a little as it arrives or leaves. `clip` keeps that from widening the screen (on a
           phone a wider page makes the whole view rescale and every fixed bar jump); unlike `hidden` it does

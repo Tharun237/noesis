@@ -281,6 +281,8 @@ export function Reader({ wide }) {
               <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, margin: '0 0 24px' }}>This file can't be shown as pages on this device.</div>
             )}
 
+            <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.09, ease: 'easeIn' } }} transition={{ duration: 0.18, ease: T.ease }}>
             {view === 'pages' ? (
               <Suspense fallback={null}>
                 <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
@@ -304,6 +306,8 @@ export function Reader({ wide }) {
                 })}
               </div>
             )}
+            </motion.div>
+            </AnimatePresence>
           </div>
         </article>
       </div>

@@ -31,7 +31,10 @@ export const T = {
 
   r: { xs: 6, sm: 10, md: 14, lg: 20, xl: 28, pill: 999 },
   ease: [0.22, 1, 0.36, 1],
-  spring: { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 },
+  // Timed springs (motion.dev: visualDuration + bounce): they arrive when they say they will.
+  spring: { type: 'spring', visualDuration: 0.26, bounce: 0.14 }, // sheets, pills, things that land
+  press: { type: 'spring', stiffness: 400, damping: 30 }, // a finger going down: instant
+  settle: { type: 'spring', visualDuration: 0.3, bounce: 0.08 }, // things moving to a new place in a list
   dur: { fast: 0.16, base: 0.28, slow: 0.5 },
 
   playerH: 132,
