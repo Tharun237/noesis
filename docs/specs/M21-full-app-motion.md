@@ -20,6 +20,15 @@ shared element between the small and full player, item 7. Sweep clean, QA 41/41.
 the shelf name in the bar (the test library is too short to scroll).
 Left: 4 (progress line, sentence fade, side panels), 6, 8, 9, 10, and the library-to-reader shared cover.
 
+## Slice 2, live 2026-10-12
+Shelf chips: one white pill that slides to the chosen shelf (`layoutId`), chips press. Library search bar and
+the reader's find bar ease in and out (`AnimatePresence`). The reader's cover settles in on arrival (a stand-in
+for the shared cover). Sweep clean, QA 41/41.
+Left: reader progress line, sentence highlight that moves (sentences are inline, so `layout` cannot do it:
+needs a measured overlay), side panels on wide screens, sheet contents and scrim tied to the drag, the Add
+drop zone, count-up numbers, the logo draw-on, the library-to-reader shared cover (needs overlapping pages),
+and a last audit for anything that still pops.
+
 ## To do, in this order (most seen first)
 1. **One motion system** (`src/lib/motion.js`): named transitions (`press`, `quick` 0.16 s, `page` 0.24 s,
    `sheet` spring by duration with bounce 0, `settle` layout spring) and variants (`rise`, `fade`,
