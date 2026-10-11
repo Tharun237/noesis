@@ -7,6 +7,9 @@ import { player, stretchInfo, audioState } from '../lib/player.js'
 import { toast } from '../lib/nav.js'
 import { Button } from './kit.jsx'
 
+const probe = document.createElement('audio')
+const plays = type => probe.canPlayType(type) || 'no'
+
 function collect() {
   const s = settings.get()
   const p = player.get()
@@ -33,6 +36,8 @@ function collect() {
       ['Player', `id ${p.id ? 'yes' : 'no'}, i ${p.i}, playing ${p.playing ? 'yes' : 'no'}, waiting ${p.waiting ? 'yes' : 'no'}, gate ${p.gate ?? 'none'}`],
       ['Loaded audio', st ? `sentences ${st.from}–${st.to}, ${Number(st.seconds).toFixed(1)}s` : 'none'],
       ['Audio element', `paused ${a.paused ? 'yes' : 'no'}, ended ${a.ended ? 'yes' : 'no'}, readyState ${a.readyState}, ${Number(a.currentTime).toFixed(1)}/${Number(a.duration).toFixed(1)}, muted ${a.muted ? 'yes' : 'no'}, volume ${a.volume}`],
+      ['Last refused play', a.playError ?? 'none'],
+      ['Audio formats', `Opus encoder ${typeof AudioEncoder === 'undefined' ? 'no' : 'yes'}, plays Ogg Opus ${plays('audio/ogg; codecs=opus')}, plays WAV ${plays('audio/wav')}`],
     ]],
     ['System media controls', [
       ['Media Session supported', supported ? 'yes' : 'no'],

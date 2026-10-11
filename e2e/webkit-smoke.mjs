@@ -293,7 +293,9 @@ try {
   })
   const played = await check('4a Play button becomes Pause (app started playback)', async () => {
     await page.getByRole('button', { name: 'Play', exact: true }).first().click({ timeout: 15000 })
+    const refused = page.getByText("couldn't play the audio").first().waitFor({ timeout: 15000 }).then(() => true, () => false)
     const started = await page.getByRole('button', { name: 'Pause', exact: true }).first().waitFor({ timeout: 15000 }).then(() => true, () => false)
+    if (await refused) return { status: 'FAIL', detail: 'play() was refused by this browser, and the app said so on screen' }
     if (!started) {
       const diag = await page.evaluate(() => ({
         media: window.__media.slice(-6),
@@ -301,7 +303,7 @@ try {
         text: (document.body.innerText.match(/[^\n]*(prepared|Audio|play|Play|error|Failed)[^\n]*/gi) || []).slice(0, 4),
         labels: [...document.querySelectorAll('button[aria-label]')].map(b => b.getAttribute('aria-label')).filter(l => /Play|Pause|Resume/.test(l)),
       }))
-      return { status: 'FAIL', detail: `Play did not start (aria-label never became Pause): ${JSON.stringify(diag)}` }
+      return { status: 'FAIL', detail: `Play did not start (aria-label never became Pause); the app said so: ${(await refused) ? 'yes' : 'NO'}: ${JSON.stringify(diag)}` }
     }
     const ms = await page.evaluate(() => (navigator.mediaSession ? navigator.mediaSession.playbackState : 'n/a'))
     return { status: 'PASS', detail: `aria-label is Pause; mediaSession.playbackState = ${ms}` }

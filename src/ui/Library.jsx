@@ -350,7 +350,7 @@ export function docMenu(d) {
     { label: d.archived ? 'Move to queue' : 'Archive', icon: 'archive', onClick: () => patch(d.id, { archived: !d.archived }) },
     '-',
     { label: 'Export transcript', icon: 'text', disabled: !d.total, onClick: () => exportTranscript(d.id) },
-    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? '.opus' : 'when fully voiced', onClick: () => exportAudio(d.id) },
+    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'when fully voiced', onClick: () => exportAudio(d.id) },
     d.status === 'error' && { label: 'Try again', icon: 'refresh', onClick: () => reprocess(d.id) },
     '-',
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) go('library') } } },

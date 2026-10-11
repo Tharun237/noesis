@@ -597,18 +597,19 @@ export async function exportAudio(id) {
   const frames = []
   const wavParts = []
   let rate = 24000
+  let wavRate = 0 // read from the stored WAV's own header: Piper voices are 16 or 22.05 kHz
   for (let from = 0; from < c.segs.length; from += 200) {
     const recs = await db.getAudios(id, from, Math.min(c.segs.length, from + 200))
     for (const r of recs) {
       if (!r || r.codec === 'none') continue
       rate = r.rate || rate
-      if (r.codec === 'opus') { const u = unpackPackets(r); packets.push(...u.packets); frames.push(...u.frames) } else wavParts.push(r.bytes.subarray(44))
+      if (r.codec === 'opus') { const u = unpackPackets(r); packets.push(...u.packets); frames.push(...u.frames) } else { wavRate ||= new DataView(r.bytes.buffer, r.bytes.byteOffset).getUint32(24, true); wavParts.push(r.bytes.subarray(44)) }
     }
   }
   // ponytail: sentences are concatenated as one Opus stream without re-encoding; boundaries can carry a ~6 ms seam.
   if (packets.length) return download(new Blob([muxOggOpus(packets, frames, { inputRate: rate })], { type: 'audio/ogg' }), `${safeName(d.title)}.opus`)
   const size = wavParts.reduce((a, p) => a + p.length, 0)
-  const head = wav(new Float32Array(0), 24000)
+  const head = wav(new Float32Array(0), wavRate)
   const v = new DataView(head.buffer)
   v.setUint32(4, 36 + size, true)
   v.setUint32(40, size, true)

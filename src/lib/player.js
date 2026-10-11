@@ -34,6 +34,15 @@ let token = 0
 let utter = 0
 let posTimer = null
 let pendingStart = false // play was pressed while the natural voice was still preparing
+let playError = null // name of the last refused play(), for the diagnostics report
+
+// A refused play() has to say so: a tap that does nothing is the worst status there is.
+function playFailed(e) {
+  player.set({ playing: false })
+  if (e?.name === 'AbortError') return // replaced by a newer load or a pause: not a failure
+  playError = e?.name || 'Error'
+  toast(playError === 'NotAllowedError' ? 'Your browser held playback back. Tap play again.' : "This browser couldn't play the audio.")
+}
 
 const system = () => activeEngine() === 'system'
 
@@ -161,7 +170,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
     current.k = i - current.from
     audio.currentTime = current.starts[current.k] + offset
     audio.playbackRate = player.get().rate
-    if (autoplay && audio.paused) audio.play().catch(() => player.set({ playing: false }))
+    if (autoplay && audio.paused) audio.play().catch(playFailed)
     return
   }
   const st = await stretchAt(id, c, i)
@@ -179,7 +188,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   audio.src = st.url
   audio.playbackRate = player.get().rate
   if (offset) audio.currentTime = offset
-  if (autoplay) audio.play().catch(() => player.set({ playing: false }))
+  if (autoplay) audio.play().catch(playFailed)
 }
 
 // ── built-in voice ───────────────────────────────────────────────────────────────
@@ -325,8 +334,12 @@ const wordStart = (t, f) => { const at = Math.floor(t.length * f); const k = t.l
 export async function play() {
   const p = player.get()
   if (!p.id) return
+  // Resuming audio that is already loaded starts inside the tap itself: Safari refuses a play() that
+  // comes after an await, and nothing here needs to wait.
+  if (!system() && !p.waiting && p.gate == null && audio.src && covers(current, p.id, p.i)) audio.play().catch(playFailed)
   maybeLockTip()
   if (!(await gateCheck())) {
+    audio.pause()
     pendingStart = true
     player.set({ playing: false })
     kickVoice()
@@ -341,7 +354,7 @@ export async function play() {
   if (system()) return load(p.i, { autoplay: true, from: p.word })
   if (p.waiting) return kickVoice()
   if (!audio.src || !covers(current, p.id, p.i)) return load(p.i, { autoplay: true })
-  audio.play().catch(() => player.set({ playing: false }))
+  audio.play().catch(playFailed)
 }
 
 export function pause() {
@@ -408,7 +421,7 @@ export const setSleep = s => player.set({ sleep: s })
 export const audioClock = () => (current ? audio.currentTime - current.starts[current.k] : audio.currentTime) // seconds into the current sentence
 // For tests: the audio that is loaded right now.
 export const stretchInfo = () => (current ? { from: current.from, to: current.to, seconds: audio.duration } : null)
-export const audioState = () => ({ paused: audio.paused, ended: audio.ended, readyState: audio.readyState, currentTime: audio.currentTime, duration: audio.duration, hasSrc: !!audio.src, rate: audio.playbackRate, volume: audio.volume, muted: audio.muted })
+export const audioState = () => ({ paused: audio.paused, ended: audio.ended, readyState: audio.readyState, currentTime: audio.currentTime, duration: audio.duration, hasSrc: !!audio.src, rate: audio.playbackRate, volume: audio.volume, muted: audio.muted, playError })
 
 export function stopIf(id) {
   if (player.get().id !== id) return
