@@ -48,9 +48,9 @@ export function loadEngine(voice = settings.get().voice) {
   return promise
 }
 
-export async function synthesize(text, voice) {
+export async function synthesize(text, voice, pause = 'sentence', tone = settings.get().voiceTone || 'natural') {
   await loadEngine(voice)
-  return (await call({ type: 'speak', text, voice })).rec
+  return (await call({ type: 'speak', text, voice, pause, tone })).rec
 }
 
 // Stored record → playable Blob.

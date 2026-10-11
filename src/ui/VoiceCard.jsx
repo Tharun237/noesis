@@ -51,11 +51,17 @@ export function VoiceCard({ Card }) {
       {engineNow === 'system'
         ? <Field title="Built-in voice"><SystemVoiceSelect /></Field>
         : (
-          <Field title="Natural voice (default for new documents)">
-            <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-              {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'} · {v.license}</option>)}
-            </select>
-          </Field>
+          <>
+            <Field title="Natural voice (default for new documents)">
+              <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
+                {VOICES.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.accent} {v.g === 'F' ? 'female' : 'male'}</option>)}
+              </select>
+            </Field>
+            <Field title="Tone" hint="Changes how the voice is made. Audio you already have is made again from where you are listening.">
+              <Segmented value={s.voiceTone || 'natural'} onChange={v => settings.set({ voiceTone: v })} size="sm"
+                options={[{ value: 'natural', label: 'Natural' }, { value: 'clear', label: 'Clear' }, { value: 'warm', label: 'Warm' }, { value: 'bright', label: 'Bright' }]} />
+            </Field>
+          </>
         )}
     </Card>
   )

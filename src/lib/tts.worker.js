@@ -4,6 +4,10 @@ import * as ort from 'onnxruntime-web/wasm' // CPU build (11 MB): Piper is fast 
 import { phonemize } from 'phonemizer'
 import { encode } from './encode.js'
 import { voiceUrl } from './voices.js'
+import { padTail, trailingSeconds } from './pause.js'
+import { applyTone } from './tone.js'
+
+const PAUSE_MS = { sentence: 260, paragraph: 480, heading: 650 }
 
 const CACHE = 'noesis-voices' // voice files, kept for offline use (Settings → Remove downloaded voices)
 // The runtime's glue + WASM are served as standalone static files (public/ort, copied by postinstall): its
@@ -84,7 +88,7 @@ async function phonemeIds(text, cfg) {
   return ids
 }
 
-async function speak({ text, voice: id }) {
+async function speak({ text, voice: id, pause = 'sentence', tone = 'natural' }) {
   const { session, cfg } = await load(id)
   const ids = await phonemeIds(text, cfg)
   const inf = cfg.inference
@@ -96,8 +100,12 @@ async function speak({ text, voice: id }) {
   if (cfg.num_speakers > 1) feeds.sid = new ort.Tensor('int64', BigInt64Array.from([0n]), [1])
   const pcm = (await session.run(feeds)).output.data
   const rate = cfg.audio.sample_rate
-  const rec = await encode(pcm, rate)
-  rec.dur = pcm.length / rate
+  const padded = padTail(pcm, rate, PAUSE_MS[pause] ?? PAUSE_MS.sentence)
+  const tail = trailingSeconds(padded, rate)
+  const shaped = applyTone(padded, rate, tone)
+  const rec = await encode(shaped, rate)
+  rec.dur = shaped.length / rate
+  rec.tail = tail
   return rec
 }
 

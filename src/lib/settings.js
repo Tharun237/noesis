@@ -7,7 +7,8 @@ const KEY = 'noesis.settings.v1'
 export const DEFAULTS = {
   geminiKey: '',
   geminiModel: 'gemini-flash-latest',
-  voice: 'en_US-ljspeech-medium', // default voice for new documents (voices.js)
+  voice: 'en_GB-alba-medium', // default voice for new documents (voices.js)
+  voiceTone: 'natural', // natural | clear | warm | bright — generation-time equalizer (tone.js)
   speed: 1,
   voiceEngine: 'natural', // natural (Piper, generated on the device) | system (built-in TTS) — see engine.js
   systemVoice: '', // voiceURI of the built-in voice ('' = device default)

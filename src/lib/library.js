@@ -28,7 +28,7 @@ library.sub(() => {
   localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(c))
 })
 
-const cache = new Map() // id → { blocks, segs: [{t, b, k}], starts: [segIndex per block], durs: [sec, 0 = not voiced] }
+const cache = new Map() // id → { blocks, segs: [{t, b, k}], starts: [segIndex per block], durs: [sec, 0 = not voiced], tails: [sec trailing silence, 0 = unknown] }
 const voiced = new Map() // id → Set<segIndex>
 const segListeners = new Set()
 export const onSegment = f => { segListeners.add(f); return () => segListeners.delete(f) }
@@ -103,12 +103,20 @@ export function loadDoc(id) {
   if (cache.has(id)) return Promise.resolve(cache.get(id))
   if (!loading.has(id)) {
     loading.set(id, (async () => {
-      const [doc, durs] = await Promise.all([db.getDoc(id), db.getDurs(id)])
+      const [doc, stored] = await Promise.all([db.getDoc(id), db.getDurs(id)])
       if (!doc) return null
       const segs = []
       const starts = []
       doc.blocks.forEach((b, bi) => { starts.push(segs.length); for (const t of b.s) segs.push({ t, b: bi, k: b.k }) })
-      const c = { blocks: doc.blocks, segs, starts, durs: durs?.length === segs.length ? durs : new Array(segs.length).fill(0) }
+      let durs, tails
+      if (stored && !Array.isArray(stored) && Array.isArray(stored.durs) && stored.durs.length === segs.length) {
+        durs = stored.durs
+        tails = Array.isArray(stored.tails) && stored.tails.length === segs.length ? stored.tails : new Array(segs.length).fill(0)
+      } else {
+        durs = stored?.length === segs.length ? stored : new Array(segs.length).fill(0)
+        tails = new Array(segs.length).fill(0)
+      }
+      const c = { blocks: doc.blocks, segs, starts, durs, tails }
       cache.set(id, c)
       return c
     })().finally(() => loading.delete(id)))
@@ -119,7 +127,7 @@ export function loadDoc(id) {
 const durTimers = new Map()
 function saveDurs(id) {
   clearTimeout(durTimers.get(id))
-  durTimers.set(id, setTimeout(() => { const c = cache.get(id); if (c) db.putDurs(id, c.durs) }, 1500))
+  durTimers.set(id, setTimeout(() => { const c = cache.get(id); if (c) db.putDurs(id, { durs: c.durs, tails: c.tails }) }, 1500))
 }
 
 // ── loops ─────────────────────────────────────────────────────────────────────────────
@@ -184,6 +192,27 @@ export function readiness(d, c, from = 0) {
 let lastEngine = activeEngine()
 settings.sub(() => { const e = activeEngine(); if (e !== lastEngine) { lastEngine = e; kickVoice() } })
 
+// A tone change remakes audio, but never the whole library at once: that would throw away hours of generated
+// audio for books nobody is listening to. The book in the player is remade now (from the listening position);
+// any other book is checked when it is next opened (ensureFresh).
+let lastTone = settings.get().voiceTone || 'natural'
+settings.sub(() => {
+  const t = settings.get().voiceTone || 'natural'
+  if (t === lastTone) return
+  lastTone = t
+  const p = priority()
+  if (p) resetAudio(p.id).then(kickVoice)
+})
+
+// Called when a document is opened: if its stored audio was made in another voice or tone, remake it.
+export async function ensureFresh(id) {
+  const d = getDoc(id)
+  const first = [...voicedSet(id)][0]
+  if (!d || first === undefined) return
+  const rec = await db.getAudio(id, first)
+  if (rec && rec.codec !== 'none' && !audioMatches(d, rec)) { await resetAudio(id); kickVoice() }
+}
+
 export const kickVoice = makeLoop(async () => {
   if (activeEngine() === 'system') return false // built-in voice speaks directly; no generation, no CPU load
   if (engine.get().status === 'error') return false // wait for a retry (which kicks)
@@ -198,7 +227,7 @@ async function resetAudio(id) {
   await db.delAudio(id)
   voicedSet(id).clear()
   const c = cache.get(id)
-  if (c) { c.durs.fill(0); db.putDurs(id, c.durs) }
+  if (c) { c.durs.fill(0); c.tails.fill(0); db.putDurs(id, { durs: c.durs, tails: c.tails }) }
   patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Generating audio' } : {}) })
 }
 
@@ -227,24 +256,29 @@ async function voiceOne(id, i) {
   const c = cache.get(id)
   const seg = c.segs[i]
   const voice = isVoice(d.voice) ? d.voice : fromKokoro(d.voice) // a device not yet updated may sync a Kokoro voice
+  const tone = settings.get().voiceTone || 'natural'
+  const b = seg.b
+  const lastInBlock = i === c.starts[b] + c.blocks[b].s.length - 1
+  const pauseKind = seg.k === 'h' ? 'heading' : lastInBlock ? 'paragraph' : 'sentence'
   let rec
   const warm = engine.get().status === 'ready' && engine.get().voice === voice // the first call also downloads the voice
   const t0 = performance.now()
   try {
-    rec = await synthesize(seg.t, voice)
+    rec = await synthesize(seg.t, voice, pauseKind, tone)
     if (warm && rec.dur > 0.5) recordSpeed(rec.dur / ((performance.now() - t0) / 1000))
   } catch (e) {
     if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
     console.warn('Sentence failed, skipping:', seg.t, e)
-    rec = { codec: 'none', dur: 0 }
+    rec = { codec: 'none', dur: 0, tail: 0 }
   }
   const now = getDoc(id)
-  if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || cache.get(id) !== c) return // deleted / voice changed / re-processed meanwhile
-  rec.v = voice
+  if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c) return // deleted / voice changed / re-processed meanwhile
+  rec.v = tone === 'natural' ? voice : voice + '|' + tone
   await db.putAudio(id, i, rec)
   const set = voicedSet(id)
   set.add(i)
   c.durs[i] = rec.dur
+  c.tails[i] = rec.tail || 0
   saveDurs(id)
   const done = set.size
   patch(id, {
@@ -322,7 +356,7 @@ async function prepare(id) {
     await db.putDoc(id, { blocks: listening })
     const total = listening.reduce((a, b) => a + b.s.length, 0)
     const chars = listening.reduce((a, b) => a + b.s.reduce((x, t) => x + t.length, 0), 0)
-    await db.putDurs(id, new Array(total).fill(0))
+    await db.putDurs(id, { durs: new Array(total).fill(0), tails: new Array(total).fill(0) })
     cache.delete(id)
     voiced.set(id, new Set())
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
@@ -447,7 +481,7 @@ async function fetchSynced(id) {
     await db.putDoc(id, doc)
     const total = doc.blocks.reduce((a, b) => a + b.s.length, 0)
     const chars = doc.blocks.reduce((a, b) => a + b.s.reduce((x, t) => x + t.length, 0), 0)
-    await db.putDurs(id, new Array(total).fill(0))
+    await db.putDurs(id, { durs: new Array(total).fill(0), tails: new Array(total).fill(0) })
     cache.delete(id)
     voiced.set(id, new Set())
     patch(id, { status: 'voicing', stage: 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
@@ -485,9 +519,15 @@ export async function changeVoice(id, voice) {
   kickVoice()
 }
 
-// Stored audio is only valid for the voice it was made in (records are tagged with rec.v; untagged
-// records are from the retired Kokoro engine and never match).
-export const audioMatches = (d, rec) => !!d && rec.v === (isVoice(d.voice) ? d.voice : fromKokoro(d.voice))
+// Stored audio is only valid for the voice AND tone it was made with (records are tagged with rec.v;
+// plain `voice` for the natural tone so existing audio stays valid; untagged records are from the
+// retired Kokoro engine and never match).
+export const audioMatches = (d, rec) => {
+  if (!d || !rec) return false
+  const voice = isVoice(d.voice) ? d.voice : fromKokoro(d.voice)
+  const tone = settings.get().voiceTone || 'natural'
+  return rec.v === (tone === 'natural' ? voice : voice + '|' + tone)
+}
 
 export function reprocess(id, changes = {}) {
   cache.delete(id)
@@ -508,7 +548,7 @@ export async function deleteAllAudio() {
     await db.delAudio(d.id)
     voicedSet(d.id).clear()
     const c = cache.get(d.id)
-    if (c) c.durs.fill(0)
+    if (c) { c.durs.fill(0); c.tails.fill(0) }
     if (d.total) patch(d.id, { done: 0, vChars: 0, vSec: 0, status: d.status === 'ready' ? 'voicing' : d.status })
   }
   kickVoice()

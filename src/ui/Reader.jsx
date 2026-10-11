@@ -208,7 +208,7 @@ export function Reader({ wide }) {
                   return <Chunk key={ci} ci={ci} ch={ch} doc={doc} typo={typo} skip={skip}
                     mounted={near.has(ci) || hasActive || hasHit}
                     est={heights.current.get(ci) ?? estimateHeight(ch, typo, colRef.current?.clientWidth || (wide ? width : innerWidth - 40))}
-                    active={hasActive ? active : -1} dur={hasActive ? doc.durs[active] : 0} hit={hasHit ? hit : -1}
+                    active={hasActive ? active : -1} dur={hasActive ? doc.durs[active] : 0} tail={hasActive ? (doc.tails?.[active] || 0) : 0} hit={hasHit ? hit : -1}
                     marks={marksBy.get(ci) || ''} onHeight={onHeight} />
                 })}
               </div>
@@ -305,7 +305,7 @@ function scrollToSentence(i) {
   el.scrollIntoView({ block: 'center', behavior: far ? 'auto' : 'smooth' })
 }
 
-const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, hit, marks, onHeight }) {
+const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight }) {
   const ref = useRef(null)
   useLayoutEffect(() => { if (mounted && ref.current) onHeight(ci, ref.current.offsetHeight) })
   if (!mounted) return <div data-c={ci} style={{ height: est }} />
@@ -317,7 +317,7 @@ const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, activ
     const end = start + b.s.length
     let m = ''
     if (marked) for (let k = start; k < end; k++) if (marked.has(k)) m += k - start + ','
-    out.push(<Block key={bi} b={b} start={start} active={active >= start && active < end ? active - start : -1} dur={dur}
+    out.push(<Block key={bi} b={b} start={start} active={active >= start && active < end ? active - start : -1} dur={dur} tail={tail}
       hit={hit >= start && hit < end ? hit - start : -1} marks={m} dim={skip && VISUAL_KINDS.has(b.k)} typo={typo} />)
   }
   return <div ref={ref} data-c={ci}>{out}</div>
@@ -425,7 +425,7 @@ function Preparing({ d, doc, pos }) {
 }
 
 // Word timing lives in src/lib/words.js so the lock screen can reuse it.
-function ActiveSentence({ i, text, dur, words }) {
+function ActiveSentence({ i, text, dur, tail, words }) {
   const { ws, ends } = useMemo(() => wordWeights(text), [text])
   const starts = useMemo(() => { let at = 0; return ws.map(x => { const s0 = at; at += x.length + 1; return s0 }) }, [ws])
   const [w, setW] = useState(-1)
@@ -437,13 +437,13 @@ function ActiveSentence({ i, text, dur, words }) {
     if (sys || !words || !dur) return
     let raf
     const tick = () => {
-      const f = (audioClock() - 0.06) / Math.max(0.2, dur - 0.18) // lead-in/tail allowance (tuned on Kokoro; to re-measure on Piper)
+      const f = (audioClock() - 0.06) / Math.max(0.2, dur - (tail || 0))
       setW(f <= 0 ? 0 : ends.findIndex(e => e >= f))
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [sys, words, dur, ends])
+  }, [sys, words, dur, tail, ends])
   const lit = sys ? sysWord : w
   const showWords = words && (sys || dur)
   return (
@@ -453,10 +453,10 @@ function ActiveSentence({ i, text, dur, words }) {
   )
 }
 
-const Block = memo(function Block({ b, start, active, dur, hit, marks, dim, typo }) {
+const Block = memo(function Block({ b, start, active, dur, tail, hit, marks, dim, typo }) {
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const sentences = b.s.map((t, k) => k === active
-    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} words={typo.words} />
+    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} />
     : (
       <span key={k} data-i={start + k}
         style={{

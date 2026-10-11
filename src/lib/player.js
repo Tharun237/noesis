@@ -5,7 +5,7 @@ import { recordToBlob } from './tts.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { activeEngine, pickSystemVoice } from './engine.js'
-import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches } from './library.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches, ensureFresh } from './library.js'
 import { toast, openSheet } from './nav.js'
 import { wordWeights } from './words.js'
 import { flushNow } from './sync.js'
@@ -304,6 +304,7 @@ export async function open(id, { at, autoplay = true } = {}) {
   player.set({ id, playing: false, gate: null })
   heard = { id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine() }
   setSession(d)
+  await ensureFresh(id) // audio made in another voice or tone is remade, not played
   const c = await loadDoc(id)
   if (!c) return // still being prepared — the reader shows progress
   doc = c
@@ -370,8 +371,8 @@ function voiceChanged() {
   if (!p.id) return
   const d = getDoc(p.id)
   if (!d) return stopIf(p.id)
-  const now = { id: d.id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine() }
-  const changed = heard.id === now.id && (heard.voice !== now.voice || heard.sys !== now.sys || heard.engine !== now.engine)
+  const now = { id: d.id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine(), tone: settings.get().voiceTone || 'natural' }
+  const changed = heard.id === now.id && (heard.voice !== now.voice || heard.sys !== now.sys || heard.engine !== now.engine || (heard.tone ?? now.tone) !== now.tone)
   heard = now
   if (!changed) return
   // Audio in the previous voice must never resume: drop both stretches before playing on.

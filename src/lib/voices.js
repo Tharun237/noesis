@@ -7,17 +7,16 @@
 export const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/'
 
 export const VOICES = [
-  { id: 'en_US-ljspeech-medium', name: 'LJ', accent: 'US', g: 'F', license: 'Public domain' },
+  { id: 'en_GB-alba-medium', name: 'Alba', accent: 'UK', g: 'F', license: 'CC BY 4.0' },
   { id: 'en_US-kristin-medium', name: 'Kristin', accent: 'US', g: 'F', license: 'Public domain' },
   { id: 'en_GB-cori-medium', name: 'Cori', accent: 'UK', g: 'F', license: 'Public domain' },
-  { id: 'en_GB-alba-medium', name: 'Alba', accent: 'UK', g: 'F', license: 'CC BY 4.0' },
+  { id: 'en_US-ljspeech-medium', name: 'LJ', accent: 'US', g: 'F', license: 'Public domain' },
+  { id: 'en_GB-northern_english_male-medium', name: 'Northern', accent: 'UK', g: 'M', license: 'CC BY-SA 4.0' },
+  { id: 'en_US-joe-medium', name: 'Joe', accent: 'US', g: 'M', license: 'CC0' },
   { id: 'en_US-john-medium', name: 'John', accent: 'US', g: 'M', license: 'Public domain' },
   { id: 'en_US-norman-medium', name: 'Norman', accent: 'US', g: 'M', license: 'Public domain' },
-  { id: 'en_US-joe-medium', name: 'Joe', accent: 'US', g: 'M', license: 'CC0' },
   { id: 'en_US-bryce-medium', name: 'Bryce', accent: 'US', g: 'M', license: 'Public domain' },
   { id: 'en_US-mike-medium', name: 'Mike', accent: 'US', g: 'M', license: 'CC0' },
-  { id: 'en_US-reza_ibrahim-medium', name: 'Reza', accent: 'US', g: 'M', license: 'CC0' },
-  { id: 'en_GB-northern_english_male-medium', name: 'Northern', accent: 'UK', g: 'M', license: 'CC BY-SA 4.0' },
 ]
 export const DEFAULT_VOICE = VOICES[0].id
 export const isVoice = id => VOICES.some(v => v.id === id)
@@ -30,7 +29,11 @@ export function voiceUrl(id) {
 }
 
 // Documents voiced with Kokoro before the switch get the closest Piper voice (US/UK, female/male).
+// Any other unknown voice id (e.g. a removed voice) falls back to the default voice.
 export function fromKokoro(id = '') {
-  const uk = id[0] === 'b', female = id[1] === 'f'
-  return (uk ? (female ? 'en_GB-cori-medium' : 'en_GB-northern_english_male-medium') : female ? 'en_US-ljspeech-medium' : 'en_US-john-medium')
+  if (typeof id === 'string' && /^[ab][fm]_/.test(id)) {
+    const uk = id[0] === 'b', female = id[1] === 'f'
+    return (uk ? (female ? 'en_GB-cori-medium' : 'en_GB-northern_english_male-medium') : female ? 'en_US-ljspeech-medium' : 'en_US-john-medium')
+  }
+  return DEFAULT_VOICE
 }
