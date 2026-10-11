@@ -1,14 +1,14 @@
 import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, tab, openSheet } from '../lib/nav.js'
+import { ui, tab, openSheet, openSearch, closeSearch } from '../lib/nav.js'
 import { Icon } from './icons.jsx'
 
 // Phone tab bar in the ACS style: icon over label, white for the active tab with a short
 // indicator bar on top. The mini player docks above it (PlayerBar), like Apple Music.
 const TABS = [
-  { id: 'library', icon: 'list', label: 'Library', run: () => { tab('library'); ui.set({ searching: false, query: '' }) } },
-  { id: 'search', icon: 'search', label: 'Search', run: () => { tab('library'); ui.set({ searching: true }) } },
+  { id: 'library', icon: 'list', label: 'Library', run: () => { if (ui.get().searching) closeSearch(); else tab('library') } },
+  { id: 'search', icon: 'search', label: 'Search', run: () => { tab('library'); openSearch() } },
   { id: 'add', icon: 'plus', label: 'Add', run: () => openSheet('add') },
   { id: 'settings', icon: 'settings', label: 'Settings', run: () => tab('settings') },
 ]

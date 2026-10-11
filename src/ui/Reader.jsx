@@ -7,6 +7,9 @@ import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '
 import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
+import { useRoute } from '../lib/route.js'
+import { pushPanel, popPanel } from '../lib/nav.js'
+import { scrollBehavior } from '../lib/motion.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
@@ -31,12 +34,23 @@ const HEADER_H = 57
 const SUBROW_H = 44 // second header row (Text | Pages) on documents that have pages
 
 export function Reader({ wide }) {
-  const id = useStore(ui, s => s.docId)
+  const id = useRoute().docId // the page's own document, also while it is animating out
   const d = useStore(library, s => s.docs.find(x => x.id === id))
   const status = d?.status
   const total = d?.total
   const [doc, setDoc] = useState(null)
-  const [panel, setPanel] = useState(null) // toc | type | marks | ask
+  const [panel, setPanelState] = useState(null) // toc | type | marks | ask
+  // On a phone a panel is a sheet over the page: it is a history entry, so Back closes it instead of leaving
+  // the document. On a wide screen panels sit beside the text and are not modal: no history entry.
+  const setPanel = name => {
+    if (wide) return setPanelState(name)
+    if (name) { pushPanel(name); setPanelState(name) } else if (history.state?.panel) popPanel(); else setPanelState(null)
+  }
+  useEffect(() => {
+    const onPop = e => setPanelState(e.state?.panel || null)
+    addEventListener('popstate', onPop)
+    return () => removeEventListener('popstate', onPop)
+  }, [])
   const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [searching, setSearching] = useState(false)
@@ -329,7 +343,7 @@ function scrollToSentence(i) {
   if (!el) return
   const top = el.getBoundingClientRect().top
   const far = top < -innerHeight * 2 || top > innerHeight * 3
-  el.scrollIntoView({ block: 'center', behavior: far ? 'auto' : 'smooth' })
+  el.scrollIntoView({ block: 'center', behavior: far ? 'auto' : scrollBehavior() })
 }
 
 const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight }) {

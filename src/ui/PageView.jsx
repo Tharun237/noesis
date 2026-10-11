@@ -9,6 +9,7 @@ import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { db } from '../lib/db.js'
 import { locatePage, sentenceAt } from '../lib/locate.js'
+import { scrollBehavior } from '../lib/motion.js'
 
 const MAX_DRAWN = 6
 const FALLBACK_RATIO = 1.4142 // A4-ish until the first page reports its true size
@@ -228,7 +229,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
     if (!el) return
     const top = el.getBoundingClientRect().top
     const far = top < -window.innerHeight * 2 || top > window.innerHeight * 3
-    el.scrollIntoView({ block: 'start', behavior: far ? 'auto' : 'smooth' })
+    el.scrollIntoView({ block: 'start', behavior: far ? 'auto' : scrollBehavior() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePage, userScroll])
 
@@ -263,7 +264,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
     const top = r.top + hit.rects[0].y * r.height
     if (top > window.innerHeight * 0.2 && top < window.innerHeight * 0.7) return
     const dy = top - window.innerHeight * 0.35
-    window.scrollTo({ top: window.scrollY + dy, behavior: Math.abs(dy) < window.innerHeight * 1.5 ? 'smooth' : 'auto' })
+    window.scrollTo({ top: window.scrollY + dy, behavior: Math.abs(dy) < window.innerHeight * 1.5 ? scrollBehavior() : 'auto' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSentence, tick, userScroll])
 

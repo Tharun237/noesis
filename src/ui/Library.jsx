@@ -2,7 +2,7 @@ import { memo, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go, openSheet } from '../lib/nav.js'
+import { ui, go, openSheet, closeSearch } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
@@ -243,7 +243,7 @@ function MobileHeader({ summary }) {
       {searching && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 12px 16px' }}>
           <div style={{ flex: 1 }}><SearchBox value={query} autoFocus /></div>
-          <IconButton icon="close" label="Close search" onClick={() => ui.set({ searching: false, query: '' })} />
+          <IconButton icon="close" label="Close search" onClick={closeSearch} />
         </div>
       )}
       {summary && <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 16px 12px', scrollbarWidth: 'none' }}>

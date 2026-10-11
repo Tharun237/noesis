@@ -23,17 +23,21 @@ history.replaceState({ view: restored.view, docId: restored.docId || null, depth
 
 export function go(view, docId = null) {
   const s = ui.get()
-  if (s.view === view && s.docId === docId) return
-  history.pushState({ view, docId, depth: depth() + 1 }, '')
+  if (s.view === view && s.docId === docId && !s.sheet) return
+  // Leaving from inside a sheet (Add to library, a passage in Ask your library, another language): the new
+  // page takes the sheet's place in history instead of stacking on it. Otherwise Back from the new page
+  // lands on the old page with the sheet open again.
+  if (history.state?.sheet || history.state?.panel || history.state?.searching) history.replaceState({ view, docId, depth: depth() }, '')
+  else history.pushState({ view, docId, depth: depth() + 1 }, '')
   ui.set({ view, docId, sheet: null })
 }
 
 // Phone tab bar: switching tabs replaces the entry instead of stacking pages, like a native tab bar.
 export function tab(view) {
   const s = ui.get()
-  if (s.view === view && !s.sheet) return
+  if (s.view === view && !s.sheet && !s.searching) return
   history.replaceState({ view, docId: null, depth: depth() }, '')
-  ui.set({ view, docId: null, sheet: null })
+  ui.set({ view, docId: null, sheet: null, searching: false, query: '' })
 }
 
 export function openSheet(sheet, extra = {}) {
@@ -42,6 +46,26 @@ export function openSheet(sheet, extra = {}) {
 }
 
 export const closeSheet = () => { if (ui.get().sheet) history.back() }
+
+// The phone's library search is a history entry too: Back closes the search instead of leaving the app.
+export function openSearch() {
+  if (ui.get().searching) return
+  history.pushState({ ...history.state, searching: true, depth: depth() + 1 }, '')
+  ui.set({ searching: true })
+}
+export function closeSearch() {
+  if (history.state?.searching) history.back()
+  else ui.set({ searching: false, query: '' })
+}
+
+// A panel inside a page (the reader's contents, reading settings, bookmarks, Ask): the page keeps its own
+// state for which panel is open; these keep history in step so Back closes the panel, not the page.
+export function pushPanel(name) {
+  const entry = { ...history.state, panel: name }
+  if (history.state?.panel) history.replaceState(entry, '')
+  else history.pushState({ ...entry, depth: depth() + 1 }, '')
+}
+export const popPanel = () => { if (history.state?.panel) history.back() }
 
 // How many in-app pages sit behind this one. Back must never depend on browser history the app didn't
 // create (opened straight into a book, restored after an update, arrived from a share or a link).
@@ -54,7 +78,8 @@ export function goBack() {
 
 addEventListener('popstate', e => {
   const s = e.state || {}
-  ui.set({ view: s.view || 'library', docId: s.docId || null, sheet: s.sheet || null })
+  const searching = !!s.searching
+  ui.set({ view: s.view || 'library', docId: s.docId || null, sheet: s.sheet || null, searching, ...(searching ? {} : { query: '' }) })
 })
 
 let toastTimer = null

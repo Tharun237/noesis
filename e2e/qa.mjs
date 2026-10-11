@@ -293,6 +293,9 @@ async function addViaSheet(fill) {
   const d = await app(`m.lib.getDoc(${JSON.stringify(id)})`)
   expect(d.status !== 'error', d.error)
   await page.getByRole('button', { name: 'Back to library' }).click()
+  // Back from a document that was just added must show the library, not the Add sheet again.
+  await sleep(500)
+  expect(await page.evaluate(() => history.state?.view === 'library' && !history.state?.sheet) && await page.locator('[role=dialog]').count() === 0, 'Back from the new document reopened the Add sheet')
   return d
 }
 

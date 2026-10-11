@@ -71,11 +71,12 @@ export function PlayerBar({ wide, full }) {
   if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} waiting={waiting} left={left} sleepLine={sleepLine} />
 
   return (
-    <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
+    <motion.div {...playerEnter()}
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 30, background: T.bg, borderTop: `1px solid ${T.border}`,
         padding: `10px ${wide ? 24 : 16}px calc(env(safe-area-inset-bottom) + 10px)`, display: 'grid', gap: wide ? 6 : 10,
       }}>
+      <PlayerLeft />
       {scrubber}
       <div style={{ display: 'grid', gridTemplateColumns: wide ? '1fr auto 1fr' : 'auto 1fr auto', alignItems: 'center', gap: 8 }}>
         {wide ? (
@@ -117,8 +118,7 @@ function PlayButton({ playing, waiting, size }) {
     <motion.button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} whileTap={{ scale: 0.9 }} transition={T.spring}
       style={{ width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
       {waiting && (
-        <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
+        <span data-spin style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
       )}
       <motion.span key={playing ? 'pause' : 'play'} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.spring} style={{ display: 'grid' }}>
         <Icon name={playing ? 'pause' : 'play'} size={size * 0.4} stroke={playing ? 2.6 : 1.6} fill={!playing} style={{ marginLeft: playing ? 0 : 2 }} />
@@ -180,10 +180,28 @@ function MoreMenu({ d }) {
   )
 }
 
+// The player rises in once, when something starts to play. Going between the library and a document swaps
+// the small player for the full one: that is the same player changing shape, so it cross-fades in place
+// instead of sliding up again on every page change.
+let playersShown = 0 // counted while mounted: when the new shape renders, the old one is still on screen
+function playerEnter() {
+  const swap = playersShown > 0
+  return {
+    initial: swap ? { opacity: 0 } : { y: 24, opacity: 0 },
+    animate: { y: 0, opacity: 1 },
+    transition: { duration: swap ? 0.16 : 0.24, ease: T.ease },
+  }
+}
+function PlayerLeft() {
+  useEffect(() => { playersShown++; return () => { playersShown-- } }, [])
+  return null
+}
+
 function MiniPlayer({ d, progress, voiceLabel, gate, waiting, left, sleepLine }) {
   return (
-    <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
+    <motion.div {...playerEnter()}
       style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
+      <PlayerLeft />
       <Progress value={progress} height={2} track={T.surface} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 8px 10px' }}>
         <button type="button" onClick={() => go('reader', d.id)}

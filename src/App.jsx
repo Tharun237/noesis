@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { motion, AnimatePresence, MotionConfig } from 'motion/react'
 import { T } from './theme.js'
 import { useStore, useWidth } from './lib/store.js'
 import { ui } from './lib/nav.js'
+import { Route } from './lib/route.js'
 import { boot } from './lib/library.js'
 import { startHistory } from './lib/history.js'
 import { player, toggle, nextSentence, prevSentence } from './lib/player.js'
@@ -40,37 +41,46 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Keep the library scroll position across visits to the reader.
+  // Keep the library scroll position across visits to the reader. It is recorded while the library is the
+  // live page, and put back when the library page arrives again (PageScroll, below), not while the old page
+  // is still fading out.
   useEffect(() => {
-    if (view === 'library') requestAnimationFrame(() => window.scrollTo(0, libraryScroll.current))
-    else window.scrollTo(0, 0)
     const onScroll = () => { if (ui.get().view === 'library') libraryScroll.current = window.scrollY }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [view, docId])
+  }, [])
+  const route = useMemo(() => ({ view, docId }), [view, docId])
 
   const full = view === 'reader'
   const dock = playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
   const lift = activity ? ACTIVITY_H : 0
   return (
+    <MotionConfig reducedMotion="user">
     <div style={{ fontFamily: T.font, color: T.text, background: T.bg, minHeight: '100dvh', WebkitFontSmoothing: 'antialiased' }}>
       <div style={{ paddingBottom: dock + lift }}>
-        {/* Enter-only page transition: an exit phase (AnimatePresence mode="wait") can strand the old page mid-exit. */}
-        <motion.div key={view + (docId || '')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: T.dur.base, ease: T.ease }}>
-          {view === 'library' && <Library wide={wide} />}
-          {view === 'reader' && <Reader wide={wide} />}
-          {view === 'settings' && <Suspense fallback={null}><Settings wide={wide} /></Suspense>}
-        </motion.div>
+        {/* The old page fades out quickly (ease-in), then the new one rises in (ease-out): one page at a time.
+            The leaving page keeps its own route through context, so it never flashes the next page's content. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={view + (docId || '')} initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: T.ease } }}
+            exit={{ opacity: 0, transition: { duration: 0.11, ease: 'easeIn' } }}>
+            <Route.Provider value={route}>
+              {view === 'library' && <Library wide={wide} />}
+              {view === 'reader' && <Reader wide={wide} />}
+              {view === 'settings' && <Suspense fallback={null}><Settings wide={wide} /></Suspense>}
+              <PageScroll view={view} top={libraryScroll} />
+            </Route.Provider>
+          </motion.div>
+        </AnimatePresence>
       </div>
       <PlayerBar wide={wide} full={full} />
       {!wide && !full && <TabBar />}
       <Sheets wide={wide} />
       <ActivityStrip activity={activity} bottom={dock} />
       <InstallPrompt wide={wide} full={full} lift={lift} />
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {toastMsg && (
-          <motion.div key={toastMsg} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={T.spring} role="status"
+          <motion.div key={toastMsg} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12, transition: { duration: 0.12, ease: 'easeIn' } }} transition={T.spring} role="status"
             style={{
               position: 'fixed', left: '50%', bottom: dock + lift + 16, x: '-50%', zIndex: 60, padding: toastAction ? '8px 8px 8px 18px' : '12px 18px',
               borderRadius: T.r.pill, background: T.text, color: T.bg, fontSize: 14, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 32px)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
@@ -90,5 +100,13 @@ export default function App() {
         )}
       </AnimatePresence>
     </div>
+    </MotionConfig>
   )
+}
+
+// Runs when a page arrives (after the old one has left): the library returns to where it was, anything
+// else starts at its top. It sits after the page's content so the content is laid out when it runs.
+function PageScroll({ view, top }) {
+  useLayoutEffect(() => { window.scrollTo(0, view === 'library' ? top.current : 0) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
 }

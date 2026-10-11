@@ -8,6 +8,7 @@ import { hasAiKey, providerName, contextChars } from '../lib/ai.js'
 import { db } from '../lib/db.js'
 import { player, pause, play } from '../lib/player.js'
 import { detectLang } from '../lib/lang.js'
+import { scrollBehavior } from '../lib/motion.js'
 import { voicesFor, defaultVoiceFor } from '../lib/voices.js'
 import { synthesize, recordToBlob } from '../lib/tts.js'
 import { sentences } from '../lib/text.js'
@@ -69,7 +70,7 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
 
   useEffect(() => { db.getChat(d.id).then(m => setMsgs(m || [])) }, [d.id])
   useEffect(() => () => { abort.current?.abort(); stopSpeaking() }, [])
-  useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' }) }, [msgs])
+  useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: scrollBehavior() }) }, [msgs])
 
   // opts: { label } shows a short line instead of the full instruction; { aloud } speaks the answer when
   // it is complete and then lets the book carry on; { skim } offers the jump to the next section.

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { T } from '../theme.js'
+import { useRoute } from '../lib/route.js'
 import { useStore } from '../lib/store.js'
 import { player, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
@@ -16,7 +17,7 @@ import { Button, IconButton } from './kit.jsx'
 const PIVOT_AT = 38 // percent of the width: a little left of centre, because most of a word lies after its pivot
 
 export function FocusView({ doc, active, onSeek, playing }) {
-  const id = useStore(ui, s => s.docId)
+  const id = useRoute().docId
   const wpm = useStore(settings, s => s.focusWpm ?? 300)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const spoken = useStore(player, s => s.word)

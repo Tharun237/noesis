@@ -18,6 +18,13 @@
       html, body, #root { margin: 0; height: 100%; background: #000; }
       body { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
       * { box-sizing: border-box; }
+      /* A spinner says "working": it keeps turning even for people who asked for less motion. */
+      @keyframes noesis-spin { to { transform: rotate(360deg); } }
+      [data-spin] { animation: noesis-spin 1s linear infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+        [data-spin] { animation-duration: 1s !important; animation-iteration-count: infinite !important; }
+      }
       ::selection { background: rgba(110, 231, 255, 0.28); }
       :focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
       ::-webkit-scrollbar { width: 10px; height: 10px; }
