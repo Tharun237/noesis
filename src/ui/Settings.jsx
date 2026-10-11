@@ -7,6 +7,7 @@ import { deleteAllAudio } from '../lib/library.js'
 import { Button, IconButton, Toggle, Field, inputStyle } from './kit.jsx'
 import { AccountCard } from './AccountCard.jsx'
 import { VoiceCard } from './VoiceCard.jsx'
+import { DiagnosticsCard } from './Diagnostics.jsx'
 
 
 export function Settings({ wide }) {
@@ -38,6 +39,7 @@ export function Settings({ wide }) {
         </Card>
         <GeminiCard />
         <StorageCard />
+        <DiagnosticsCard Card={Card} />
         <AppCard />
       </div>
     </div>

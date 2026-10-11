@@ -400,6 +400,7 @@ export const setSleep = s => player.set({ sleep: s })
 export const audioClock = () => (current ? audio.currentTime - current.starts[current.k] : audio.currentTime) // seconds into the current sentence
 // For tests: the audio that is loaded right now.
 export const stretchInfo = () => (current ? { from: current.from, to: current.to, seconds: audio.duration } : null)
+export const audioState = () => ({ paused: audio.paused, ended: audio.ended, readyState: audio.readyState, currentTime: audio.currentTime, duration: audio.duration, hasSrc: !!audio.src, rate: audio.playbackRate, volume: audio.volume, muted: audio.muted })
 
 export function stopIf(id) {
   if (player.get().id !== id) return
