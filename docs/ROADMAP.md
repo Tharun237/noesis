@@ -47,7 +47,7 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
 
 5. **Original view.** The source page (PDF) beside or instead of the flowing text, following the playhead and
    highlighting the sentence being read; later the dual-pane "glass" view.
-6. **Languages.** Telugu voices SHIPPED 2026-10-11 (M7, with the Credits and licences screen); Hindi waits for a voice with a usable licence; translation is next. Spec: (docs/specs/M7-languages.md; measurements in docs/research/languages.md).
+6. **Languages.** Telugu voices SHIPPED 2026-10-11 (M7, with the Credits and licences screen); Hindi waits for a voice with a usable licence. Translation SHIPPED 2026-10-11 (M8): any book into English, Telugu or Hindi, from Add a document or from the reader menu, with the customer's Gemini key; tested with a stand-in translator only, real-model quality unchecked. Spec: (docs/specs/M7-languages.md; measurements in docs/research/languages.md).
    The app's pronunciation library is English-only; a multilingual eSpeak build (24 MB, GPL-3.0, loaded only
    for non-English documents) covers the rest. Telugu has two voices a paid product may use; Hindi has none
    with a verified licence yet. Item 5 (sentence on the page) shipped 2026-10-11 as M6.
