@@ -346,7 +346,7 @@ async function prepare(id) {
       const orig = await db.getDoc(refFrom)
       if (!orig?.blocks?.length) throw new Error('The original document was removed from this device.')
       const o = getDoc(refFrom)
-      fromOriginal = { blocks: orig.blocks.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p })), title: d.title, author: o?.author, cover: o?.cover }
+      fromOriginal = { blocks: orig.blocks.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p, data: b.d, src: b.x })), title: d.title, author: o?.author, cover: o?.cover }
       patch(id, { kind: o?.kind || 'text' })
     }
     if (src.kind === 'link') {

@@ -130,7 +130,11 @@ function listenBlock(b, lang = 'en') {
   if (!t || !/[\p{L}\d]/u.test(t)) return null
   const s = b.k === 'h' ? [t.replace(/\.$/, '')] : sentences(t, lang)
   if (!s.length) return null
-  return typeof b.page === 'number' ? { k: b.k, s, p: b.page } : { k: b.k, s }
+  const out = typeof b.page === 'number' ? { k: b.k, s, p: b.page } : { k: b.k, s }
+  if (b.k === 'table' && b.data?.length) out.d = b.data // the table's cells (header row first), for the sound tool
+  const written = b.k === 'math' ? b.src || (b.tex ? b.text : '') : ''
+  if (written) out.x = written // the equation as written (what is spoken is its wording), for the equation tool
+  return out
 }
 export const toListening = (blocks, lang = 'en') => blocks.map(b => listenBlock(b, lang)).filter(Boolean)
 

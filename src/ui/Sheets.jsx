@@ -9,6 +9,7 @@ import { LANGS } from '../lib/lang.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn } from '../lib/library.js'
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
+import { looksMarkdown } from '../ingest/text.js'
 import { voiceName, voicesFor } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
@@ -136,7 +137,7 @@ function AddForm({ wide }) {
     if (!ready) return
     let src
     if (tab === 'file') src = { kind, name: file.name, blob: file }
-    else if (tab === 'text') src = { kind: /^#{1,6}\s/m.test(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
+    else if (tab === 'text') src = { kind: looksMarkdown(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
     else src = { kind: 'link', name: url.trim(), url: url.trim() }
     const named = tab === 'text' && title.trim()
     const id = await addDocument(src, { mode, voice: picked || voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })

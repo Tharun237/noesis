@@ -20,6 +20,7 @@ import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { wordWeights } from '../lib/words.js'
+import { numbersIn, columnsIn } from '../lib/sonify.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, fmtDur } from './kit.jsx'
@@ -32,6 +33,7 @@ import { playerHeight } from './PlayerBar.jsx'
 // Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
 const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
 const Insights = lazy(() => import('./Insights.jsx').then(m => ({ default: m.Insights })))
+const BlockTool = lazy(() => import('./BlockTool.jsx').then(m => ({ default: m.BlockTool })))
 const FloatingReader = lazy(() => import('./FloatingReader.jsx').then(m => ({ default: m.FloatingReader })))
 function FloatingLazy() { return <Suspense fallback={null}><FloatingReader /></Suspense> }
 // Pages view (and its pdf.js engine) loads only when a PDF listener asks for it.
@@ -64,6 +66,7 @@ export function Reader({ wide }) {
     addEventListener('popstate', onPop)
     return () => removeEventListener('popstate', onPop)
   }, [])
+  const [tool, setTool] = useState(null) // the equation, table or figure a tool sheet is open on: { kind, bi }
   const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [voiceState, setVoiceState] = useState('off')
@@ -311,7 +314,12 @@ export function Reader({ wide }) {
             ) : view === 'focus' ? (
               doc && <FocusView doc={doc} active={active} onSeek={onSeek} playing={isPlaying && playId === id} />
             ) : doc && (
-              <div ref={colRef} onClick={e => { if (window.getSelection()?.toString()) return; const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i) }}>
+              <div ref={colRef} onClick={e => {
+                if (window.getSelection()?.toString()) return
+                const t = e.target.closest('[data-tool]') // "Take it apart" on an equation, "Hear as sound" on a table
+                if (t) { setTool({ kind: t.dataset.tool, bi: +t.dataset.b }); return setPanel('tool') }
+                const el = e.target.closest('[data-i]'); if (el) onSeek(+el.dataset.i)
+              }}>
                 {chunks.map((ch, ci) => {
                   const hasActive = active >= ch.s0 && active < ch.s1
                   const hasHit = hit >= ch.s0 && hit < ch.s1
@@ -348,6 +356,8 @@ export function Reader({ wide }) {
       {sheet('insights', 'Insights', panel === 'insights' && doc ? <Suspense fallback={null}><Insights doc={doc} title={d.title}
         onSeek={i => { setPanel(null); onSeek(i) }}
         onAsk={word => { setAskAuto({ q: `Explain the word "${word}" as it is used in this document, in two plain sentences.`, n: Date.now() }); setPanel('ask') }} /></Suspense> : null, 560)}
+      {sheet('tool', tool?.kind === 'sonify' ? 'Heard as sound' : 'The equation, taken apart', panel === 'tool' && tool && doc?.blocks[tool.bi]
+        ? <Suspense fallback={null}><BlockTool key={tool.kind + tool.bi} tool={tool} doc={doc} d={d} onClose={() => setPanel(null)} /></Suspense> : null, 560)}
       {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} /></div>)}
     </div>
   )
@@ -440,7 +450,7 @@ const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, activ
     const end = start + b.s.length
     let m = ''
     if (marked) for (let k = start; k < end; k++) if (marked.has(k)) m += k - start + ','
-    out.push(<Block key={bi} b={b} start={start} active={active >= start && active < end ? active - start : -1} dur={dur} tail={tail}
+    out.push(<Block key={bi} bi={bi} b={b} start={start} active={active >= start && active < end ? active - start : -1} dur={dur} tail={tail}
       hit={hit >= start && hit < end ? hit - start : -1} marks={m} dim={skip && VISUAL_KINDS.has(b.k)} typo={typo} />)
   }
   return <div ref={ref} data-c={ci}>{out}</div>
@@ -594,7 +604,14 @@ function ActiveSentence({ i, text, dur, tail, words }) {
   )
 }
 
-const Block = memo(function Block({ b, start, active, dur, tail, hit, marks, dim, typo }) {
+// What a block offers beyond being read aloud: an equation can be taken apart, numbers can be heard as sound.
+const SOUND_MIN = 3 // fewer numbers than this make no shape worth hearing
+const hasSound = b => (b.d ? columnsIn(b.d).length > 0 : numbersIn(b.s.join(' ')).length >= SOUND_MIN)
+const toolFor = b => (b.k === 'math' ? 'equation' : (b.k === 'table' || b.k === 'fig') && hasSound(b) ? 'sonify' : null)
+const TOOL_LABEL = { equation: 'Take it apart', sonify: 'Hear as sound' }
+
+const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks, dim, typo }) {
+  const tool = useMemo(() => (VISUAL_KINDS.has(b.k) ? toolFor(b) : null), [b])
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const sentences = b.s.map((t, k) => k === active
     ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} />
@@ -614,6 +631,12 @@ const Block = memo(function Block({ b, start, active, dur, tail, hit, marks, dim
         style={{ ...box, margin: '22px 0', padding: '14px 16px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface }}>
         <div style={{ ...label, color: T.accent, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Icon name={b.k === 'code' ? 'text' : b.k === 'math' ? 'sparkle' : 'grid'} size={13} />{VISUAL_LABEL[b.k]}{dim ? ' · skipped' : ''}
+          {tool && (
+            <button type="button" data-tool={tool} data-b={bi}
+              style={{ marginLeft: 'auto', height: 28, padding: '0 12px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 12, fontWeight: 600, letterSpacing: 0, textTransform: 'none', cursor: 'pointer' }}>
+              {TOOL_LABEL[tool]}
+            </button>
+          )}
         </div>
         <div style={{ fontFamily: typo.font, fontSize: typo.size - 2, lineHeight: typo.leading, color: T.sub }}>{sentences}</div>
       </motion.figure>

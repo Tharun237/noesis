@@ -7,11 +7,8 @@ import { settings } from '../lib/settings.js'
 import { hasAiKey, providerName, contextChars } from '../lib/ai.js'
 import { db } from '../lib/db.js'
 import { player, pause, play } from '../lib/player.js'
-import { detectLang } from '../lib/lang.js'
+import { speak, stopSpeaking, voiceForText } from '../lib/aside.js'
 import { scrollBehavior } from '../lib/motion.js'
-import { voicesFor, defaultVoiceFor } from '../lib/voices.js'
-import { synthesize, recordToBlob } from '../lib/tts.js'
-import { sentences } from '../lib/text.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Pulse } from './kit.jsx'
 
@@ -27,36 +24,6 @@ export const QUICK = [
   { id: 'words', label: 'Hard words here', q: 'Pick the five hardest or most technical words in the passage I am listening to now and explain each in one plain sentence. Answer in the language of the document.' },
   { id: 'skim', label: 'Skim this section', q: 'I want to skip ahead. Summarise the rest of the section I am in, in under 120 words. Answer in the language of the document.', skim: true },
 ]
-
-// An answer is spoken by a voice of the language it is written in: the document's own voice when that
-// matches, otherwise the first voice of that language (an English answer about a Telugu book, say).
-const voiceForText = (text, d) => {
-  const lang = detectLang(text)
-  return voicesFor(lang).some(v => v.id === d.voice) ? d.voice : defaultVoiceFor(lang) || d.voice
-}
-
-// Answers can be listened to in the document's own voice, so the user never has to switch to reading.
-const voiceOut = new Audio()
-let speakToken = 0
-async function speak(text, voice, onState) {
-  const my = ++speakToken
-  pause()
-  try {
-    for (const s of sentences(text.replace(/[*#_`>]/g, ''))) {
-      const url = URL.createObjectURL(recordToBlob(await synthesize(s, voice)))
-      if (my !== speakToken) return URL.revokeObjectURL(url)
-      voiceOut.src = url
-      await voiceOut.play()
-      if (my === speakToken) onState(true) // first sound: no longer preparing
-      await new Promise(r => { voiceOut.onended = r; voiceOut.onpause = r })
-      URL.revokeObjectURL(url)
-      if (my !== speakToken) return
-    }
-  } finally {
-    if (my === speakToken) onState(false)
-  }
-}
-const stopSpeaking = () => { speakToken++; voiceOut.pause() }
 
 export function AskPanel({ d, doc, onClose, auto, onSeek }) {
   useStore(settings)

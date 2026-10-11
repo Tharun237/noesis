@@ -49,6 +49,12 @@ function tableText(table) {
 
 const clean = s => s.replace(/\s+/g, ' ').trim()
 
+// The cells themselves, header row first: what is spoken only describes the table, but its numbers can be
+// heard as sound. Bounded, so one huge table cannot swell a stored document.
+export const TABLE_ROWS = 200
+export const TABLE_COLS = 12
+const tableData = table => [...table.querySelectorAll('tr')].slice(0, TABLE_ROWS).map(tr => [...tr.children].slice(0, TABLE_COLS).map(c => clean(c.textContent)))
+
 export function walk(node, out = []) {
   let buf = ''
   const flush = () => { const t = clean(buf); if (t) out.push({ k: 'p', text: t }); buf = '' }
@@ -59,7 +65,7 @@ export function walk(node, out = []) {
     if (SKIP.has(t) || isNoise(n)) continue
     if (/^H[1-6]$/.test(t)) { flush(); const h = clean(inlineText(n)); if (h) out.push({ k: 'h', text: h }); continue }
     if (t === 'PRE') { flush(); out.push({ k: 'code', text: n.textContent }); continue }
-    if (t === 'TABLE') { flush(); out.push({ k: 'table', text: tableText(n) }); continue }
+    if (t === 'TABLE') { flush(); out.push({ k: 'table', text: tableText(n), data: tableData(n) }); continue }
     if (t === 'MATH' && n.getAttribute('display') === 'block') { flush(); out.push({ k: 'math', text: mathText(n) }); continue }
     if (t === 'IMG') {
       const alt = clean(n.getAttribute('alt') || '')
@@ -71,7 +77,7 @@ export function walk(node, out = []) {
       const cap = n.querySelector('figcaption')
       const alt = clean(n.querySelector('img')?.getAttribute('alt') || '')
       const tbl = n.querySelector('table')
-      if (tbl) out.push({ k: 'table', text: tableText(tbl) })
+      if (tbl) out.push({ k: 'table', text: tableText(tbl), data: tableData(tbl) })
       const txt = clean(cap ? inlineText(cap) : alt)
       if (txt) out.push({ k: 'fig', text: /^(fig|figure|image|table)/i.test(txt) ? txt : `Figure: ${txt}` })
       continue

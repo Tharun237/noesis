@@ -100,7 +100,17 @@ graph and a real floating window; NOT tested: a real microphone, real sound, vib
 Shipped later the same day (M19, M20): a concept map across the library (item 18, first version: shared names
 and terms, no AI; labels can overlap) and Insights for a document (item 19: emotional arc by section, English
 only and said so, and a hard-word list that opens Ask).
-Still not built: 11 citation cards, 20 equation exploder, plot sonification, the spatial canvas in 18.
+Shipped 2026-10-12 (M22, M23): item 20, the equation exploder ("Take it apart" on every equation in the Text
+view: what it is for, each part as a row that is spoken when tapped, the whole equation in words; the
+customer's own AI, any provider) and item 21 in part, sound for numbers ("Hear as sound" on a table or
+figure: one column at a time, higher pitch for a larger number, no AI). Verified in the built app with a real
+NVIDIA model: the equation came back in 8 s, a tapped part was spoken, five tones were scheduled for five
+values, Back closed the sheet. NOT verified: the tones by ear, a real phone. Two faults found and fixed on the
+way: imports threw a table's numbers away (they are kept now, as are equations as written), and pasted text
+with a table or an equation but no heading was read as plain prose. Documents added before this keep their
+old form: add them again to get the table sound. Limits: the buttons are in the Text view only; a PDF table
+read without AI narration has no stored cells.
+Still not built: 11 citation cards, binaural study mode in 21, the spatial canvas in 18.
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
 Verified on a real document: the pivot stays at one x for every word, the place is saved. Not built: haptic

@@ -29,6 +29,26 @@ needs a measured overlay), side panels on wide screens, sheet contents and scrim
 drop zone, count-up numbers, the logo draw-on, the library-to-reader shared cover (needs overlapping pages),
 and a last audit for anything that still pops.
 
+## Slice 3, live 2026-10-12
+The dark behind a sheet lightens as the sheet is pulled down. A reading line under the reader's header fills
+with the scroll. Results, errors and status lines that arrive late ease in (`Appear` in the kit: library
+ask, briefing, concept map, listening, focus-sound volume, the three ways to add a document, voice and AI
+test results). Listening totals count up (`Count`). On a wide screen the contents panel slides in and the
+text glides over when a side panel opens (measured only then). Found by the sweep and fixed: on desktop,
+Back from a reader sheet left the document; the desktop sidebar did not scroll and ran under the player.
+Sweep clean on phone and desktop, QA 41/41. Not seen with my own eyes: the contents panel sliding (the test
+documents have no headings), the sheet's dark changing during a real finger pull.
+
+Decided against, with the reason:
+- A highlight that slides from sentence to sentence. Sentences wrap over several lines, so a moving box
+  would need to be measured and redrawn inside text that is built and discarded as it scrolls; the word
+  highlight already moves within the sentence.
+- The contents of a sheet rising one by one after the sheet lands. The sheet arriving is the motion; a
+  second one delays reading. Lists that arrive later (an equation's parts) do stagger.
+- A logo that draws itself. The wordmark is a filled shape, not strokes; drawing it on would need new art.
+Left: the library-to-reader shared cover (needs two pages on screen at once), and the frame-by-frame study
+against the ACS categories page.
+
 ## To do, in this order (most seen first)
 1. **One motion system** (`src/lib/motion.js`): named transitions (`press`, `quick` 0.16 s, `page` 0.24 s,
    `sheet` spring by duration with bounce 0, `settle` layout spring) and variants (`rise`, `fade`,
