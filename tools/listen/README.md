@@ -99,3 +99,14 @@ Measured in selftest.mjs (the metric responds to the synthetic signal it should)
   be checked by ear too, using the WAVs in `out/`.
 - Whisper can misspell names and numbers ("3.5" as "three point five"); those show up in `misheard` and are a
   transcription limit as much as a voice limit.
+
+## Heard by a person (the calibration that counts)
+
+- 2026-10-12, Tharun, three samples made through the app: "Audio's are good enough."
+  - Hindi, NVIDIA `Magpie-Multilingual.HI-IN.Siwei`: gaps 370 to 400 ms, worst join click 0.49, RMS -27 dBFS,
+    roominess 45 ms, pitch movement 3.5 st.
+  - Telugu, `te_IN-padmavathi-medium`: gaps 300 to 600 ms, click 0.01, RMS -19.9 dBFS, roominess 60 ms,
+    brightness 0.00 (almost nothing above 4 kHz).
+  - Telugu, `te_IN-venkatesh-medium`: gaps 340 to 470 ms, click 0.16, RMS -23 dBFS, roominess 65 ms, brightness 0.00.
+  So: a brightness reading of 0.00 was NOT heard as muffled enough to object to; roominess up to 65 ms and gaps
+  up to 600 ms passed.

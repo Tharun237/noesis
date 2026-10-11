@@ -22,6 +22,9 @@ const STARTERS = ['Recap what I have heard so far.', 'Explain what I just heard,
 export const QUICK = [
   { id: 'explain', label: 'Explain that', q: 'Explain what I just heard, simply, in under 90 words. Answer in the language of the document.' },
   { id: 'recap', label: 'Recap so far', q: 'Recap what I have heard so far in under 100 words, so I can pick up where I left off. Answer in the language of the document.' },
+  { id: 'people', label: 'Who is who', q: 'List the people, groups or characters that have appeared so far in what I have heard, each with one short line saying who they are and why they matter. Only up to the point I have reached. Under 120 words. Answer in the language of the document.' },
+  { id: 'argument', label: 'The argument so far', q: 'State the main argument or story so far, up to the point I have reached, as three or four plain sentences: the claim, the reasons given, and what is still open. Answer in the language of the document.' },
+  { id: 'words', label: 'Hard words here', q: 'Pick the five hardest or most technical words in the passage I am listening to now and explain each in one plain sentence. Answer in the language of the document.' },
   { id: 'skim', label: 'Skim this section', q: 'I want to skip ahead. Summarise the rest of the section I am in, in under 120 words. Answer in the language of the document.', skim: true },
 ]
 
