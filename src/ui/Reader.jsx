@@ -10,6 +10,7 @@ import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
+import { wordWeights } from '../lib/words.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, fmtDur } from './kit.jsx'
@@ -423,16 +424,7 @@ function Preparing({ d, doc, pos }) {
   )
 }
 
-// Word timing is estimated from the sentence's real duration, weighted by word length plus
-// punctuation pauses. The voice engine doesn't emit word timestamps; this tracks speech closely in practice.
-function wordWeights(text) {
-  const ws = text.split(' ')
-  const w = ws.map(x => x.length + 1 + (/[,;:—–]$/.test(x) ? 4 : /[.!?…]["”')]?$/.test(x) ? 6 : 0))
-  const sum = w.reduce((a, b) => a + b, 0)
-  let acc = 0
-  return { ws, ends: w.map(x => (acc += x) / sum) }
-}
-
+// Word timing lives in src/lib/words.js so the lock screen can reuse it.
 function ActiveSentence({ i, text, dur, words }) {
   const { ws, ends } = useMemo(() => wordWeights(text), [text])
   const starts = useMemo(() => { let at = 0; return ws.map(x => { const s0 = at; at += x.length + 1; return s0 }) }, [ws])

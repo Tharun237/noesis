@@ -38,6 +38,7 @@ function collect() {
       ['Media Session supported', supported ? 'yes' : 'no'],
       ['Media Session state', ms ? String(ms.playbackState) : 'unsupported'],
       ['Media Session title', ms?.metadata?.title ?? 'none'],
+      ['Media Session artist', ms?.metadata?.artist ?? 'none'],
       ['Notifications permission', typeof Notification === 'undefined' ? 'unsupported' : Notification.permission],
     ]],
     ['Device', [

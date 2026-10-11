@@ -6,7 +6,8 @@ import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { activeEngine, pickSystemVoice } from './engine.js'
 import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches } from './library.js'
-import { toast } from './nav.js'
+import { toast, openSheet } from './nav.js'
+import { wordWeights } from './words.js'
 import { flushNow } from './sync.js'
 
 // Two ways to speak, chosen per device (engine.js):
@@ -152,6 +153,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   const my = ++token
   cancelSpeech()
   player.set({ i, t: offset, waiting: false, word: from })
+  refreshMedia()
   savePosition()
   if (system()) { audio.pause(); return speak(c, i, autoplay, from) }
 
@@ -229,6 +231,7 @@ function finish() {
   const { id, sleep } = player.get()
   stopOutput()
   player.set({ playing: false, waiting: false, sleep: sleep?.doc ? null : sleep })
+  refreshMedia(true)
   if (!id) return
   const s = settings.get()
   patch(id, { finished: true, pos: 0, posF: 0, ...(s.archiveFinished && { archived: true }) })
@@ -252,6 +255,7 @@ audio.addEventListener('timeupdate', () => {
   track(true)
   sleepCheck()
   updatePositionState()
+  refreshMedia()
   // Build the following stretch a few seconds before it is needed, so it holds as much generated audio as possible.
   if (current && !current.pre && audio.duration - audio.currentTime < 6) {
     current.pre = true
@@ -320,6 +324,7 @@ const wordStart = (t, f) => { const at = Math.floor(t.length * f); const k = t.l
 export async function play() {
   const p = player.get()
   if (!p.id) return
+  maybeLockTip()
   if (!(await gateCheck())) {
     pendingStart = true
     player.set({ playing: false })
@@ -331,6 +336,7 @@ export async function play() {
   }
   pendingStart = false
   player.set({ playing: true, gate: null })
+  refreshMedia(true)
   if (system()) return load(p.i, { autoplay: true, from: p.word })
   if (p.waiting) return kickVoice()
   if (!audio.src || !covers(current, p.id, p.i)) return load(p.i, { autoplay: true })
@@ -341,6 +347,7 @@ export function pause() {
   pendingStart = false
   player.set({ playing: false, gate: null })
   stopOutput()
+  refreshMedia(true)
   savePosition(true)
   flushNow()
 }
@@ -431,14 +438,116 @@ export async function seekTime(sec) {
 }
 
 // ── lock screen / headset / car controls ─────────────────────────────────────────
+let sessionArtwork = null
+let sessionCoverKey = null
+let lastMeta = { title: null, artist: null, album: null }
+let lastMetaAt = 0
+
+function artworkFor(d) {
+  const key = d?.cover || '/pwa-512x512.png'
+  if (key !== sessionCoverKey) {
+    sessionCoverKey = key
+    sessionArtwork = d?.cover
+      ? [{ src: d.cover, sizes: '240x320', type: 'image/jpeg' }]
+      : [{ src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' }]
+  }
+  return sessionArtwork
+}
+
+function chapterFor(c, i) {
+  if (!c) return ''
+  for (let k = Math.min(i, c.segs.length - 1); k >= 0; k--) {
+    if (c.segs[k]?.k === 'h') return c.segs[k].t
+  }
+  return ''
+}
+
+function currentPhrase() {
+  const p = player.get()
+  if (!current || system() || !covers(current, p.id, p.i)) return null
+  const text = doc?.segs[p.i]?.t
+  if (!text) return null
+  const j = p.i - current.from
+  const dur = current.starts[j + 1] - current.starts[j]
+  if (!dur || dur <= 0) return null
+  const elapsed = audio.currentTime - current.starts[j]
+  if (elapsed < 0) return null
+  const { ws, ends } = wordWeights(text)
+  if (!ws.length) return null
+  const f = elapsed / dur
+  let idx = ends.findIndex(e => e >= f)
+  if (idx < 0) idx = ws.length - 1
+  let start = Math.max(0, idx - 2)
+  let end = Math.min(ws.length, start + 6)
+  start = Math.max(0, end - 6)
+  let s = ws.slice(start, end).join(' ')
+  if (!s) return null
+  if (start > 0) s = '… ' + s
+  if (end < ws.length) s = s + ' …'
+  return s
+}
+
+function pushMeta(meta, force = false) {
+  if (!('mediaSession' in navigator) || !meta) return
+  if (meta.title === lastMeta.title && meta.artist === lastMeta.artist && meta.album === lastMeta.album) return
+  const now = Date.now()
+  if (!force && now - lastMetaAt < 1000) return
+  lastMeta = meta
+  lastMetaAt = now
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: meta.title,
+      artist: meta.artist,
+      album: meta.album,
+      artwork: artworkFor(getDoc(player.get().id)),
+    })
+  } catch { /* unsupported */ }
+}
+
+function defaultMeta() {
+  const p = player.get()
+  const d = getDoc(p.id)
+  if (!d) return null
+  return { title: d.title, artist: d.author || 'Noesis', album: chapterFor(doc, p.i) }
+}
+
+function refreshMedia(force = false) {
+  const p = player.get()
+  const d = getDoc(p.id)
+  if (!d) return
+  if (p.playing && !system() && settings.get().lockScreenWords) {
+    const phrase = currentPhrase()
+    if (phrase) pushMeta({ title: phrase, artist: d.title, album: chapterFor(doc, p.i) }, force)
+    return // between sentences there is no phrase for a moment: keep the last one instead of flashing the title
+  }
+  pushMeta(defaultMeta(), force)
+}
+
 function setSession(d) {
   if (!('mediaSession' in navigator)) return
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: d.title,
-    artist: d.author || 'Noesis',
-    album: 'Noesis',
-    artwork: d.cover ? [{ src: d.cover, sizes: '240x320', type: 'image/jpeg' }] : [{ src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' }],
-  })
+  sessionCoverKey = null
+  lastMeta = { title: null, artist: null, album: null }
+  lastMetaAt = 0
+  try {
+    const meta = { title: d.title, artist: d.author || 'Noesis', album: '' }
+    lastMeta = meta
+    lastMetaAt = Date.now()
+    navigator.mediaSession.metadata = new MediaMetadata({ ...meta, artwork: artworkFor(d) })
+  } catch { /* unsupported */ }
+}
+
+// One-time help for Android: the lock-screen controls only appear if the phone lets Chrome show notifications,
+// and a web app cannot check that. Offered once playback has run for a few seconds (so it cannot be replaced
+// at once by a "preparing" message), and only marked as seen when it was really shown.
+let lockTipTimer = 0
+function maybeLockTip() {
+  if (!/Android/i.test(navigator.userAgent) || settings.get().lockTipSeen || lockTipTimer) return
+  lockTipTimer = setTimeout(() => {
+    lockTipTimer = 0
+    if (!player.get().playing || settings.get().lockTipSeen) return
+    settings.set({ lockTipSeen: true })
+    toast('Want play and pause on your lock screen?', { label: 'Show me how', run: () => openSheet('lockscreen') })
+  }, 8000)
 }
 
 let lastPosUpdate = 0
@@ -463,5 +572,9 @@ if ('mediaSession' in navigator) {
   on('seekbackward', prevSentence)
   on('seekforward', nextSentence)
   on('seekto', e => seekTime(e.seekTime))
-  player.sub(() => { navigator.mediaSession.playbackState = player.get().playing ? 'playing' : 'paused' })
+  player.sub(() => {
+    navigator.mediaSession.playbackState = player.get().playing ? 'playing' : 'paused'
+    if (!player.get().playing) refreshMedia(true)
+  })
+  settings.sub(() => refreshMedia(true))
 }

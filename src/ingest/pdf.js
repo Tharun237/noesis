@@ -1,4 +1,5 @@
 import { pause } from '../lib/text.js'
+import { cleanMeta } from './meta.js'
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -201,18 +202,17 @@ export async function readPdf(data, filename, onProgress) {
 
   const kept = blocks.filter(b => b.k !== 'p' || !isResidue(b.text))
   const info = (await pdf.getMetadata().catch(() => null))?.info || {}
-  const sane = t => t && t.length > 3 && !/untitled|^microsoft word|\.(docx?|dvi|tex|pdf)$/i.test(t)
-  const firstPage = pages[0] || []
-  const biggest = [...firstPage].sort((a, b) => b.size - a.size)[0]
-  const title = sane(info.Title?.trim()) ? info.Title.trim()
-    : biggest && biggest.size > body * 1.3 ? biggest.text
-    : filename.replace(/\.pdf$/i, '')
+  const firstHeading = kept.find(b => b.k === 'h')?.text || ''
+  const { title, author } = cleanMeta(
+    { title: info.Title, author: info.Author },
+    { fileName: filename, firstHeading },
+  )
   // A cover is decoration: never let a slow image decode (huge scanned page 1) hold up the document.
   const cover = await Promise.race([renderPage(pdf, 1, 240, 0.7), new Promise(r => setTimeout(r, 6000, null))]).catch(() => null)
 
   return {
     title,
-    author: info.Author?.trim() || '',
+    author,
     cover,
     blocks: kept.map(({ k, text, page }) => ({ k, text, page: page + 1 })),
     pdf,

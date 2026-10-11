@@ -20,9 +20,46 @@ export function Sheets({ wide }) {
       <Sheet open={sheet === 'add'} onClose={closeSheet} wide={wide} title="Add document"><AddForm wide={wide} /></Sheet>
       <Sheet open={sheet === 'voice'} onClose={closeSheet} wide={wide} title="Choose a voice" width={520}><VoicePicker /></Sheet>
       <Sheet open={sheet === 'collect'} onClose={closeSheet} wide={wide} title="Add to collection" width={440}><CollectPicker /></Sheet>
+      <Sheet open={sheet === 'lockscreen'} onClose={closeSheet} wide={wide} title="Controls on your lock screen" width={520}><LockScreenGuide wide={wide} /></Sheet>
     </>
   )
 }
+
+function LockScreenGuide({ wide }) {
+  return (
+    <div style={{ padding: wide ? '28px 28px 30px' : '18px 20px 24px', display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', flex: 1, color: T.text }}>Controls on your lock screen</h2>
+        <IconButton icon="close" label="Close" onClick={closeSheet} />
+      </div>
+      <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>
+        While Noesis is playing, pull down your notifications. If you see the book with play and pause, you&apos;re set. If not, your phone is hiding Chrome&apos;s notifications:
+      </div>
+      <ol style={{ margin: 0, paddingLeft: 20, display: 'grid', gap: 8, fontSize: 14, color: T.text, lineHeight: 1.5 }}>
+        <li>Open your phone&apos;s Settings, then Apps.</li>
+        <li>Find Chrome, then Notifications.</li>
+        <li>Turn on Show notifications and Lock screen notifications.</li>
+      </ol>
+      <div style={{ display: 'grid', gap: 10, paddingTop: 14, borderTop: `1px solid ${T.border}` }}>
+        <div style={{ fontSize: 12.5, color: T.sub }}>The names differ a little between phones:</div>
+        {PHONE_PATHS.map(([brand, path]) => (
+          <div key={brand} style={{ display: 'grid', gap: 3 }}>
+            <div style={{ ...label, color: T.sub }}>{brand}</div>
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.45 }}>{path}</div>
+          </div>
+        ))}
+      </div>
+      <div><Button kind="primary" full onClick={closeSheet}>Done</Button></div>
+    </div>
+  )
+}
+
+// Where each Android skin keeps Chrome's notification switch (menu names as of 2026; they vary by version).
+const PHONE_PATHS = [
+  ['Xiaomi · Redmi · Poco', 'Settings → Apps → Manage apps → Chrome → Notifications'],
+  ['OnePlus · Oppo · Realme', 'Settings → Apps → App management → Chrome → Manage notifications'],
+  ['Samsung', 'Settings → Notifications → App notifications → Chrome'],
+]
 
 // ── voice preview ──────────────────────────────────────────────────────────────
 const previewAudio = new Audio()

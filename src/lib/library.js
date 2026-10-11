@@ -7,6 +7,7 @@ import { isVoice, fromKokoro } from './voices.js'
 import { activeEngine } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
+import { cleanMeta } from '../ingest/meta.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
 import { touch, configureSync, startSync, downloadContent, deviceName } from './sync.js'
 
@@ -343,6 +344,7 @@ export async function boot() {
     voicedSet(k.slice(0, j)).add(+k.slice(j + 1))
   }
   library.set({ docs: metas.sort((a, b) => b.createdAt - a.createdAt), loaded: true })
+  void repairMeta(metas)
   await retireKokoro(metas)
   persistStorage()
   kickPrep()
@@ -354,6 +356,23 @@ export async function boot() {
     else if (d.total && !d.contentVer) patch(d.id, { contentVer: d.createdAt })
   }
   startSync().catch(e => console.warn('Sync failed to start:', e))
+}
+
+// Documents already in the library may carry junk PDF metadata titles/authors. Repair them
+// after the library is shown so startup never waits; yield between documents.
+async function repairMeta(metas) {
+  for (const d of metas) {
+    try {
+      if (d.renamed) continue
+      const src = await db.getSource(d.id)
+      if (!src?.name) continue
+      const stored = await db.getDoc(d.id).catch(() => null)
+      const firstHeading = stored?.blocks?.find(b => b.k === 'h')?.s?.join(' ') || ''
+      const cleaned = cleanMeta({ title: d.title, author: d.author }, { fileName: src.name, firstHeading })
+      if (cleaned.title !== d.title || cleaned.author !== (d.author || '')) patch(d.id, cleaned)
+    } catch { /* one bad document must not stop the repair */ }
+    await pause()
+  }
 }
 
 // One-time move off the retired Kokoro engine: free its ~310 MB model cache, and give documents in a

@@ -19,6 +19,8 @@ export const DEFAULTS = {
   sort: 'recent', // library order, also the order "up next" plays in
   autoplayNext: false, // when a document ends, play the next one in the queue
   archiveFinished: false, // move finished documents to Archived
+  lockScreenWords: true, // show the words being read on the lock screen
+  lockTipSeen: false, // the lock-screen guide toast was shown once on Android
   // Reading
   readFont: 'serif', // serif (Literata) | sans (DM Sans)
   readSize: 19,

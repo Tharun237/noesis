@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, toast, goBack } from '../lib/nav.js'
+import { ui, toast, goBack, openSheet } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
 import { deleteAllAudio } from '../lib/library.js'
 import { Button, IconButton, Toggle, Field, inputStyle } from './kit.jsx'
@@ -32,6 +32,16 @@ export function Settings({ wide }) {
           </Field>
           <Toggle checked={s.skipVisuals} onChange={v => settings.set({ skipVisuals: v })} labelText="Skip figure, table, equation and code descriptions"
             hint="They stay in the transcript; playback jumps over them." />
+          <Toggle checked={s.lockScreenWords} onChange={v => settings.set({ lockScreenWords: v })} labelText="Show the words being read on the lock screen"
+            hint="The notification follows the speech, a few words at a time." />
+          {/Android/i.test(navigator.userAgent) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Lock-screen controls</div>
+              </div>
+              <Button onClick={() => openSheet('lockscreen')}>Show me how</Button>
+            </div>
+          )}
           <Toggle checked={s.autoplayNext} onChange={v => settings.set({ autoplayNext: v })} labelText="Play the next document automatically"
             hint="When a document ends, the next unfinished one in your queue starts, in the library's sort order." />
           <Toggle checked={s.archiveFinished} onChange={v => settings.set({ archiveFinished: v })} labelText="Archive documents when finished"
