@@ -12,6 +12,14 @@ wide) and a mid-transition screenshot. Each motion has a PURPOSE written beside 
 - Player: cross-fades when it only changes shape. Status island: layout animation, text slides.
 - Voice display. Reduced motion: `MotionConfig reducedMotion="user"` + CSS backstop, spinner kept.
 
+## Slice 1, live 2026-10-12
+Item 1 (timed springs `T.spring` / `T.press` / `T.settle`, `MotionConfig` default), item 2 except the shared
+cover between library and reader (pages use `mode="wait"`, so the two covers are never on screen together:
+it needs overlapping pages, not done), item 3 (already there), item 4 view cross-fade only, item 5 cover as a
+shared element between the small and full player, item 7. Sweep clean, QA 41/41. Not seen with my own eyes:
+the shelf name in the bar (the test library is too short to scroll).
+Left: 4 (progress line, sentence fade, side panels), 6, 8, 9, 10, and the library-to-reader shared cover.
+
 ## To do, in this order (most seen first)
 1. **One motion system** (`src/lib/motion.js`): named transitions (`press`, `quick` 0.16 s, `page` 0.24 s,
    `sheet` spring by duration with bounce 0, `settle` layout spring) and variants (`rise`, `fade`,
