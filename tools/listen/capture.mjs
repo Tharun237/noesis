@@ -78,7 +78,8 @@ export async function capture({ text, voice, url = APP_URL, onStatus = () => {} 
     page.on('pageerror', e => pageErrors.push(String(e)))
 
     await page.goto(url)
-    await page.evaluate(v => localStorage.setItem('noesis.settings.v1', JSON.stringify({ voice: v, voiceEngine: 'natural' })), voice)
+    // NOESIS_SETTINGS (JSON) adds settings for the run, e.g. a provider key for an online voice. Never put a key in this file.
+    await page.evaluate(([v, extra]) => localStorage.setItem('noesis.settings.v1', JSON.stringify({ voice: v, voiceEngine: 'natural', ...extra })), [voice, JSON.parse(process.env.NOESIS_SETTINGS || '{}')])
     await page.reload()
     const addButton = page.getByRole('button', { name: 'Add document' }).first()
     await addButton.waitFor({ timeout: 60000 })

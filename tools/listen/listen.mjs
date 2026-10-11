@@ -37,12 +37,12 @@ function parseArgs(argv) {
   }
   if (all) voices.push(...VOICES.map(v => v.id))
   if (!voices.length) throw new Error('give at least one --voice <id> (or --all)')
-  for (const v of voices) if (!VOICES.some(x => x.id === v)) throw new Error(`unknown voice "${v}". Known: ${VOICES.map(x => x.id).join(', ')}`)
+  for (const v of voices) if (!v.startsWith('nv:') && !VOICES.some(x => x.id === v)) throw new Error(`unknown voice "${v}". Known: ${VOICES.map(x => x.id).join(', ')}`)
   return { voices: [...new Set(voices)], text }
 }
 
 async function measure(voice, text) {
-  const dir = join(OUT, voice)
+  const dir = join(OUT, voice.replace(/[^\w.-]/g, '_')) // an online voice id has a colon, which Windows refuses in a folder name
   mkdirSync(dir, { recursive: true })
   const t0 = Date.now()
   const cap = await capture({ text, voice, onStatus: s => process.stderr.write(`  [${voice}] ${s}\n`) })
