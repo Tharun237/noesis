@@ -97,7 +97,10 @@ voice (binaural Focus / Calm, brown noise) and haptic rhythm (items 21 in part, 
 (Document Picture-in-Picture, desktop Chrome and Edge). Also three more one-tap questions (Who is who, The
 argument so far, Hard words here: the cards in item 14). Tested with a stand-in recogniser, a counted audio
 graph and a real floating window; NOT tested: a real microphone, real sound, vibration on a phone.
-Still not built: 11 citation cards, 18 knowledge graph, 19 emotional arc, 20 equation exploder, plot sonification.
+Shipped later the same day (M19, M20): a concept map across the library (item 18, first version: shared names
+and terms, no AI; labels can overlap) and Insights for a document (item 19: emotional arc by section, English
+only and said so, and a hard-word list that opens Ask).
+Still not built: 11 citation cards, 20 equation exploder, plot sonification, the spatial canvas in 18.
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
 Verified on a real document: the pivot stays at one x for every word, the place is saved. Not built: haptic
