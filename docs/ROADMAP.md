@@ -91,6 +91,13 @@ The "Other" AI provider was walked for real on 2026-10-12 against a local OpenAI
 
 ## Sprint 4: library intelligence and insight
 
+Shipped 2026-10-12 (M16-M18, modules by Haiku agents in parallel worktrees because Muse was rate-limited; wiring
+and tests by Opus): voice commands with hands-free bookmarks (items 12 by voice, 13), focus sounds under the
+voice (binaural Focus / Calm, brown noise) and haptic rhythm (items 21 in part, 22), the floating reader
+(Document Picture-in-Picture, desktop Chrome and Edge). Also three more one-tap questions (Who is who, The
+argument so far, Hard words here: the cards in item 14). Tested with a stand-in recogniser, a counted audio
+graph and a real floating window; NOT tested: a real microphone, real sound, vibration on a phone.
+Still not built: 11 citation cards, 18 knowledge graph, 19 emotional arc, 20 equation exploder, plot sonification.
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
 Verified on a real document: the pivot stays at one x for every word, the place is saved. Not built: haptic
