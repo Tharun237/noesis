@@ -248,7 +248,13 @@ export function Reader({ wide }) {
             Pages aren't linked to the audio for this document. Add it again to link them.
           </div>
         )}
-        {searching && <SearchBar doc={doc} onHit={setHit} onClose={() => setSearching(false)} />}
+        <AnimatePresence initial={false}>
+          {searching && (
+            <motion.div key="find" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6, transition: { duration: 0.1, ease: 'easeIn' } }} transition={{ duration: 0.18, ease: T.ease }}>
+              <SearchBar doc={doc} onHit={setHit} onClose={() => setSearching(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -262,7 +268,9 @@ export function Reader({ wide }) {
         <article style={{ flex: 1, minWidth: 0, padding: wide ? `48px 32px ${120 + bottom}px` : `28px 20px ${100 + bottom}px`, marginRight: askDocked ? T.askW : 0 }}>
           <div style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', marginBottom: 36 }}>
-              <Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} />
+              <motion.div initial={{ scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.settle} style={{ flexShrink: 0, transformOrigin: '0 100%' }}>
+                <Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} />
+              </motion.div>
               <div style={{ minWidth: 0, display: 'grid', gap: 8 }}>
                 <h1 style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</h1>
                 <div style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>

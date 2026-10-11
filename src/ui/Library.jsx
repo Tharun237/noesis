@@ -252,19 +252,26 @@ function MobileHeader({ summary }) {
           <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: T.text }}>{name}</h1>
         </div>
       )}
-      {searching && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 12px 16px' }}>
-          <div style={{ flex: 1 }}><SearchBox value={query} autoFocus /></div>
-          <IconButton icon="close" label="Close search" onClick={closeSearch} />
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {searching && (
+          <motion.div key="search" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6, transition: { duration: 0.1, ease: 'easeIn' } }}
+            transition={{ duration: 0.18, ease: T.ease }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 12px 16px' }}>
+            <div style={{ flex: 1 }}><SearchBox value={query} autoFocus /></div>
+            <IconButton icon="close" label="Close search" onClick={closeSearch} />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {summary && <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 16px 12px', scrollbarWidth: 'none' }}>
         {chips.map(([id, name]) => (
-          <button key={id} type="button" onClick={() => ui.set({ filter: id })}
+          <motion.button key={id} type="button" onClick={() => ui.set({ filter: id })} whileTap={{ scale: 0.96 }} transition={T.press}
             style={{
-              height: 32, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${filter === id ? T.text : T.border}`, flexShrink: 0,
-              background: filter === id ? T.text : 'transparent', color: filter === id ? T.bg : T.sub, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}>{name}</button>
+              position: 'relative', height: 32, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, flexShrink: 0,
+              background: 'transparent', color: filter === id ? T.bg : T.sub, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}>
+            {/* The white pill is one object: it slides to the shelf that was chosen, so the eye follows the choice. */}
+            {filter === id && <motion.span layoutId="shelf-pill" transition={T.spring} style={{ position: 'absolute', inset: -1, borderRadius: T.r.pill, background: T.text }} />}
+            <span style={{ position: 'relative' }}>{name}</span>
+          </motion.button>
         ))}
         <button type="button" aria-label="New collection" onClick={() => { const n = prompt('New collection name'); if (n?.trim()) ui.set({ filter: addCollection(n) }) }}
           style={{ height: 32, width: 32, borderRadius: T.r.pill, border: `1px dashed ${T.borderHi}`, background: 'transparent', color: T.sub, display: 'grid', placeItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
