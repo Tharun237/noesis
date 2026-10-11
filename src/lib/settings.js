@@ -1,12 +1,16 @@
 import { createStore } from './store.js'
 
-// Per-device preferences. The Gemini key lives only here (localStorage on this device) and is
-// sent only to generativelanguage.googleapis.com — never to Noesis servers.
+// Per-device preferences. The AI keys live only here (localStorage on this device). The
+// Gemini key is sent only to generativelanguage.googleapis.com; the NVIDIA key and the text
+// travel through Noesis's relay (/api/nvidia) to reach NVIDIA — never anywhere else.
 const KEY = 'noesis.settings.v1'
 
 export const DEFAULTS = {
+  aiProvider: 'gemini', // gemini | nvidia — which provider AI text features use
   geminiKey: '',
   geminiModel: 'gemini-flash-latest',
+  nvidiaKey: '',
+  nvidiaModel: '', // no default invented: the customer picks one from the list their key returns
   voice: 'en_GB-alba-medium', // default voice for new documents (voices.js)
   voiceTone: 'natural', // natural | clear | warm | bright — generation-time equalizer (tone.js)
   speed: 1,

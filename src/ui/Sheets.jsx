@@ -4,6 +4,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, closeSheet, go, toast } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
+import { hasAiKey } from '../lib/ai.js'
 import { LANGS } from '../lib/lang.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn } from '../lib/library.js'
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
@@ -93,7 +94,9 @@ function PreviewButton({ voice, busy, setBusy }) {
 function AddForm({ wide }) {
   const prefill = useStore(ui, s => s.prefill)
   const s = useStore(settings)
-  const keyed = hasKey()
+  const keyed = hasAiKey()
+  const geminiKeyed = hasKey()
+  const nvidiaChosen = s.aiProvider === 'nvidia'
   const [tab, setTab] = useState(prefill?.tab || 'file')
   const [file, setFile] = useState(prefill?.file || null)
   const [text, setText] = useState(prefill?.text || '')
@@ -106,7 +109,7 @@ function AddForm({ wide }) {
   const voiceLang = target || 'en'
   const langVoices = voicesFor(voiceLang)
   const picked = langVoices.some(v => v.id === voice) ? voice : langVoices[0]?.id
-  const [ai, setAi] = useState(keyed && s.aiNarration)
+  const [ai, setAi] = useState(geminiKeyed && s.aiNarration)
   const [busy, setBusy] = useState(null)
   const [over, setOver] = useState(false)
   const inputRef = useRef(null)
@@ -127,7 +130,7 @@ function AddForm({ wide }) {
     else if (tab === 'text') src = { kind: /^#{1,6}\s/m.test(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
     else src = { kind: 'link', name: url.trim(), url: url.trim() }
     const named = tab === 'text' && title.trim()
-    const id = await addDocument(src, { mode, voice: picked || voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })
+    const id = await addDocument(src, { mode, voice: picked || voice, ai: ai && geminiKeyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })
     if (voice !== s.voice) settings.set({ voice })
     if (mode !== s.mode && keyed) settings.set({ mode })
     history.replaceState({ view: 'reader', docId: id, depth: history.state?.depth || 1 }, '') // the sheet's history entry becomes the reader
@@ -175,12 +178,12 @@ function AddForm({ wide }) {
         </Field>
       )}
 
-      <Field title="Listen to" hint={keyed ? null : 'Summaries need a free Gemini key. Add one in Settings.'}>
+      <Field title="Listen to" hint={keyed ? null : 'Summaries need a free AI key. Add one in Settings.'}>
         <Segmented value={mode} onChange={setMode} disabled={keyed ? [] : ['long', 'short']} size="sm"
           options={[{ value: 'full', label: 'Full text' }, { value: 'long', label: 'Long summary' }, { value: 'short', label: 'Short summary' }]} />
       </Field>
 
-      <Field title="Language" hint={keyed ? null : 'Translation needs a free Gemini key. Add one in Settings.'}>
+      <Field title="Language" hint={keyed ? null : 'Translation needs a free AI key. Add one in Settings.'}>
         <Segmented value={target || 'orig'} onChange={v => setTarget(v === 'orig' ? undefined : v)} disabled={keyed ? [] : ['en', 'te', 'hi']} size="sm"
           options={[{ value: 'orig', label: 'Original' }, { value: 'en', label: 'English' }, { value: 'te', label: 'Telugu' }, { value: 'hi', label: 'Hindi' }]} />
       </Field>
@@ -202,7 +205,7 @@ function AddForm({ wide }) {
       </Field>
       )}
 
-      {keyed && aiApplies && (
+      {geminiKeyed && !nvidiaChosen && aiApplies && (
         <Toggle checked={ai} onChange={setAi} labelText="AI narration"
           hint="Gemini reads each page image: it describes figures and tables, speaks math, and fixes broken text. Uses your own key." />
       )}
@@ -252,7 +255,8 @@ function VoicePicker() {
 function LanguagePicker() {
   const docId = useStore(ui, s => s.docId)
   const d = useStore(library, s => s.docs.find(x => x.id === docId))
-  const keyed = useStore(settings, s => s.geminiKey.trim().length > 20)
+  useStore(settings)
+  const keyed = hasAiKey()
   const [busy, setBusy] = useState(null)
   if (!d) return null
   const choose = async lang => {
@@ -271,7 +275,7 @@ function LanguagePicker() {
         <div style={{ fontSize: 20, fontWeight: 700, flex: 1, color: T.text }}>Listen in another language</div>
         <IconButton icon="close" label="Close" onClick={closeSheet} />
       </div>
-      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Uses your Gemini key. A long book takes several minutes the first time.</div>
+      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Uses your AI key. A long book takes several minutes the first time.</div>
       <div style={{ display: 'grid', gap: 2 }}>
         {Object.entries(LANGS).map(([code, l]) => (
           <button key={code} type="button" disabled={!keyed || !!busy} onClick={() => choose(code)}
@@ -282,7 +286,7 @@ function LanguagePicker() {
           </button>
         ))}
       </div>
-      {!keyed && <div style={{ padding: '12px 12px 0', fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>Translation needs a free Gemini key. Add one in Settings.</div>}
+      {!keyed && <div style={{ padding: '12px 12px 0', fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>Translation needs a free AI key. Add one in Settings.</div>}
     </div>
   )
 }

@@ -3,7 +3,8 @@ import { motion } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { go } from '../lib/nav.js'
-import { settings, hasKey } from '../lib/settings.js'
+import { settings } from '../lib/settings.js'
+import { hasAiKey, providerName } from '../lib/ai.js'
 import { db } from '../lib/db.js'
 import { player, pause } from '../lib/player.js'
 import { synthesize, recordToBlob } from '../lib/tts.js'
@@ -37,8 +38,8 @@ async function speak(text, voice, onState) {
 const stopSpeaking = () => { speakToken++; voiceOut.pause() }
 
 export function AskPanel({ d, doc, onClose }) {
-  const key = useStore(settings, s => s.geminiKey)
-  const model = useStore(settings, s => s.geminiModel)
+  useStore(settings)
+  const keyed = hasAiKey()
   const playId = useStore(player, s => s.id)
   const pi = useStore(player, s => s.i)
   const [msgs, setMsgs] = useState([])
@@ -66,7 +67,7 @@ export function AskPanel({ d, doc, onClose }) {
     let answer = ''
     try {
       await askStream({
-        key, model, title: d.title, context: askContext(doc.blocks, doc.starts, at), history, question: question.trim(),
+        title: d.title, context: askContext(doc.blocks, doc.starts, at), history, question: question.trim(),
         nowHearing: doc.segs[at]?.t, signal: abort.current.signal,
         onText: t => { answer += t; setMsgs(m => [...m.slice(0, -1), { role: 'model', text: answer }]) },
       })
@@ -79,7 +80,7 @@ export function AskPanel({ d, doc, onClose }) {
         const quota = e.status === 429 || /429|quota|rate limit/i.test(e.message || '')
         setMsgs(m => [...m.slice(0, -1), {
           role: 'model',
-          text: quota ? "Google's free quota is full right now. Try again in a minute."
+          text: quota ? `${providerName()}'s free quota is full right now. Try again in a minute.`
             : offline ? "You're offline. Your question is still in the box."
             : "Couldn't get an answer. Try again.",
           error: true,
@@ -100,12 +101,12 @@ export function AskPanel({ d, doc, onClose }) {
         <IconButton icon="close" label="Close" size={34} iconSize={16} onClick={onClose} />
       </div>
 
-      {!hasKey() ? (
+      {!keyed ? (
         <div style={{ padding: 22, display: 'grid', gap: 14 }}>
           <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
-            Ask questions, get explanations of what you just heard, and hear the answers read aloud. This uses your own free Google Gemini key, which stays on this device.
+            Ask questions, get explanations of what you just heard, and hear the answers read aloud. This uses your own free AI key, which stays on this device.
           </div>
-          <Button kind="primary" icon="settings" onClick={() => go('settings')}>Add a free Gemini key</Button>
+          <Button kind="primary" icon="settings" onClick={() => go('settings')}>Add a free AI key</Button>
         </div>
       ) : (
         <>

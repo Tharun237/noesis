@@ -1,9 +1,8 @@
 // Translation into another listening language (M8). Pure helpers run in Node tests;
-// translateBlocks calls Gemini the same way summarize does (see src/lib/gemini.js).
+// translateBlocks sends each chunk through the AI door (src/lib/ai.js), so it works
+// with either provider (Gemini or NVIDIA).
 import { LANGS } from './lang.js'
-
-const BASE = 'https://generativelanguage.googleapis.com/v1beta'
-const sleep = ms => new Promise(r => setTimeout(r, ms))
+import { aiText } from './ai.js'
 
 // Block kinds that are descriptions of non-text (figures, tables, equations, code):
 // they are kept unchanged and never sent for translation.
@@ -59,42 +58,10 @@ export function parseReply(text, expected) {
   return parsed
 }
 
-// One Gemini request, exactly like summarize's request: same endpoint shape, same
-// retry and rate-limit handling, same onRetry (seconds to wait, null when clear).
-async function requestTexts({ key, model, prompt, signal, onRetry }) {
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: 'application/json',
-      responseSchema: { type: 'ARRAY', items: { type: 'STRING' } },
-    },
-  }
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch(`${BASE}/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    })
-    if (res.ok) {
-      onRetry?.(null)
-      const r = await res.json()
-      const text = r.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')
-      if (!text) throw new Error('Gemini returned no text')
-      return text
-    }
-    const err = await res.json().catch(() => ({}))
-    const msg = err.error?.message || `Gemini error ${res.status}`
-    if ((res.status === 429 || res.status >= 500) && attempt < 8) {
-      const retry = err.error?.details?.find(d => d.retryDelay)?.retryDelay
-      const ms = retry ? parseFloat(retry) * 1000 + 500 : Math.min(60_000, 2000 * 2 ** attempt)
-      onRetry?.(Math.max(1, Math.round(ms / 1000)))
-      await sleep(ms)
-      continue
-    }
-    throw Object.assign(new Error(msg), { status: res.status })
-  }
+// One AI request per chunk through the provider door: same prompt, same JSON-array
+// contract, same onRetry (seconds to wait, null when clear) for either provider.
+async function requestTexts({ prompt, signal, onRetry }) {
+  return aiText({ prompt, json: true, signal, onRetry })
 }
 
 // New blocks: one output block per input block, same order, same kind and page;
@@ -103,7 +70,7 @@ async function requestTexts({ key, model, prompt, signal, onRetry }) {
 // onProgress(done / total) counts characters translated. saved (Map chunkIndex →
 // strings) skips finished chunks; onChunk(index, strings) reports each chunk.
 export async function translateBlocks(blocks, target, opts = {}) {
-  const { key, model, onProgress, signal, onRetry, saved, onChunk } = opts
+  const { onProgress, signal, onRetry, saved, onChunk } = opts
   const languageName = LANGS[target]?.name || target
   const chunks = chunkBlocks(blocks)
   const total = chunks.flat().reduce((a, i) => a + (blocks[i].text || '').length, 0)
@@ -118,14 +85,14 @@ export async function translateBlocks(blocks, target, opts = {}) {
     if (Array.isArray(prev) && prev.length === idx.length && prev.every(x => typeof x === 'string')) {
       strings = prev
     } else {
-      const raw = await requestTexts({ key, model, prompt: buildPrompt(texts, languageName), signal, onRetry })
+      const raw = await requestTexts({ prompt: buildPrompt(texts, languageName), signal, onRetry })
       try {
         strings = parseReply(raw, texts.length)
       } catch (e) {
         if (idx.length < 2) throw e
         const mid = Math.ceil(idx.length / 2)
-        const first = await requestTexts({ key, model, prompt: buildPrompt(texts.slice(0, mid), languageName), signal, onRetry })
-        const second = await requestTexts({ key, model, prompt: buildPrompt(texts.slice(mid), languageName), signal, onRetry })
+        const first = await requestTexts({ prompt: buildPrompt(texts.slice(0, mid), languageName), signal, onRetry })
+        const second = await requestTexts({ prompt: buildPrompt(texts.slice(mid), languageName), signal, onRetry })
         strings = [...parseReply(first, mid), ...parseReply(second, texts.length - mid)]
       }
     }

@@ -1,6 +1,7 @@
 import { createStore, uid } from './store.js'
 import { db, persistStorage } from './db.js'
 import { settings, hasKey } from './settings.js'
+import { hasAiKey, providerName } from './ai.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -352,13 +353,13 @@ async function prepare(id) {
     patch(id, { scanned: !!parsed.scanned })
 
     if (d.mode !== 'full') {
-      if (!hasKey()) throw new Error('Summaries need a free Gemini key. Add one in Settings.')
+      if (!hasAiKey()) throw new Error('Summaries need a free AI key. Add one in Settings.')
       patch(id, { status: 'narrating', stage: d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary', prep: 0 })
       const { summarize } = await import('./gemini.js')
       const text = blocks.map(b => (b.k === 'h' ? `\n## ${b.text}\n` : b.text)).join('\n')
       const stage = d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary'
-      blocks = await summarize({ text, title: getDoc(id).title, mode: d.mode, key: s.geminiKey, model: s.geminiModel,
-        onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }) })
+      blocks = await summarize({ text, title: getDoc(id).title, mode: d.mode,
+        onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }) })
     }
 
     // Already in the wanted language? Script tells Telugu and Hindi apart; for English the words must agree
@@ -366,7 +367,7 @@ async function prepare(id) {
     const before = blocks.map(b => b.text || '').join('\n')
     const already = detectLang(before) === d.target && (d.target !== 'en' || isEnglish(before))
     if (d.target && LANGS[d.target] && !already) {
-      if (!hasKey()) throw new Error('Translation needs a free Gemini key. Add one in Settings.')
+      if (!hasAiKey()) throw new Error('Translation needs a free AI key. Add one in Settings.')
       const languageName = LANGS[d.target].name
       const stage = `Translating into ${languageName}`
       patch(id, { status: 'narrating', stage, prep: 0 })
@@ -374,9 +375,8 @@ async function prepare(id) {
       const stored = await db.getTranslation(id)
       const saved = stored instanceof Map ? stored : new Map()
       blocks = await translateBlocks(blocks, d.target, {
-        key: s.geminiKey, model: s.geminiModel,
         onProgress: stepped(id),
-        onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }),
+        onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }),
         saved,
         onChunk: (index, strings) => { saved.set(index, strings); return db.putTranslation(id, saved) },
       })

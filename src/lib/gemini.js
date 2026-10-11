@@ -1,6 +1,7 @@
 // Gemini (bring-your-own-key). Called straight from the browser; the key never touches a Noesis server.
 // Docs: https://ai.google.dev/api/generate-content
 import { renderPage } from '../ingest/pdf.js'
+import { aiText, aiStream } from './ai.js'
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -122,7 +123,13 @@ Write for the ear: clear, flowing sentences, no bullet symbols, no markdown. Use
 }
 
 export async function summarize({ text, title, mode, key, model, signal, onRetry }) {
-  return blocksCall(key, model, [{ text: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}` }], signal, onRetry)
+  // Summaries work with either provider: the prompt and the block output are unchanged,
+  // only the door (aiText) picks Gemini or NVIDIA from Settings.
+  const raw = await aiText({ prompt: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}`, json: true, signal, onRetry })
+  let s = String(raw).trim()
+  const fence = s.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/)
+  if (fence) s = fence[1].trim()
+  return JSON.parse(s).blocks.filter(b => b.text?.trim())
 }
 
 // ── Ask about this document (streaming) ──────────────────────────────────────────────
@@ -148,46 +155,12 @@ export function askContext(blocks, starts, at) {
 }
 
 export async function askStream({ key, model, title, context, history, question, nowHearing, onText, signal, onRetry }) {
-  const contents = [
-    ...history.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
-    { role: 'user', parts: [{ text: nowHearing ? `${question}\n\n(I am currently listening to: "${nowHearing}")` : question }] },
+  // Ask works with either provider: the system prompt, history and question are unchanged,
+  // only the door (aiStream) picks Gemini or NVIDIA from Settings.
+  const system = `${ASK}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${context}`
+  const messages = [
+    ...history.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text })),
+    { role: 'user', content: nowHearing ? `${question}\n\n(I am currently listening to: "${nowHearing}")` : question },
   ]
-  const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: `${ASK}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${context}` }] },
-    contents,
-    generationConfig: { temperature: 0.4 },
-  })
-  let res
-  for (let attempt = 0; ; attempt++) {
-    res = await fetch(`${BASE}/models/${model}:streamGenerateContent?alt=sse`, {
-      method: 'POST', headers: { 'x-goog-api-key': key, 'content-type': 'application/json' }, body, signal,
-    })
-    if (res.ok) break
-    const err = await res.json().catch(() => ({}))
-    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
-      const retry = err.error?.details?.find(d => d.retryDelay)?.retryDelay
-      const ms = retry ? parseFloat(retry) * 1000 + 500 : 2000 * 2 ** attempt
-      onRetry?.(Math.max(1, Math.round(ms / 1000)))
-      await sleep(ms)
-      continue
-    }
-    throw new Error(err.error?.message || `Gemini error ${res.status}`)
-  }
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-  let buf = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += value.replace(/\r/g, '')
-    for (let k; (k = buf.indexOf('\n\n')) >= 0;) {
-      const event = buf.slice(0, k)
-      buf = buf.slice(k + 2)
-      for (const line of event.split('\n')) {
-        if (!line.startsWith('data:')) continue
-        const j = JSON.parse(line.slice(5))
-        const t = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')
-        if (t) onText(t)
-      }
-    }
-  }
+  return aiStream({ system, messages, onText, signal, onRetry })
 }
