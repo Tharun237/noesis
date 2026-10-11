@@ -58,6 +58,10 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
     (Hindi, Spanish, French, German, Italian, Portuguese, Vietnamese, Chinese, Japanese, Korean, Arabic, English)
     appear wherever voices are chosen, and those languages become translation targets. Audio is stored and plays
     offline like any other. Tested with a real key; Hindi words not machine-verified (see the listening skill).
+6c. **Own voice service + scanned pages with any provider.** SHIPPED 2026-10-11 (M11): any voice service that
+    speaks the OpenAI speech protocol plugs in under Settings → Voice; AI narration of scanned pages works with
+    any provider whose model sees images (tested: NVIDIA `z-ai/glm-5.3-flash` read a 2-page scan in 3.6 s);
+    Ask sends a window around the listener's place and long summaries are built part by part for smaller models.
 7. **AI provider layer.** SHIPPED 2026-10-11 (M9): Settings → AI lets the customer bring Gemini, NVIDIA (through a relay), or any OpenAI-compatible address; a model check finds the models that answer. Tested with a real NVIDIA key. Scanned-page reading is still Gemini-only.
 8. **Motion pass.** Frame-by-frame transitions modelled on the ACS categories page; premium phone feel
    (Dynamic-Island-style live status), desktop and phone, browser compatibility.

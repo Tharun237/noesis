@@ -6,6 +6,7 @@ import { ui, go, goBack, openSheet } from '../lib/nav.js'
 import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
+import { hasAiKey } from '../lib/ai.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
@@ -341,7 +342,7 @@ const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, activ
 
 // Notes about how a document was prepared; scanned books get a one-tap path to AI narration.
 function DocNote({ d }) {
-  const keyed = useStore(settings, s => s.geminiKey.trim().length > 20)
+  const keyed = useStore(settings, s => hasAiKey(s))
   const offerAi = d.scanned && !d.ai && d.status !== 'queued' && d.status !== 'reading' && d.status !== 'narrating'
   return (
     <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, margin: '0 0 24px', padding: '12px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, display: 'grid', gap: 10 }}>
@@ -351,7 +352,7 @@ function DocNote({ d }) {
           <span style={{ flex: 1, minWidth: 200 }}>For the cleanest read, AI narration reads the page images directly instead of the scan's text layer.</span>
           {keyed
             ? <Button kind="accent" icon="sparkle" onClick={() => reprocess(d.id, { ai: true })}>Use AI narration</Button>
-            : <Button icon="settings" onClick={() => go('settings')}>Add a free Gemini key</Button>}
+            : <Button icon="settings" onClick={() => go('settings')}>Add an AI key</Button>}
         </div>
       )}
     </div>

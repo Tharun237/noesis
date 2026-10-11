@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { settings, hasKey } from '../lib/settings.js'
+import { settings } from '../lib/settings.js'
 import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels } from '../lib/ai.js'
 import { loadCloudVoices } from '../lib/cloudvoice.js'
 import { Button, IconButton, Segmented, Toggle, Field, inputStyle } from './kit.jsx'
@@ -175,10 +175,10 @@ export function AiCard({ Card }) {
         </div>
       )}
 
-      {id === 'gemini'
-        ? <Toggle checked={ai} onChange={v => settings.set({ aiNarration: v })} disabled={!hasKey()} labelText="AI narration for PDFs by default"
-            hint="Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests." />
-        : <div style={small}>Reading scanned pages as images works with Gemini only for now.</div>}
+      <Toggle checked={ai} onChange={v => settings.set({ aiNarration: v })} disabled={!connectedNow} labelText="AI narration for PDFs by default"
+        hint={id === 'gemini'
+          ? 'Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests.'
+          : 'The model reads each page as an image, so it must be one that can see images; many cannot, and the app says so when one refuses. One request per 2 pages.'} />
     </Card>
   )
 }

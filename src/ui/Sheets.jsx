@@ -110,7 +110,7 @@ function AddForm({ wide }) {
   const voiceLang = target || 'en'
   const langVoices = voicesFor(voiceLang)
   const picked = langVoices.some(v => v.id === voice) ? voice : langVoices[0]?.id
-  const [ai, setAi] = useState(geminiKeyed && s.aiNarration)
+  const [ai, setAi] = useState(keyed && s.aiNarration)
   const [busy, setBusy] = useState(null)
   const [over, setOver] = useState(false)
   const inputRef = useRef(null)
@@ -131,7 +131,7 @@ function AddForm({ wide }) {
     else if (tab === 'text') src = { kind: /^#{1,6}\s/m.test(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
     else src = { kind: 'link', name: url.trim(), url: url.trim() }
     const named = tab === 'text' && title.trim()
-    const id = await addDocument(src, { mode, voice: picked || voice, ai: ai && geminiKeyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })
+    const id = await addDocument(src, { mode, voice: picked || voice, ai: ai && keyed, ...(named ? { title: named, renamed: true } : {}), ...(target ? { target } : {}) })
     if (voice !== s.voice) settings.set({ voice })
     if (mode !== s.mode && keyed) settings.set({ mode })
     history.replaceState({ view: 'reader', docId: id, depth: history.state?.depth || 1 }, '') // the sheet's history entry becomes the reader
@@ -211,9 +211,9 @@ function AddForm({ wide }) {
       </Field>
       )}
 
-      {geminiKeyed && !nvidiaChosen && aiApplies && (
+      {keyed && aiApplies && (
         <Toggle checked={ai} onChange={setAi} labelText="AI narration"
-          hint="Gemini reads each page image: it describes figures and tables, speaks math, and fixes broken text. Uses your own key." />
+          hint="Your AI model reads each page image: it describes figures and tables, speaks math, and fixes broken text. The model must be one that can see images." />
       )}
 
       <Button kind="primary" full onClick={submit} disabled={!ready} style={{ height: 50, fontSize: 15 }}>Add to library</Button>

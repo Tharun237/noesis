@@ -365,20 +365,20 @@ async function prepare(id) {
     let blocks = parsed.blocks
     let note = null
 
-    if (d.ai && hasKey() && parsed.pdf) {
+    if (d.ai && hasAiKey() && parsed.pdf) {
       patch(id, { status: 'narrating', stage: 'AI is reading the pages', prep: 0 })
       const { narratePdf } = await import('./gemini.js')
       const r = await narratePdf({
         pdf: parsed.pdf, pageText: parsed.pageText, key: s.geminiKey, model: s.geminiModel,
         onProgress: stepped(id),
-        onRetry: secs => patch(id, { stage: secs == null ? 'AI is reading the pages' : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }),
+        onRetry: secs => patch(id, { stage: secs == null ? 'AI is reading the pages' : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }),
       })
       blocks = r.blocks.flatMap(b => (b.k === 'gap' ? parsed.blocks.filter(x => x.page >= b.from && x.page <= b.to) : [b]))
       if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
     }
 
     // Scanned book without AI narration: repair OCR errors on-device with a dictionary.
-    if (parsed.scanned && !(d.ai && hasKey())) {
+    if (parsed.scanned && !(d.ai && hasAiKey())) {
       patch(id, { stage: 'Repairing scanned text', prep: 0 })
       const { loadRepair } = await import('../ingest/ocrfix.js')
       const fix = await loadRepair()
@@ -429,8 +429,8 @@ async function prepare(id) {
     const langNote = voice == null ? `No natural voice for ${LANGS[lang].name} yet. ${hasSystemVoice() ? "Your device's built-in voice reads this document." : 'This browser has no built-in voice to read it either.'}` : null
     const listening = await toListeningAsync(blocks, lang)
     if (!listening.length) {
-      throw new Error(parsed.pdf && !hasKey()
-        ? 'No selectable text found (scanned PDF?). Add a free Gemini key in Settings to read scanned pages.'
+      throw new Error(parsed.pdf && !hasAiKey()
+        ? 'No selectable text found (scanned PDF?). Add an AI key in Settings to read scanned pages.'
         : 'No readable text found in this document.')
     }
     await db.delAudio(id)
@@ -595,7 +595,7 @@ export async function addDocument(src, overrides = {}) {
   const id = uid()
   const meta = {
     id, title: src.title || src.name || src.url || 'Untitled', author: '', kind: src.kind, url: src.url || null,
-    createdAt: Date.now(), lastPlayed: 0, mode: s.mode, ai: s.aiNarration && hasKey(), voice: s.voice,
+    createdAt: Date.now(), lastPlayed: 0, mode: s.mode, ai: s.aiNarration && hasAiKey(), voice: s.voice,
     status: 'queued', stage: 'Waiting', prep: 0, total: 0, chars: 0, done: 0, vChars: 0, vSec: 0,
     pos: 0, finished: false, archived: false, collections: [], marks: [], cover: null, error: null, note: null,
     ...overrides,

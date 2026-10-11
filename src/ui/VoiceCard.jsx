@@ -61,8 +61,9 @@ export function OwnVoiceService() {
   }
 
   return (
-    <>
-      <div style={{ ...label, paddingTop: 4 }}>Your own voice service</div>
+    <details open={!!base || undefined}>
+      <summary style={{ cursor: 'pointer', fontFamily: T.font, fontSize: 14, fontWeight: 600, color: T.text }}>Your own voice service</summary>
+      <div style={{ display: 'grid', gap: 14, marginTop: 12 }}>
       <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.6 }}>
         Use any voice service that speaks the OpenAI protocol: OpenAI, Groq, or a model on your own computer.
         Its voices appear in every language&apos;s list. The text goes straight from this device to that address.
@@ -92,7 +93,8 @@ export function OwnVoiceService() {
         {state === 'ok' && <span style={{ fontSize: 12.5, color: T.ok }}>This voice service answers.</span>}
         {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: T.danger }}>{state}</span>}
       </div>
-    </>
+      </div>
+    </details>
   )
 }
 
