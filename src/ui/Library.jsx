@@ -18,6 +18,18 @@ import { waitSeconds } from '../lib/readiness-math.js'
 const KIND = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', html: 'WEB', md: 'MD', txt: 'TXT', text: 'TEXT', link: 'LINK' }
 const MODE = { long: 'Long summary', short: 'Short summary' }
 
+// What the customer's AI can do across the whole library, behind one button: the header stays the same
+// width on a phone however many of these there are.
+function LibraryAi({ hasBriefing }) {
+  return (
+    <Menu trigger={t => <IconButton icon="sparkle" label="Ask your library" onClick={t} />}
+      items={[
+        { label: 'Ask your library', icon: 'sparkle', onClick: () => openSheet('libraryask') },
+        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'list', onClick: () => openSheet('briefing') }] : []),
+      ]} />
+  )
+}
+
 function useVisibleDocs() {
   const docs = useStore(library, s => s.docs)
   const filter = useStore(ui, s => s.filter)
@@ -156,8 +168,7 @@ function DesktopHeader({ summary }) {
       <SearchBox value={query} width={220} />
       <SortMenu />
       <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
-      {hasDocs && <Button icon="sparkle" onClick={() => openSheet('libraryask')}>Ask your library</Button>}
-      {hasBriefing && <Button icon="list" onClick={() => openSheet('briefing')}>Make a briefing</Button>}
+      {hasDocs && <LibraryAi hasBriefing={hasBriefing} />}
       <Button kind="primary" icon="plus" onClick={() => openSheet('add')}>Add document</Button>
     </header>
   )
@@ -214,8 +225,7 @@ function MobileHeader({ summary }) {
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 56, padding: '0 10px 0 12px' }}>
           <div style={{ flex: 1 }}><Wordmark size={24} /></div>
-          {hasDocs && <IconButton icon="sparkle" label="Ask your library" onClick={() => openSheet('libraryask')} />}
-          {hasBriefing && <IconButton icon="list" label="Make a briefing" onClick={() => openSheet('briefing')} />}
+          {hasDocs && <LibraryAi hasBriefing={hasBriefing} />}
           <SortMenu />
           <AccountChip compact />
         </div>

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
@@ -10,7 +10,10 @@ import { Button, IconButton, Pulse } from './kit.jsx'
 
 export function Briefing({ wide }) {
   useStore(settings)
-  const docs = useStore(library, s => s.docs.filter(d => d.status === 'voicing' || d.status === 'ready'))
+  // The store hands back the same list until it changes; filtering inside the selector would make a new
+  // list on every read, which React treats as endless change.
+  const all = useStore(library, s => s.docs)
+  const docs = useMemo(() => all.filter(d => d.status === 'voicing' || d.status === 'ready'), [all])
   const keyed = hasAiKey()
   const [checked, setChecked] = useState([])
   const [busy, setBusy] = useState(false)
