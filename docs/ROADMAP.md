@@ -24,7 +24,12 @@ Rules: one writer in the repo at a time; a task is done only when `npx vite buil
 - **It is a web app.** Some items need things a browser cannot do (see "Not possible as a web app").
 - **Phones first** (Android skins: MIUI/HyperOS, OxygenOS, ColorOS; and iPhone). No iPhone has been tested yet.
 
-## Sprint 1: trust and basics (now)
+## Sprint 1: trust and basics (DONE 2026-10-11, all four deployed)
+
+Shipped: status audit (M2), Android notification with the moving phrase and the enable-notifications guide (M4),
+voice quality (M5: Alba default, measured pauses 310-410 ms, tone presets), the listening skill
+(`.claude/skills/listening/`), and Safari readiness (refused play says so, true export format, iOS tags).
+Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anything Safari.
 
 1. **Status messages audit.** Every message must be true right now and about something the user is waiting
    on. Sweep every screen and transition (open, reload, back, add, play). *Haiku audits, Opus fixes.*
@@ -38,11 +43,14 @@ Rules: one writer in the repo at a time; a task is done only when `npx vite buil
    and compare with the text (wrong words, skipped words), measure gaps and clicks at sentence joins, loudness,
    clipping, reverb. So audio is verified without Tharun's ears every time.
 
-## Sprint 2: core gaps
+## Sprint 2: core gaps (now; item 5 in build as M6)
 
 5. **Original view.** The source page (PDF) beside or instead of the flowing text, following the playhead and
    highlighting the sentence being read; later the dual-pane "glass" view.
-6. **Languages.** Translate a document into Hindi, Telugu and more (Piper has Hindi, Telugu, Malayalam,
+6. **Languages.** BLOCKER found 2026-10-11: the pronunciation library in the app (`phonemizer` 1.2.1) holds
+   English only (measured: Hindi and Telugu text is rejected). A multilingual eSpeak-ng build has to replace it
+   first; evaluation in progress. eSpeak-ng is GPL-3.0: a licence question for a closed commercial app.
+   Then: Translate a document into Hindi, Telugu and more (Piper has Hindi, Telugu, Malayalam,
    Marathi, Bengali, Urdu, Nepali voices, verified 2026-10-11). Natural translation that keeps names, terms,
    code and equations. Switch language mid-session without losing the place.
 7. **AI provider layer.** One interface for "ask a model", with the provider chosen in Settings.

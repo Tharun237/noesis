@@ -91,6 +91,20 @@ export function Reader({ wide }) {
     return m
   }, [doc])
   const linked = firstOfPage.size > 0
+  // Sentences per page, once per document: sentence i belongs to block segs[i].b.
+  const pageSentenceMap = useMemo(() => {
+    const m = new Map()
+    if (doc) doc.segs.forEach((s, i) => {
+      const p = doc.blocks[s.b]?.p
+      if (typeof p !== 'number') return
+      const e = { i, t: s.t }
+      const arr = m.get(p)
+      if (arr) arr.push(e)
+      else m.set(p, [e])
+    })
+    return m
+  }, [doc])
+  const pageSentences = useCallback(p => pageSentenceMap.get(p) ?? [], [pageSentenceMap])
 
   useEffect(() => {
     if (view !== 'text') return
@@ -197,6 +211,7 @@ export function Reader({ wide }) {
               <Suspense fallback={null}>
                 <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
                   onPages={setNumPages} onVisible={setVisPage}
+                  pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek}
                   onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }}
                   onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
               </Suspense>

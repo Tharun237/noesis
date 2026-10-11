@@ -121,6 +121,25 @@ async function pageLines(pdf, n) {
   return toLines(tc.items) // content-stream order: follows columns in typeset papers
 }
 
+// Visual lines with positions for the sentence mark: [{ text, x, y, w, h }] as
+// fractions (0..1) of the page, origin top-left, y = top edge of the line.
+export async function pageLayout(pdf, n) {
+  const page = await pdf.getPage(n)
+  const viewport = page.getViewport({ scale: 1 })
+  const tc = await page.getTextContent()
+  page.cleanup()
+  return toLines(tc.items).map(l => {
+    const [vx, vy] = viewport.convertToViewportPoint(l.x, l.y)
+    return {
+      text: l.text,
+      x: vx / viewport.width,
+      y: (vy - l.size) / viewport.height,
+      w: (l.xEnd - l.x) / viewport.width,
+      h: l.size * 1.25 / viewport.height,
+    }
+  })
+}
+
 export async function readPdf(data, filename, onProgress) {
   const pdf = await openPdf(data)
   const pages = []

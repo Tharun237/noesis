@@ -4,7 +4,7 @@ import { useStore } from '../lib/store.js'
 import { ui, tab, openSheet } from '../lib/nav.js'
 import { Icon } from './icons.jsx'
 
-// Phone tab bar in the ACS style: icon over label, Mars Orange for the active tab with a short
+// Phone tab bar in the ACS style: icon over label, white for the active tab with a short
 // indicator bar on top. The mini player docks above it (PlayerBar), like Apple Music.
 const TABS = [
   { id: 'library', icon: 'list', label: 'Library', run: () => { tab('library'); ui.set({ searching: false, query: '' }) } },

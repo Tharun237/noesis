@@ -337,6 +337,43 @@ await step('pages view shows the original PDF', async () => {
   await click('button', 'Back to library')
 })
 
+await step('the spoken sentence is marked on the PDF page, and a tap on a line starts there', async () => {
+  // A text PDF made here (the scanned Traction has no text to match): two columns, justified, hyphenated.
+  const para = 'Sound travels through air as a wave of pressure. The listener hears a sentence long before the eye would have found it on the page. In our measurements the harbour fund grew by 3.5 percent last year, and the committee noted an extraordinarily long word that breaks across a line. Every sentence must be found exactly where it was printed. '
+  // A run that failed here leaves its document behind, and later steps count PDFs: clear leftovers first.
+  await app(`Promise.all(m.lib.library.get().docs.filter(d => d.title === 'Marked page test').map(d => m.lib.deleteDoc(d.id)))`)
+  const maker = await ctx.newPage()
+  await maker.setContent(`<html><head><title>Marked page test</title></head><body style="font:11pt Georgia;margin:0"><h1>Listening to the printed page</h1><div style="column-count:2;column-gap:24pt;text-align:justify;hyphens:auto" lang="en">${Array.from({ length: 9 }, (_, i) => `<p>Paragraph ${i + 1} begins here. ${para}</p>`).join('')}</div></body></html>`)
+  const pdfPath = new URL('mark-test.pdf', OUT).pathname.replace(/^\/([A-Z]:)/, '$1')
+  await maker.pdf({ path: pdfPath, format: 'A4', margin: { top: '60px', bottom: '60px', left: '50px', right: '50px' } })
+  await maker.close()
+  const d = await addViaSheet(async () => { await page.locator('input[type=file]').setInputFiles(pdfPath) })
+  await page.locator('[role=button]').filter({ hasText: 'Marked page test' }).first().click()
+  await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
+  await click('tab', 'Pages')
+  await until(() => page.evaluate(() => [...document.querySelectorAll('[data-testid="page-view"] canvas')].some(c => c.width > 100)), 30000, 'a drawn page')
+  const box = await page.locator('[data-page="1"]').boundingBox()
+  const marks = () => page.evaluate(() => [...document.querySelectorAll('[data-testid="sentence-mark"] > div')].map(e => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round) }))
+  // Tap inside the right-hand column: the mark must appear there (not in the left column), over several lines.
+  await until(async () => {
+    await page.mouse.click(box.x + box.width * 0.75, box.y + box.height * 0.22)
+    await sleep(700)
+    // Until the page's text has been matched a tap starts the page from its top (sentence 0): keep tapping.
+    return (await marks()).length > 0 && (await app('m.pl.player.get().i')) > 0
+  }, 20000, 'a tap on a line starting at that sentence, with its mark')
+  const m = await marks()
+  const i = await app('m.pl.player.get().i')
+  expect(i > 0, `the tap did not move the playhead (i ${i})`)
+  expect(m.every(r => r[0] >= box.x + box.width * 0.45), `mark is not in the tapped column: ${JSON.stringify(m)}`)
+  const now = await page.locator('[data-page="1"]').boundingBox() // the view follows the sentence, so the page may have moved since the tap
+  expect(m.some(r => Math.abs(r[1] - (now.y + now.height * 0.22)) < now.height * 0.06), `mark is not near the tapped line: ${JSON.stringify(m)} on page at y ${Math.round(now.y)}`)
+  await app('m.pl.pause()')
+  await click('tab', 'Text')
+  await click('button', 'Back to library')
+  await app(`m.lib.deleteDoc(${JSON.stringify(d.id)})`)
+  return `sentence ${i}, ${m.length} line(s) marked`
+})
+
 await step('add EPUB (generated)', async () => {
   const zip = new JSZip()
   zip.file('mimetype', 'application/epub+zip')
