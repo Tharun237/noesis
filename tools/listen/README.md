@@ -64,7 +64,7 @@ Everything is computed on the joined audio at 48 kHz, after decoding, so the sea
   peak and stops at 20 dB under it. Falls are discarded if the level rises back by 3 dB first. The reported
   value is the median.
 - **Brightness**: Welch average of a 2048-point Hann spectrum over speech frames; share of power at 4 kHz and above.
-- **WER**: word-level Levenshtein alignment after normalising both texts (lower case, apostrophes removed, other
+- **WER**: word-level Levenshtein alignment after normalising both texts (lower case, apostrophes removed, "%" as "percent", British spellings folded onto American, other
   punctuation turned into spaces, so "3.5" is "3 5" on both sides).
 - **Transcription**: Whisper base (English), `onnx-community/whisper-base.en`, word timestamps when the model
   supports them, 30 s chunks with 5 s stride.

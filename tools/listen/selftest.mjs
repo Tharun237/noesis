@@ -202,6 +202,7 @@ check('compare: one changed word and one dropped word give WER 2/9 and name both
   assert.deepEqual(r.extra, [])
   near(r.wer, 2 / 9, 1e-9, 'wer')
   assert.equal(compare('Same words, here.', 'same WORDS here').wer, 0)
+  assert.equal(compare('The harbour fund grew 3.5 percent; we realised it.', 'The harbor fund grew 3 5% we realized it').wer, 0)
   return `wer ${r.wer.toFixed(3)}, substitutions ${JSON.stringify(r.substitutions)}, missing ${JSON.stringify(r.missing)}`
 })
 

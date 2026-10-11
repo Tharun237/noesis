@@ -1,9 +1,13 @@
 // Word error rate between the text Noesis should say and what Whisper heard. No dependencies.
-// Normalisation: Unicode-aware lower case, apostrophes removed (don't -> dont), every other non-letter/digit
-// becomes a space ("3.5" -> "3 5"). Both sides get the same treatment, so punctuation never counts as an error.
+// Normalisation: Unicode-aware lower case, apostrophes removed (don't -> dont), "%" read as "percent", every
+// other non-letter/digit becomes a space ("3.5" -> "3 5"), and British spellings folded onto American
+// (harbour -> harbor, realise -> realize): Whisper writes American, and a spelling is not a mispronunciation.
+// Both sides get the same treatment, so punctuation and spelling never count as errors.
 
 export function normalise(text) {
-  return text.normalize('NFKC').toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean)
+  return text.normalize('NFKC').toLowerCase().replace(/['’]/g, '').replace(/%/g, ' percent ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean)
+    .map(w => w.replace(/(..)our$/, '$1or').replace(/is(e[sd]?|ing|ation)$/, 'iz$1'))
 }
 
 // Levenshtein alignment over words. wer = (substitutions + missing + extra) / reference words.
