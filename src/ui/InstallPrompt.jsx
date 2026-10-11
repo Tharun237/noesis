@@ -33,7 +33,7 @@ export function InstallPrompt({ wide, full, lift = 0 }) {
 
   useEffect(() => { const t = setTimeout(() => setReady(true), DELAY); return () => clearTimeout(t) }, [])
   useEffect(() => {
-    const on = () => { setHidden(true); toast('Installed. Find Noesis on your home screen.') }
+    const on = () => { setHidden(true); toast('Noesis is installed. Open it from your apps.') }
     addEventListener('appinstalled', on)
     return () => removeEventListener('appinstalled', on)
   }, [])

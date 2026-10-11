@@ -15,11 +15,14 @@ export function AccountCard({ Card }) {
     return (
       <Card title="Account & sync">
         <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
-          Sign in to keep your library in step on every device. Start a book on your laptop and pick it up on your phone, <span style={{ color: T.text }}>to the word</span>. Your documents, positions, bookmarks and collections sync automatically. Noesis works fully without an account too.
+          Sign in to keep your library in step on every device. Start a book on your laptop and pick it up on your phone, <span style={{ color: T.text }}>to the same sentence</span>. Your documents, positions, bookmarks and collections sync automatically. Noesis works fully without an account too.
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <GoogleButton disabled={!a.google} />
-          {!a.google && a.checked && <span style={{ fontSize: 12.5, color: T.faint }}>Google sign-in isn't configured on this server yet.</span>}
+          {!a.checked && <span style={{ fontSize: 12.5, color: T.faint }}>Checking sign-in...</span>}
+          {!a.google && a.checked && (a.reachable
+            ? <span style={{ fontSize: 12.5, color: T.faint }}>Google sign-in isn't configured on this server yet.</span>
+            : <span style={{ fontSize: 12.5, color: T.faint }}>Can't reach Noesis. Sign-in needs a connection.</span>)}
         </div>
         {a.dev && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 6, borderTop: `1px dashed ${T.border}` }}>
@@ -47,7 +50,7 @@ export function AccountCard({ Card }) {
       <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.55 }}>
         Sign in with the same Google account on your other devices: your library and listening position follow you automatically.
       </div>
-      {st.error && st.status !== 'idle' && <div style={{ fontSize: 12.5, color: T.danger }}>{st.error}</div>}
+      {st.status === 'error' && <div style={{ fontSize: 12.5, color: T.danger }}>{st.error}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button icon="refresh" disabled={st.status === 'syncing'} onClick={() => flush()}>Sync now</Button>
         <span style={{ flex: 1 }} />

@@ -280,11 +280,12 @@ async function prepare(id) {
     let note = null
 
     if (d.ai && hasKey() && parsed.pdf) {
-      patch(id, { status: 'narrating', stage: 'AI is reading the pages' })
+      patch(id, { status: 'narrating', stage: 'AI is reading the pages', prep: 0 })
       const { narratePdf } = await import('./gemini.js')
       const r = await narratePdf({
         pdf: parsed.pdf, pageText: parsed.pageText, key: s.geminiKey, model: s.geminiModel,
         onProgress: stepped(id),
+        onRetry: secs => patch(id, { stage: secs == null ? 'AI is reading the pages' : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }),
       })
       blocks = r.blocks.flatMap(b => (b.k === 'gap' ? parsed.blocks.filter(x => x.page >= b.from && x.page <= b.to) : [b]))
       if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
@@ -292,7 +293,7 @@ async function prepare(id) {
 
     // Scanned book without AI narration: repair OCR errors on-device with a dictionary.
     if (parsed.scanned && !(d.ai && hasKey())) {
-      patch(id, { stage: 'Repairing scanned text' })
+      patch(id, { stage: 'Repairing scanned text', prep: 0 })
       const { loadRepair } = await import('../ingest/ocrfix.js')
       const fix = await loadRepair()
       blocks = fix.repair(blocks)
@@ -305,7 +306,9 @@ async function prepare(id) {
       patch(id, { status: 'narrating', stage: d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary', prep: 0 })
       const { summarize } = await import('./gemini.js')
       const text = blocks.map(b => (b.k === 'h' ? `\n## ${b.text}\n` : b.text)).join('\n')
-      blocks = await summarize({ text, title: getDoc(id).title, mode: d.mode, key: s.geminiKey, model: s.geminiModel })
+      const stage = d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary'
+      blocks = await summarize({ text, title: getDoc(id).title, mode: d.mode, key: s.geminiKey, model: s.geminiModel,
+        onRetry: secs => patch(id, { stage: secs == null ? stage : `Google's free quota is limiting requests. Retrying in about ${secs} s.` }) })
     }
 
     const listening = await toListeningAsync(blocks)
@@ -403,7 +406,7 @@ const syncHooks = {
 async function createSynced(id, v) {
   const meta = {
     id, title: 'Untitled', author: '', kind: 'text', url: null, createdAt: Date.now(), lastPlayed: 0, mode: 'full', ai: false,
-    voice: settings.get().voice, status: 'syncing', stage: 'Downloading from your other device', prep: 0, total: 0, chars: 0,
+    voice: settings.get().voice, status: 'syncing', stage: 'Waiting for your other device to finish preparing', prep: 0, total: 0, chars: 0,
     done: 0, vChars: 0, vSec: 0, pos: 0, posF: 0, finished: false, archived: false, collections: [], marks: [], cover: null,
     error: null, note: null, ...pick(v, META_FIELDS), ...pending.get(id),
   }
@@ -489,6 +492,7 @@ export async function deleteAllAudio() {
     if (c) c.durs.fill(0)
     if (d.total) patch(d.id, { done: 0, vChars: 0, vSec: 0, status: d.status === 'ready' ? 'voicing' : d.status })
   }
+  kickVoice()
 }
 
 // Bookmarks & notes: [{ i: sentence index, note, at }]

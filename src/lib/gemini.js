@@ -5,7 +5,7 @@ import { renderPage } from '../ingest/pdf.js'
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-async function api(path, key, body, signal) {
+async function api(path, key, body, signal, onRetry) {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(BASE + path, {
       method: body ? 'POST' : 'GET',
@@ -19,7 +19,9 @@ async function api(path, key, body, signal) {
     // Free-tier rate limits are normal for long documents: wait as long as Google asks, then retry.
     if ((res.status === 429 || res.status >= 500) && attempt < 8) {
       const retry = err.error?.details?.find(d => d.retryDelay)?.retryDelay
-      await sleep(retry ? parseFloat(retry) * 1000 + 500 : Math.min(60_000, 2000 * 2 ** attempt))
+      const ms = retry ? parseFloat(retry) * 1000 + 500 : Math.min(60_000, 2000 * 2 ** attempt)
+      onRetry?.(Math.max(1, Math.round(ms / 1000)))
+      await sleep(ms)
       continue
     }
     throw Object.assign(new Error(msg), { status: res.status })
@@ -54,11 +56,11 @@ const BLOCKS_SCHEMA = {
   required: ['blocks'],
 }
 
-async function blocksCall(key, model, parts, signal) {
+async function blocksCall(key, model, parts, signal, onRetry) {
   const r = await api(`/models/${model}:generateContent`, key, {
     contents: [{ role: 'user', parts }],
     generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema: BLOCKS_SCHEMA },
-  }, signal)
+  }, signal, onRetry)
   const text = r.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')
   if (!text) throw new Error(r.promptFeedback?.blockReason ? `Gemini declined: ${r.promptFeedback.blockReason}` : 'Gemini returned no text')
   return JSON.parse(text).blocks.filter(b => b.text?.trim())
@@ -79,7 +81,7 @@ Never add commentary, never summarise body text, never invent content.`
 
 // AI narration for PDFs: Gemini sees each page as an image (figures, tables, math) plus its text layer.
 // Pages go in small windows so any book length works and each response stays well under output limits.
-export async function narratePdf({ pdf, pageText, key, model, onProgress, signal }) {
+export async function narratePdf({ pdf, pageText, key, model, onProgress, signal, onRetry }) {
   const WINDOW = 5
   const out = []
   const failed = []
@@ -92,7 +94,8 @@ export async function narratePdf({ pdf, pageText, key, model, onProgress, signal
       parts.push({ text: `--- Text layer of page ${n} ---\n${pageText[n - 1] || '(no text layer: scanned page, read it from the image)'}` })
     }
     try {
-      const blocks = await blocksCall(key, model, parts, signal)
+      const blocks = await blocksCall(key, model, parts, signal, onRetry)
+      onRetry?.(null)
       // Stitch a paragraph that was cut by the window boundary back together.
       const last = out[out.length - 1]
       if (last?.k === 'p' && blocks[0]?.k === 'p' && !/[.!?:"”)]$/.test(last.text.trim())) {
@@ -118,8 +121,8 @@ Aim for about 3-5% of the original length (roughly 300-1500 words). Start with o
 Write for the ear: clear, flowing sentences, no bullet symbols, no markdown. Use k="h" only for 2-6 short section headings.`,
 }
 
-export async function summarize({ text, title, mode, key, model, signal }) {
-  return blocksCall(key, model, [{ text: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}` }], signal)
+export async function summarize({ text, title, mode, key, model, signal, onRetry }) {
+  return blocksCall(key, model, [{ text: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}` }], signal, onRetry)
 }
 
 // ── Ask about this document (streaming) ──────────────────────────────────────────────
@@ -144,7 +147,7 @@ export function askContext(blocks, starts, at) {
   return `OUTLINE (whole book):\n${outline}\n\nEXCERPT around the listener's position:\n${lines.slice(lo, hi + 1).join('\n')}`
 }
 
-export async function askStream({ key, model, title, context, history, question, nowHearing, onText, signal }) {
+export async function askStream({ key, model, title, context, history, question, nowHearing, onText, signal, onRetry }) {
   const contents = [
     ...history.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
     { role: 'user', parts: [{ text: nowHearing ? `${question}\n\n(I am currently listening to: "${nowHearing}")` : question }] },
@@ -163,7 +166,9 @@ export async function askStream({ key, model, title, context, history, question,
     const err = await res.json().catch(() => ({}))
     if ((res.status === 429 || res.status >= 500) && attempt < 3) {
       const retry = err.error?.details?.find(d => d.retryDelay)?.retryDelay
-      await sleep(retry ? parseFloat(retry) * 1000 + 500 : 2000 * 2 ** attempt)
+      const ms = retry ? parseFloat(retry) * 1000 + 500 : 2000 * 2 ** attempt
+      onRetry?.(Math.max(1, Math.round(ms / 1000)))
+      await sleep(ms)
       continue
     }
     throw new Error(err.error?.message || `Gemini error ${res.status}`)

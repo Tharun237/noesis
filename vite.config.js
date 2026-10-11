@@ -49,7 +49,7 @@ export default defineConfig({
         id: '/',
         name: 'Noesis',
         short_name: 'Noesis',
-        description: 'Listen deeper. Any document as natural audio, generated on your own device. Free and open source.',
+        description: 'Listen deeper. Any document as natural audio, generated on your own device.',
         start_url: '/',
         scope: '/',
         display: 'standalone',

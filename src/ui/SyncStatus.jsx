@@ -16,10 +16,19 @@ export function SyncStatus() {
   const st = useStore(syncState)
   if (!user) return null
   const color = st.status === 'error' ? T.danger : st.status === 'offline' ? T.faint : T.ok
+  if (st.status === 'error') {
+    return (
+      <button type="button" onClick={() => go('settings')}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.sub, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: T.font }}>
+        <span style={{ width: 6, height: 6, borderRadius: 6, background: color }} />
+        Sync paused. Tap to see why.
+      </button>
+    )
+  }
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.sub }}>
       {st.status === 'syncing' ? <Pulse /> : <span style={{ width: 6, height: 6, borderRadius: 6, background: color }} />}
-      {st.status === 'syncing' ? 'Syncing…' : st.status === 'offline' ? 'Offline · will sync' : st.status === 'error' ? 'Sync problem' : `Synced ${ago(st.last)}`}
+      {st.status === 'syncing' ? 'Syncing…' : st.status === 'offline' ? 'Offline · will sync' : st.last ? `Synced ${ago(st.last)}` : 'Connecting...'}
     </span>
   )
 }

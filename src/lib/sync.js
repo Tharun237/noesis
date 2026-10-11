@@ -7,7 +7,7 @@ import { createStore as idbStore, get, set, del } from 'idb-keyval'
 import { createStore } from './store.js'
 
 const store = idbStore('noesis-sync', 'sync')
-export const account = createStore({ user: null, checked: false, google: false, dev: false })
+export const account = createStore({ user: null, checked: false, google: false, dev: false, reachable: true })
 export const syncState = createStore({ status: 'idle', last: 0, error: null })
 
 const te = new TextEncoder()
@@ -176,11 +176,11 @@ export async function startSync() {
       for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
       early = {}
     }
-    account.set({ checked: true })
+    account.set({ checked: true, reachable: false })
     if (uid) { syncState.set({ status: 'offline' }); wire() }
     return
   }
-  account.set({ user: me.user, checked: true })
+  account.set({ user: me.user, checked: true, reachable: true })
   if (!me.user) return
   const saved = await get('state', store)
   if (saved?.uid === me.user.id) ({ uid, cursor, clock, dirty, uploaded } = { uploaded: {}, ...saved })

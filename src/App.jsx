@@ -74,8 +74,10 @@ export default function App() {
               borderRadius: T.r.pill, background: T.text, color: T.bg, fontSize: 14, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 32px)', boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
               display: 'flex', alignItems: 'center', gap: 12, boxSizing: 'border-box',
             }}>
-            {/* Long messages truncate; the action button never gets pushed off-screen. */}
-            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toastMsg}</span>
+            {/* Long messages truncate; with an action the text wraps to two lines so the wait stays visible. */}
+            {toastAction
+              ? <span style={{ minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 }}>{toastMsg}</span>
+              : <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toastMsg}</span>}
             {toastAction && (
               <button type="button" onClick={() => { toastAction.run(); ui.set({ toast: null, toastAction: null }) }}
                 style={{ height: 32, padding: '0 14px', borderRadius: T.r.pill, border: 'none', background: T.bg, color: T.text, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>

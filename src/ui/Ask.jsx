@@ -19,13 +19,13 @@ let speakToken = 0
 async function speak(text, voice, onState) {
   const my = ++speakToken
   pause()
-  onState(true)
   try {
     for (const s of sentences(text.replace(/[*#_`>]/g, ''))) {
       const url = URL.createObjectURL(recordToBlob(await synthesize(s, voice)))
       if (my !== speakToken) return URL.revokeObjectURL(url)
       voiceOut.src = url
       await voiceOut.play()
+      if (my === speakToken) onState(true) // first sound: no longer preparing
       await new Promise(r => { voiceOut.onended = r; voiceOut.onpause = r })
       URL.revokeObjectURL(url)
       if (my !== speakToken) return
@@ -45,6 +45,7 @@ export function AskPanel({ d, doc, onClose }) {
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(null)
+  const [preparingVoice, setPreparingVoice] = useState(null)
   const scroller = useRef(null)
   const abort = useRef(null)
 
@@ -73,7 +74,18 @@ export function AskPanel({ d, doc, onClose }) {
       setMsgs(done)
       db.putChat(d.id, done)
     } catch (e) {
-      if (e.name !== 'AbortError') setMsgs(m => [...m.slice(0, -1), { role: 'model', text: e.message, error: true }])
+      if (e.name !== 'AbortError') {
+        const offline = !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed/i.test(e.message || '')
+        const quota = e.status === 429 || /429|quota|rate limit/i.test(e.message || '')
+        setMsgs(m => [...m.slice(0, -1), {
+          role: 'model',
+          text: quota ? "Google's free quota is full right now. Try again in a minute."
+            : offline ? "You're offline. Your question is still in the box."
+            : "Couldn't get an answer. Try again.",
+          error: true,
+        }])
+        setQ(question.trim()) // keep the question for a retry
+      }
     } finally {
       setBusy(false)
     }
@@ -118,9 +130,12 @@ export function AskPanel({ d, doc, onClose }) {
                 {m.text || (busy && k === msgs.length - 1 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: T.sub }}><Pulse /> Thinking</span> : null)}
                 {m.role === 'model' && m.text && !m.error && !(busy && k === msgs.length - 1) && (
                   <div style={{ marginTop: 6 }}>
-                    <button type="button" onClick={() => (speaking === k ? (stopSpeaking(), setSpeaking(null)) : speak(m.text, d.voice, on => setSpeaking(on ? k : null)))}
+                    <button type="button" onClick={() => {
+                      if (speaking === k || preparingVoice === k) { stopSpeaking(); setSpeaking(null); setPreparingVoice(null) }
+                      else { setPreparingVoice(k); speak(m.text, d.voice, on => { if (on) { setPreparingVoice(null); setSpeaking(k) } else { setSpeaking(null); setPreparingVoice(null) } }) }
+                    }}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: 'transparent', color: speaking === k ? T.accent : T.sub, fontFamily: T.font, fontSize: 12, cursor: 'pointer' }}>
-                      <Icon name={speaking === k ? 'stop' : 'speaker'} size={13} /> {speaking === k ? 'Stop' : 'Listen'}
+                      <Icon name={speaking === k ? 'stop' : 'speaker'} size={13} /> {preparingVoice === k ? 'Preparing the voice...' : speaking === k ? 'Stop' : 'Listen'}
                     </button>
                   </div>
                 )}

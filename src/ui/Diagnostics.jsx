@@ -53,15 +53,17 @@ function reportText(sections) {
 }
 
 export function DiagnosticsCard({ Card }) {
+  const [open, setOpen] = useState(false)
   const [, setTick] = useState(0)
   useEffect(() => {
+    if (!open) return
     const t = setInterval(() => setTick(x => x + 1), 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [open])
   const sections = collect()
   async function copy() {
     try {
-      await navigator.clipboard.writeText(reportText(sections))
+      await navigator.clipboard.writeText(reportText(collect()))
       toast('Diagnostics copied')
     } catch {
       toast('Could not copy. Select the text instead.')
@@ -69,18 +71,21 @@ export function DiagnosticsCard({ Card }) {
   }
   return (
     <Card title="Diagnostics">
-      {sections.map(([h, rows]) => (
-        <div key={h} style={{ display: 'grid', gap: 6 }}>
-          <div style={label}>{h}</div>
-          {rows.map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.5 }}>
-              <span style={{ color: T.sub, flexShrink: 0 }}>{k}:</span>
-              <span style={{ color: T.text, fontFamily: T.mono, wordBreak: 'break-word' }}>{String(v)}</span>
-            </div>
-          ))}
-        </div>
-      ))}
       <div><Button onClick={copy}>Copy report</Button></div>
+      <details open={open} onToggle={e => setOpen(e.currentTarget.open)}>
+        <summary style={{ cursor: 'pointer', fontFamily: T.font, fontSize: 14, fontWeight: 600, color: T.text }}>Show diagnostics</summary>
+        {sections.map(([h, rows]) => (
+          <div key={h} style={{ display: 'grid', gap: 6, marginTop: 12 }}>
+            <div style={label}>{h}</div>
+            {rows.map(([k, v]) => (
+              <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.5 }}>
+                <span style={{ color: T.sub, flexShrink: 0 }}>{k}:</span>
+                <span style={{ color: T.text, fontFamily: T.mono, wordBreak: 'break-word' }}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </details>
     </Card>
   )
 }

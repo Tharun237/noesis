@@ -108,4 +108,4 @@ npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name noesis
 
 ## License
 
-MIT. Voices: [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices); only voices whose model card allows free use are offered (see `src/lib/voices.js` for each voice's license).
+Copyright (c) 2026 Tharun Gundu. All rights reserved. Voices: rhasspy/piper-voices (see src/lib/voices.js for each voice's license).

@@ -64,7 +64,7 @@ function GeminiCard() {
   const [models, setModels] = useState(null)
   const [state, setState] = useState(null)
 
-  async function test(k = draft.trim()) {
+  async function test(k = draft.trim(), auto = false) {
     setState('testing')
     try {
       const { listModels } = await import('../lib/gemini.js')
@@ -73,10 +73,12 @@ function GeminiCard() {
       settings.set({ geminiKey: k })
       setState('ok')
     } catch (e) {
-      setState(e.message)
+      const offline = !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed/i.test(e.message || '')
+      if (auto && offline) { setState(null); return }
+      setState(offline ? 'No connection. Your key is saved. Test again when online.' : e.message)
     }
   }
-  useEffect(() => { if (key && !models) test(key) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (key && !models) test(key, true) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Card title="AI features · optional" right={hasKey() && state === 'ok' ? <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.ok }}>connected</span> : null}>
@@ -93,7 +95,7 @@ function GeminiCard() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button kind="primary" onClick={() => test()} disabled={draft.trim().length < 20 || state === 'testing'}>{state === 'testing' ? 'Checking…' : 'Save & test'}</Button>
         {key && <Button kind="danger" onClick={() => { settings.set({ geminiKey: '' }); setDraft(''); setModels(null); setState(null) }}>Remove key</Button>}
-        {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: T.danger }}>{state}</span>}
+        {state && state !== 'ok' && state !== 'testing' && <span style={{ fontSize: 12.5, color: state === 'No connection. Your key is saved. Test again when online.' ? T.sub : T.danger }}>{state}</span>}
       </div>
       {models && (
         <Field title="Model" hint="gemini-flash-latest always points to Google's newest Flash model.">
@@ -105,7 +107,7 @@ function GeminiCard() {
         </Field>
       )}
       <Toggle checked={ai} onChange={v => settings.set({ aiNarration: v })} disabled={!hasKey()} labelText="AI narration for PDFs by default"
-        hint="Better for papers and textbooks. Uses more of your free quota; long books take a few minutes to prepare." />
+        hint="Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests." />
     </Card>
   )
 }
@@ -115,11 +117,9 @@ const MODEL_CACHE = 'noesis-voices'
 
 function StorageCard() {
   const [est, setEst] = useState(null)
-  const [persisted, setPersisted] = useState(null)
   const [hasModel, setHasModel] = useState(false)
   const refresh = () => {
     navigator.storage?.estimate?.().then(setEst)
-    navigator.storage?.persisted?.().then(setPersisted)
     globalThis.caches?.has(MODEL_CACHE).then(setHasModel)
   }
   useEffect(refresh, [])
@@ -128,7 +128,7 @@ function StorageCard() {
     <Card title="Storage">
       <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>
         {est ? <>Using <span style={{ color: T.text, fontFamily: T.mono }}>{gb(est.usage)}</span> of {gb(est.quota)} available. </> : null}
-        {persisted === true ? 'Storage is persistent, so your browser will not clear it.' : persisted === false ? 'Storage may be cleared by the browser when space runs low. Installing Noesis makes it persistent.' : ''}
+        Noesis asked your browser to keep this storage. You can still clear it in browser settings.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Button kind="danger" icon="trash" onClick={async () => {
@@ -161,7 +161,7 @@ function AppCard() {
       {evt && !installed && (
         <Button kind="primary" icon="install" onClick={async () => { evt.prompt(); const r = await evt.userChoice; if (r.outcome === 'accepted') ui.set({ installEvt: null }) }}>Install Noesis</Button>
       )}
-      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')} · free & open source (MIT) · voices by Piper (rhasspy/piper-voices; public domain, CC0 and CC BY voices only)</div>
+      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')} · free to use · voices by Piper (rhasspy/piper-voices; public domain, CC0 and CC BY voices only)</div>
     </Card>
   )
 }

@@ -194,7 +194,7 @@ await step('sleep timer sets', async () => {
   const s = await playerState()
   expect(s.sleep?.until > Date.now(), 'sleep not set')
   await page.getByRole('button', { name: 'Player menu' }).click()
-  await page.getByRole('menuitem', { name: 'Sleep timer off' }).click()
+  await page.getByRole('menuitem', { name: 'Turn sleep timer off' }).click()
 })
 
 await step('bookmark current sentence', async () => {

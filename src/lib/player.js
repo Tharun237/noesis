@@ -234,7 +234,7 @@ function finish() {
   patch(id, { finished: true, pos: 0, posF: 0, ...(s.archiveFinished && { archived: true }) })
   const up = !sleep?.doc && s.autoplayNext && nextInQueue(id, s.sort)
   if (!up) return
-  toast(`Up next: ${up.title}`)
+  toast(`Playing next: ${up.title}`)
   open(up.id)
 }
 
@@ -325,7 +325,7 @@ export async function play() {
     player.set({ playing: false })
     kickVoice()
     const wait = player.get().gate
-    toast(`The natural voice is still being prepared on this device: ready in ${fmtWait(wait)}. It starts by itself.`,
+    toast(`Audio is still being prepared on this device: ready in ${fmtWait(wait)}. It starts by itself.`,
       typeof speechSynthesis !== 'undefined' ? { label: 'Use built-in voice now', run: () => settings.set({ voiceEngine: 'system' }) } : null)
     return
   }

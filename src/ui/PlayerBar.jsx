@@ -23,7 +23,7 @@ import { IconButton, Menu, Progress, fmtTime, fmtDur } from './kit.jsx'
 import { Cover } from './Library.jsx'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
-const SLEEP = [[0, 'Off'], [10, '10 minutes'], [20, '20 minutes'], [30, '30 minutes'], [45, '45 minutes'], [60, '1 hour'], [90, '1½ hours'], [120, '2 hours']]
+const SLEEP = [[10, '10 minutes'], [20, '20 minutes'], [30, '30 minutes'], [45, '45 minutes'], [60, '1 hour'], [90, '1½ hours'], [120, '2 hours']]
 
 function useTimeline(id) {
   const d = useStore(library, s => s.docs.find(x => x.id === id))
@@ -40,15 +40,22 @@ export function PlayerBar({ wide, full }) {
   const { d, c, offs } = useTimeline(id)
   const [drag, setDrag] = useState(null)
   const gate = useStore(player, s => s.gate)
+  const waiting = useStore(player, s => s.waiting)
+  const sleep = useStore(player, s => s.sleep)
   const voiceLabel = useVoiceLabel(d || {})
   if (!id || !d) return null
   const total = offs ? offs[offs.length - 1] : 0
   const pos = offs ? Math.min(total, offs[Math.min(i, offs.length - 1)] + t) : 0
   const shown = drag ?? pos
   const remaining = Math.max(0, total - shown) / player.get().rate
+  const est = d.vChars <= 400
+  const left = total ? `${est ? '~' : ''}${fmtDur(remaining)} left` : ''
+  const sleepLine = sleepText(sleep)
 
   const scrubber = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
+    <div style={{ display: 'grid', gap: 2 }}>
+      {waiting && <div style={{ fontSize: 12, color: T.sub }}>Waiting for the next sentence to generate</div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
       <span style={{ minWidth: 52 }}>{fmtTime(shown)}</span>
       <input type="range" min={0} max={Math.max(1, Math.floor(total))} step={1} value={Math.floor(shown)} aria-label="Position"
         disabled={!c}
@@ -57,10 +64,11 @@ export function PlayerBar({ wide, full }) {
         onKeyUp={e => { if (drag !== null) { seekTime(drag); setDrag(null) } }}
         style={{ flex: 1, accentColor: T.accent, height: 20, cursor: 'pointer', margin: 0 }} />
       <span style={{ minWidth: 60, textAlign: 'right' }}>-{fmtTime(remaining)}</span>
+      </div>
     </div>
   )
 
-  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} left={total ? `${fmtDur(remaining)} left` : ''} />
+  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} waiting={waiting} left={left} sleepLine={sleepLine} />
 
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
@@ -82,7 +90,7 @@ export function PlayerBar({ wide, full }) {
         ) : <SpeedMenu />}
         <Transport />
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
-          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{gate != null ? `Ready in ${fmtWait(gate)}` : `${fmtDur(remaining)} left`}</span>}
+          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{gate != null ? `Ready in ${fmtWait(gate)}` : left}{sleepLine ? ` · ${sleepLine}` : ''}</span>}
           {wide && <BookmarkButton d={d} i={i} />}
           {wide && <SpeedMenu />}
           <MoreMenu d={d} />
@@ -143,14 +151,25 @@ function BookmarkButton({ d, i }) {
   return <IconButton icon="bookmark" label={on ? 'Remove bookmark' : 'Bookmark this sentence'} active={on} fill={on} onClick={() => toast(toggleMark(d.id, i) ? 'Bookmarked' : 'Bookmark removed')} />
 }
 
+export function sleepText(sleep) {
+  if (!sleep) return null
+  if (sleep.until) return `Sleep in ${Math.max(1, Math.round((sleep.until - Date.now()) / 60000))} min`
+  if (sleep.chapter) return 'Sleep at end of chapter'
+  if (sleep.doc) return 'Sleep at end of document'
+  return null
+}
+
 function MoreMenu({ d }) {
   const sleep = useStore(player, s => s.sleep)
   const skip = useStore(settings, s => s.skipVisuals)
-  const sleepLeft = sleep?.until ? `${Math.max(1, Math.round((sleep.until - Date.now()) / 60000))}m` : sleep?.chapter ? 'chapter' : sleep?.doc ? 'end' : 'off'
+  const running = sleep?.until || sleep?.chapter || sleep?.doc
+  const minsLeft = sleep?.until ? Math.max(1, Math.round((sleep.until - Date.now()) / 60000)) : null
+  const runningRight = sleep?.until ? `${minsLeft} min left` : sleep?.chapter ? 'at end of chapter' : sleep?.doc ? 'at end of document' : 'off'
   const at = m => new Date(Date.now() + m * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   return (
     <Menu up trigger={t => <IconButton icon="more" label="Player menu" onClick={t} />} items={[
-      ...SLEEP.map(([m, l]) => ({ label: m ? `Sleep in ${l}` : 'Sleep timer off', icon: m === 0 ? 'moon' : undefined, right: m ? at(m) : sleepLeft, onClick: () => setSleep(m ? { until: Date.now() + m * 60000 } : null) })),
+      ...(running ? [{ label: 'Turn sleep timer off', icon: 'moon', right: runningRight, onClick: () => setSleep(null) }] : []),
+      ...SLEEP.map(([m, l]) => ({ label: `Sleep in ${l}`, icon: minsLeft === m ? 'check' : undefined, right: at(m), onClick: () => setSleep({ until: Date.now() + m * 60000 }) })),
       { label: 'Sleep at end of chapter', icon: sleep?.chapter ? 'check' : undefined, onClick: () => setSleep({ chapter: true }) },
       { label: 'Sleep at end of document', icon: sleep?.doc ? 'check' : undefined, onClick: () => setSleep({ doc: true }) },
       '-',
@@ -161,7 +180,7 @@ function MoreMenu({ d }) {
   )
 }
 
-function MiniPlayer({ d, progress, voiceLabel, gate, left }) {
+function MiniPlayer({ d, progress, voiceLabel, gate, waiting, left, sleepLine }) {
   return (
     <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={T.spring}
       style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
@@ -172,7 +191,7 @@ function MiniPlayer({ d, progress, voiceLabel, gate, left }) {
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, gate != null ? `ready in ${fmtWait(gate)}` : left].filter(Boolean).join(' · ')}</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting ? 'waiting for the next sentence' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
           </span>
         </button>
         <MiniTransport />

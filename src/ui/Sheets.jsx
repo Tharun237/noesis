@@ -36,7 +36,7 @@ async function preview(voice, setBusy) {
     previewAudio.src = previewUrl
     await previewAudio.play()
   } catch (e) {
-    toast(`Preview failed: ${e.message}`)
+    toast("Preview couldn't play. Check your connection and try again.")
   } finally {
     setBusy(null)
   }
@@ -181,7 +181,7 @@ function VoicePicker() {
   return (
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>
-      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice you haven't used yet downloads once (about 63 MB).</div>
+      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice downloads once on each device (about 63 MB).</div>
       {VOICES.map(v => (
         <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
           <button type="button" onClick={() => { changeVoice(d.id, v.id); toast(`Switching to ${v.name}`); closeSheet() }}

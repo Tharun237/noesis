@@ -1,13 +1,13 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack } from '../lib/nav.js'
-import { library, loadDoc, docDuration, reprocess, readiness } from '../lib/library.js'
+import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
-import { engine } from '../lib/tts.js'
+import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { voiceName } from '../lib/voices.js'
@@ -15,8 +15,10 @@ import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Sheet, fmtDur } from './kit.jsx'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts.jsx'
-import { AskPanel } from './Ask.jsx'
 import { playerHeight } from './PlayerBar.jsx'
+
+// Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
+const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
 
 const VISUAL_LABEL = { fig: 'Figure', table: 'Table', math: 'Equation', code: 'Code' }
 const HEADER_H = 57
@@ -271,47 +273,72 @@ function DocNote({ d }) {
   )
 }
 
-const fmtWait = w => (w < 90 ? 'under 2 minutes' : w < 3600 ? `about ${Math.round(w / 60)} minutes` : `about ${(w / 3600).toFixed(1)} hours`)
+const fmtWait = w => (w == null ? null : w < 90 ? 'under 2 minutes' : w < 3600 ? `about ${Math.round(w / 60)} minutes` : `about ${(w / 3600).toFixed(1)} hours`)
+const offlineErr = e => !navigator.onLine || /failed to fetch|networkerror|load failed|offline|network request failed/i.test(e || '')
 
 function Preparing({ d, doc, pos }) {
   const eng = useStore(engine, s => s.status)
+  const engVoice = useStore(engine, s => s.voice)
+  const engErr = useStore(engine, s => s.error)
   const loaded = useStore(engine, s => s.loaded)
   const total = useStore(engine, s => s.total)
   const opening = useStore(engine, s => s.opening)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const speed = useStore(settings, s => s.voiceSpeed)
+  const playId = useStore(player, s => s.id)
+  const gate = useStore(player, s => s.gate)
   const textReady = d.status === 'voicing' || d.status === 'ready'
   const [asked, setAsked] = useState(notifyAsked)
   if (sys && textReady) return null // the built-in voice speaks straight away: nothing to prepare
-  const downloading = d.status === 'voicing' && eng !== 'ready'
+  const gated = playId === d.id && gate != null
+  const realDownload = total > 0 && !opening
+  // A load from this device's storage that nobody is waiting on is routine: silent.
+  const downloading = d.status === 'voicing' && eng !== 'ready' && eng !== 'error' && (gated || realDownload)
   const pct = downloading ? (total ? loaded / total : 0) : d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
   const ready = d.status === 'voicing' && !downloading ? readiness(d, doc, pos) : null
   const slow = speed > 0 && speed < 1 && hasSystemVoice()
+  const voiceOff = eng === 'error' && offlineErr(engErr)
   return (
     <div style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${d.status === 'error' || eng === 'error' ? T.danger : T.border}`, background: T.surface, display: 'grid', gap: 12, marginBottom: 32 }}>
       <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {downloading
+        {eng === 'error' && d.status === 'voicing'
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.danger }}>
+              <Pulse color={T.danger} />
+              {voiceOff ? "You're offline. The voice downloads when you're back online." : "The voice couldn't start."}
+            </span>
+          : downloading
           ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: eng === 'error' ? T.danger : T.accent }}>
               <Pulse color={eng === 'error' ? T.danger : T.accent} />
-              {eng === 'error' ? 'The voice could not be downloaded' : total && !opening ? `Downloading the voice · ${Math.floor(pct * 100)}%` : 'Getting the voice ready'}
+              {realDownload && pct >= 0.01 ? `Downloading the voice · ${Math.floor(pct * 100)}%` : realDownload ? 'Downloading the voice' : 'Getting the voice ready'}
             </span>
           : ready
             ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.lime : T.text }}>
                 {ready.ready ? <Icon name="check" size={15} /> : <Pulse />}
-                {ready.ready ? 'Ready to play' : `Preparing the natural voice · ready in ${fmtWait(ready.wait)}`}
+                {ready.ready ? 'Ready to play' : ready.wait == null ? 'Preparing the voice' : `Preparing the natural voice · ready in ${fmtWait(ready.wait)}`}
               </span>
             : <StatusLine d={d} />}
       </div>
       {d.status !== 'error' && <Progress value={pct} />}
       <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
-        {downloading
-          ? eng === 'error' ? 'Check your connection, then tap Retry below.' : total && !opening ? 'One time only. After this, this voice works offline on this device.' : 'A few seconds.'
+        {eng === 'error' && d.status === 'voicing'
+          ? voiceOff ? "The voice downloads when you're back online." : 'Tap Retry to try again.'
+          : downloading
+          ? realDownload ? 'One time only. After this, this voice works offline on this device.' : 'A few seconds.'
           : ready
             ? ready.ready
-              ? `Generation keeps going in the background and stays ahead of you. ${Math.floor(pct * 100)}% generated.`
-              : `Noesis prepares enough audio to play to the end without pauses (this device generates at ${speed ? speed.toFixed(2) : '…'}× speaking speed). Play starts by itself when ready.`
-            : d.status === 'error' ? 'Use the menu above to try again.' : 'Preparing the text. This page fills in when it is ready.'}
+              ? 'The rest is prepared ahead of you as you listen.'
+              : gated
+                ? `Noesis prepares enough audio to play to the end without pauses (this device generates at ${speed ? speed.toFixed(2) : '…'}× speaking speed). Play starts by itself when ready.`
+                : "Noesis prepares enough audio to play to the end without pauses. Press Play when it's ready."
+            : d.status === 'error' ? 'Use the menu above to try again.'
+            : d.status === 'queued' ? 'Starts when the earlier book is done.'
+            : d.status === 'syncing' ? 'Waiting for your other device or the download.'
+            : d.status === 'reading' ? 'Reading the file on this device.'
+            : 'Preparing the text. This page fills in when it is ready.'}
       </div>
+      {eng === 'error' && d.status === 'voicing' && !voiceOff && (
+        <div><Button icon="refresh" onClick={() => loadEngine(engVoice).then(kickVoice).catch(() => {})}>Retry</Button></div>
+      )}
       {ready && !ready.ready && slow && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Don't want to wait? Your device's built-in voice starts instantly.</span>

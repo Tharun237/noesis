@@ -60,7 +60,10 @@ export function Library({ wide }) {
               </AnimatePresence>
             </div>
             {loaded && docs.length === 0 && (
-              <div style={{ padding: '60px 20px', textAlign: 'center', color: T.sub, fontSize: 14 }}>Nothing here yet.</div>
+              <div style={{ padding: '60px 20px', textAlign: 'center', display: 'grid', gap: 14, justifyItems: 'center' }}>
+                <div style={{ color: T.sub, fontSize: 14 }}>No documents match.</div>
+                <Button onClick={() => ui.set({ query: '', kind: null, progress: null })}>Clear filters</Button>
+              </div>
             )}
           </>
         )}
@@ -267,34 +270,44 @@ export function Cover({ d, w = 56, h = 74 }) {
   )
 }
 
-// One true statement about a document's audio, or nothing. "Generating audio 0%" beside "playable now" read as a
-// contradiction (2026-10-11): what matters to the listener is only whether they can press play, and if not, when.
+// One true statement about a document's audio, or nothing. An audio line shows only for the document
+// loaded in the player while its gate is closed (Play was pressed and it is not ready yet), using the
+// same gate seconds the player shows. Every other card stays silent: routine background work blocks nothing.
 export function StatusLine({ d }) {
   const sys = useStore(settings, s => activeEngine(s) === 'system')
-  const voiceLoading = useStore(engine, s => s.status === 'loading')
-  const r = useStore(settings, s => s.voiceSpeed)
-  if (d.status === 'error') return <span style={{ color: T.danger }}>{d.error || 'Failed'}</span>
+  const playId = useStore(player, s => s.id)
+  const gate = useStore(player, s => s.gate)
+  const engStatus = useStore(engine, s => s.status)
+  // Queue order as a stable string: re-renders only when the queue's membership changes, not on progress ticks.
+  const qkey = useStore(library, s => s.docs.filter(x => x.status === 'queued' || x.status === 'reading' || x.status === 'narrating' || x.status === 'syncing').sort((a, b) => a.createdAt - b.createdAt).map(x => x.id).join(','))
+  if (d.status === 'error') return <span style={{ color: T.danger }}>Could not read this file. Try again from the menu (⋯).{d.error ? <span style={{ color: T.faint }}> · {d.error}</span> : null}</span>
   if (d.status === 'ready') return null
   if (d.status === 'voicing') {
     if (sys) return null // built-in voice: playable as soon as the text is ready
-    // Same rule as the player's gate, from the document's own counters: can it play to the end without stalling?
-    const w = r && d.chars ? waitSeconds(d.vSec || 0, Math.max(0, d.chars - (d.vChars || 0)) * secPerChar(d), r) : null
-    if (w === 0) return null // ready to play; the rest is prepared ahead of the listener, silently
-    if (voiceLoading) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Waiting for the voice</span>
-    const when = w == null ? '' : ` · ready in ${w < 90 ? 'under 2 min' : w < 3600 ? `about ${Math.round(w / 60)} min` : `about ${(w / 3600).toFixed(1)} h`}`
+    if (engStatus === 'error' && d.id === playId) return <span style={{ color: T.danger }}>The voice didn't load</span>
+    if (d.id !== playId || gate == null) return null
+    const when = ` · ready in ${gate < 90 ? 'under 2 min' : gate < 3600 ? `about ${Math.round(gate / 60)} min` : `about ${(gate / 3600).toFixed(1)} h`}`
     return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Preparing audio{when}</span>
   }
+  if (d.status === 'queued') return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> {queuedText(d.id, qkey)}</span>
   const pct = d.prep || 0
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}>
-      <Pulse /> {d.stage || 'Waiting'}{pct > 0 ? ` · ${Math.floor(pct * 100)}%` : ''}
+      <Pulse /> {d.stage || 'Waiting'}{pct >= 0.01 ? ` · ${Math.floor(pct * 100)}%` : ''}
     </span>
   )
 }
 
+const ord = n => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`)
+function queuedText(id, qkey) {
+  const at = qkey ? qkey.split(',').indexOf(id) : -1
+  return at < 0 ? 'Queued' : `Queued, ${ord(at + 1)} in line`
+}
+
 const DocCard = memo(function DocCard({ d, playing }) {
   const listened = d.total ? (d.finished ? 1 : d.pos / d.total) : 0
-  const meta = [KIND[d.kind], d.chars ? fmtDur(docDuration(d)) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
+  const dur = d.chars ? fmtDur(docDuration(d)) : null
+  const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
   return (
     <motion.div layout="position" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}
@@ -325,7 +338,6 @@ const DocCard = memo(function DocCard({ d, playing }) {
         </div>
       </div>
       {listened > 0 && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0 }}><Progress value={listened} height={2} color={T.faint} track="transparent" /></div>}
-      {working && d.status === 'voicing' && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0 }}><Progress value={d.done / Math.max(1, d.total)} height={2} /></div>}
     </motion.div>
   )
 })
@@ -338,14 +350,14 @@ export function docMenu(d) {
     { label: d.archived ? 'Move to queue' : 'Archive', icon: 'archive', onClick: () => patch(d.id, { archived: !d.archived }) },
     '-',
     { label: 'Export transcript', icon: 'text', disabled: !d.total, onClick: () => exportTranscript(d.id) },
-    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? '.opus' : `${Math.floor((d.done / Math.max(1, d.total)) * 100)}%`, onClick: () => exportAudio(d.id) },
+    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? '.opus' : 'when fully voiced', onClick: () => exportAudio(d.id) },
     d.status === 'error' && { label: 'Try again', icon: 'refresh', onClick: () => reprocess(d.id) },
     '-',
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) go('library') } } },
   ]
 }
 
-const STATS = [['₹0', 'Free forever'], ['100%', 'On your device'], [String(VOICES.length), 'Natural voices']]
+const STATS = [['₹0', 'Free forever'], ['Offline', 'audio'], [String(VOICES.length), 'Natural voices']]
 const FEATURES = [
   ['waves', 'Natural voices, on your device', 'Audio is generated locally. No account, no limits, works offline.'],
   ['sparkle', 'Skips the page junk', 'Headers, page numbers, citations and reference lists are removed before listening.'],
@@ -370,7 +382,7 @@ function EmptyState({ wide }) {
         Understand it.
       </motion.div>
       <motion.p {...rise(3)} style={{ color: T.sub, fontSize: wide ? 18 : 16, lineHeight: 1.6, margin: '22px 0 0', maxWidth: 540 }}>
-        Papers, books and articles turned into natural audio, generated privately on your own device. Open source.
+        Papers, books and articles turned into natural audio. Audio is made on your device. AI features are opt-in.
       </motion.p>
       <motion.div {...rise(4)} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', justifyContent: 'start', columnGap: wide ? 56 : 28, rowGap: 6, marginTop: 34 }}>
         {STATS.map(([v]) => <div key={v} style={{ fontFamily: T.mono, fontSize: wide ? 26 : 21, fontWeight: 600, color: T.text }}>{v}</div>)}
