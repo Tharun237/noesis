@@ -136,6 +136,7 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
     if (!auto || !doc || !keyed || ran.current === auto.n) return
     const qk = QUICK.find(x => x.id === auto.id)
     if (qk) { ran.current = auto.n; quick(qk) }
+    else if (auto.q) { ran.current = auto.n; ask(auto.q, { aloud: true }) } // a question asked by voice is answered aloud
   }, [auto, doc, keyed]) // eslint-disable-line react-hooks/exhaustive-deps
   const nextSection = () => {
     const at = playId === d.id ? pi : d.pos || 0

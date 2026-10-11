@@ -6,6 +6,7 @@ import { ui } from './lib/nav.js'
 import { Route } from './lib/route.js'
 import { boot } from './lib/library.js'
 import { startHistory } from './lib/history.js'
+import { startExtras } from './lib/extras.js'
 import { player, toggle, nextSentence, prevSentence } from './lib/player.js'
 import { Library } from './ui/Library.jsx'
 import { Reader } from './ui/Reader.jsx'
@@ -28,7 +29,7 @@ export default function App() {
   const activity = useActivity()
 
   useEffect(() => { boot() }, [])
-  useEffect(() => { startHistory() }, [])
+  useEffect(() => { startHistory(); startExtras() }, [])
 
   useEffect(() => {
     const onKey = e => {

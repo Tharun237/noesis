@@ -4,7 +4,12 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet } from '../lib/nav.js'
 import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '../lib/library.js'
-import { player, open as openPlayer, seekTo, timeline, audioClock } from '../lib/player.js'
+import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate } from '../lib/player.js'
+import { toggleMark, setMarkNote } from '../lib/library.js'
+import { toast } from '../lib/nav.js'
+import { parseCommand, speechSupported } from '../lib/voicecmd.js'
+import { VoiceControl, VoiceStatus } from './VoiceControl.jsx'
+import { floatingSupported } from '../lib/floating.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { useRoute } from '../lib/route.js'
@@ -31,6 +36,8 @@ const PageView = lazy(() => import('./PageView.jsx').then(m => ({ default: m.Pag
 
 const VISUAL_LABEL = { fig: 'Figure', table: 'Table', math: 'Equation', code: 'Code' }
 const HEADER_H = 57
+// The app's name as a speech recogniser tends to write it.
+const WAKE = /^(?:hey\s+)?(?:noesis|no\s?esis|gnosis|no\s?thesis|know\s?esis|noises)[\s,.:!]*/i
 const SUBROW_H = 44 // second header row (Text | Pages) on documents that have pages
 
 export function Reader({ wide }) {
@@ -53,6 +60,37 @@ export function Reader({ wide }) {
   }, [])
   const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
+  const [voiceState, setVoiceState] = useState('off')
+  const [heard, setHeard] = useState('')
+  // What the microphone heard. While the book is playing through a loudspeaker the microphone hears the
+  // book too, and the book says "stop" and "next" all the time: then a command must start with "Noesis".
+  const onHeard = said => {
+    setHeard(said)
+    const m = said.trim().match(WAKE)
+    const p = player.get()
+    if (p.playing && p.id === id && !m) return
+    const c = parseCommand(m ? said.trim().slice(m[0].length) : said)
+    if (!c) return
+    const at = p.id === id ? p.i : d?.pos || 0
+    if (c.cmd === 'play') (p.id === id ? play() : openPlayer(id, { at }).then(play))
+    else if (c.cmd === 'pause') pause()
+    else if (c.cmd === 'back') prevSentence()
+    else if (c.cmd === 'next') nextSentence()
+    else if (c.cmd === 'slower') setRate(Math.max(0.5, Math.round((p.rate - 0.1) * 10) / 10))
+    else if (c.cmd === 'faster') setRate(Math.min(3, Math.round((p.rate + 0.1) * 10) / 10))
+    else if (c.cmd === 'bookmark') {
+      // The bookmark keeps the last few sentences as its note, so "what was I marking?" has an answer later.
+      if (!(d.marks || []).some(x => x.i === at)) toggleMark(id, at)
+      if (doc) setMarkNote(id, at, doc.segs.slice(Math.max(0, at - 2), at + 1).map(x => x.t).join(' '))
+      toast('Bookmarked, with the last few sentences')
+    }
+    else if (c.cmd === 'explain' || c.cmd === 'recap' || c.cmd === 'skim') quick(c.cmd)
+    else if (c.cmd === 'ask' && c.arg) { setAskAuto({ q: c.arg, n: Date.now() }); setPanel('ask') }
+  }
+  const float = async () => {
+    const [{ openFloating }, { FloatingReader }] = await Promise.all([import('../lib/floating.js'), import('./FloatingReader.jsx')])
+    openFloating(() => <FloatingReader />)
+  }
   const [searching, setSearching] = useState(false)
   const [hit, setHit] = useState(-1)
   const playId = useStore(player, s => s.id)
@@ -171,10 +209,12 @@ export function Reader({ wide }) {
           {!wide && headings.length > 1 && <IconButton icon="toc" label="Contents" onClick={() => setPanel('toc')} />}
           <IconButton icon="type" label="Reading settings" onClick={() => setPanel('type')} />
           {wide && <IconButton icon="bookmark" label="Bookmarks & notes" onClick={() => setPanel('marks')} />}
+          {speechSupported() && <VoiceControl onState={setVoiceState} onHeard={onHeard} />}
           <IconButton icon="sparkle" label="Ask about this document" active={panel === 'ask'} onClick={() => setPanel(panel === 'ask' ? null : 'ask')} />
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
             items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
               ...(view === 'pages' ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
+              ...(floatingSupported() ? [{ label: 'Float the words over other windows', icon: 'eye', onClick: float }, '-'] : []),
               { label: 'Explain what I just heard', icon: 'sparkle', onClick: () => quick('explain') },
               { label: 'Skim this section', icon: 'sparkle', onClick: () => quick('skim') },
               '-',
@@ -196,6 +236,12 @@ export function Reader({ wide }) {
         {view === 'pages' && numPages > 0 && doc && !linked && (
           <div style={{ padding: `0 ${wide ? 20 : 14}px 10px`, fontSize: 12, lineHeight: 1.45, color: T.sub }}>
             Pages aren't linked to the audio for this document. Add it again to link them.
+          </div>
+        )}
+        {voiceState !== 'off' && (
+          <div style={{ padding: `0 ${wide ? 20 : 14}px 10px`, display: 'grid', gap: 4 }}>
+            <VoiceStatus state={voiceState} heard={heard} />
+            {voiceState === 'listening' && <div style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>While the book is playing, start with its name: “Noesis, pause.” The microphone hears the book too.</div>}
           </div>
         )}
         {searching && <SearchBar doc={doc} onHit={setHit} onClose={() => setSearching(false)} />}

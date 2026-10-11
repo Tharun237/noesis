@@ -10,6 +10,7 @@ import { AccountCard } from './AccountCard.jsx'
 import { VoiceCard } from './VoiceCard.jsx'
 import { DiagnosticsCard } from './Diagnostics.jsx'
 import { CreditsCard } from './Credits.jsx'
+import { AmbientCard } from './AmbientCard.jsx'
 
 
 export function Settings({ wide }) {
@@ -28,6 +29,8 @@ export function Settings({ wide }) {
         </div>
         <AccountCard Card={Card} />
         <VoiceCard Card={Card} />
+        <AmbientCard Card={Card} mode={s.ambientMode || 'off'} volume={s.ambientVolume ?? 0.5} haptics={!!s.haptics}
+          onChange={c => settings.set({ ...('mode' in c ? { ambientMode: c.mode } : {}), ...('volume' in c ? { ambientVolume: c.volume } : {}), ...('haptics' in c ? { haptics: c.haptics } : {}) })} />
         <Card title="Listening">
           <Field title={`Default speed · ${s.speed}x`}>
             <input type="range" min={0.5} max={3} step={0.05} value={s.speed} onChange={e => settings.set({ speed: +e.target.value })} style={{ accentColor: T.accent, width: '100%' }} />

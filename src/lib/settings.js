@@ -34,6 +34,9 @@ export const DEFAULTS = {
   sort: 'recent', // library order, also the order "up next" plays in
   autoplayNext: false, // when a document ends, play the next one in the queue
   archiveFinished: false, // move finished documents to Archived
+  ambientMode: 'off', // off | focus | calm | brown: a quiet sound under the voice
+  ambientVolume: 0.5,
+  haptics: false, // vibrate with the rhythm of the text (Android)
   lockScreenWords: true, // show the words being read on the lock screen
   lockTipSeen: false, // the lock-screen guide toast was shown once on Android
   // Reading
