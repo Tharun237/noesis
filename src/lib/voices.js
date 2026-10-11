@@ -6,9 +6,11 @@
 // Each "medium" voice is a single ~63 MB download, cached on the device after first use.
 // NVIDIA Magpie cloud voices (M10) appear after the on-device voices when the customer saved an
 // NVIDIA key and the voice list was loaded: { id: 'nv:…', accent: 'NVIDIA · online', cloud: true }.
+// The customer's own voice service (M11) appears after those, for EVERY language, when its address,
+// model and at least one voice name are set: { id: 'oa:…', accent: '<host> · online', cloud: true }.
 import { settings } from './settings.js'
-import { isNvidiaKey } from './ai.js'
-import { isCloudVoice, cloudVoiceInfo } from './cloudvoice.js'
+import { isNvidiaKey, cleanBase, hostOf } from './ai.js'
+import { isCloudVoice, cloudVoiceInfo, parseVoiceNames } from './cloudvoice.js'
 
 export const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/'
 
@@ -40,7 +42,20 @@ function cloudFor(lang) {
   })
 }
 
-export const voicesFor = lang => [...VOICES.filter(v => v.lang === lang), ...cloudFor(lang)]
+function customFor() {
+  let s
+  try { s = settings.get() } catch { return [] }
+  const base = cleanBase(String(s.voiceBase || ''))
+  if (!base || !String(s.voiceModel || '').trim()) return []
+  const names = parseVoiceNames(s.voiceNames || '')
+  if (!names.length) return []
+  const host = hostOf(base)
+  return names.map(n => ({ id: 'oa:' + n, name: n, accent: `${host} · online`, g: undefined, license: 'Own voice', lang: null, cloud: true }))
+}
+
+export const voicesFor = lang => [...VOICES.filter(v => v.lang === lang), ...cloudFor(lang), ...customFor()]
+// On-device first, then NVIDIA, then the customer's own voices last: an `oa:` voice is the default
+// only when nothing else exists for that language.
 export const defaultVoiceFor = lang => voicesFor(lang)[0]?.id ?? null
 export const isVoice = id => VOICES.some(v => v.id === id) || isCloudVoice(id)
 export const voiceName = id => {

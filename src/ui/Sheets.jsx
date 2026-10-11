@@ -10,13 +10,11 @@ import { library, addDocument, changeVoice, addCollection, toggleInCollection, l
 import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
 import { voiceName, voicesFor } from '../lib/voices.js'
-import { isCloudVoice } from '../lib/cloudvoice.js'
+import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle } from './kit.jsx'
-
-const CLOUD_TRUTH = "Made online by NVIDIA: the text travels through Noesis's relay to NVIDIA. The audio is kept on this device and plays offline."
 
 export function Sheets({ wide }) {
   const sheet = useStore(ui, s => s.sheet)
@@ -201,7 +199,7 @@ function AddForm({ wide }) {
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: T.sub }}>{systemVoiceLabel(pickSystemVoice())}</div>
         </Field>
       ) : (
-      <Field title="Voice" hint={picked && isCloudVoice(picked) ? CLOUD_TRUTH : langVoices.length ? null : `No natural voice for ${LANGS[voiceLang].name} yet. Your device's built-in voice reads it.`}>
+      <Field title="Voice" hint={picked && isCloudVoice(picked) ? cloudTruth(picked) : langVoices.length ? null : `No natural voice for ${LANGS[voiceLang].name} yet. Your device's built-in voice reads it.`}>
         {langVoices.length > 0 && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select value={picked} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
@@ -245,7 +243,7 @@ function VoicePicker() {
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>
       <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice downloads once on each device (about 63 MB).</div>
       {d.voice && isCloudVoice(d.voice) && (
-        <div style={{ padding: '0 12px 14px', fontSize: 12.5, color: T.sub, lineHeight: 1.55 }}>{CLOUD_TRUTH}</div>
+        <div style={{ padding: '0 12px 14px', fontSize: 12.5, color: T.sub, lineHeight: 1.55 }}>{cloudTruth(d.voice)}</div>
       )}
       {voicesFor(d.lang || 'en').map(v => (
         <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>

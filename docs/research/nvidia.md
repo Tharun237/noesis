@@ -54,3 +54,13 @@ The key itself is NOT in this repository. For testing it sits in the session scr
   `magpie-tts-zeroshot` is restricted ("Apply for access"); `chatterbox-multilingual-tts` is gRPC only.
 - Not checked: whether the Hindi audio says the right words (no multilingual transcriber in tools/listen
   yet), and how it sounds.
+
+## Reading a page image (measured 2026-10-11, OpenAI `image_url` format, one 150 KB PNG of a printed page)
+- Read the heading correctly: `z-ai/glm-5.3-flash` (2.6 s), `meta/muse-glimmer-30b` (2.6 s),
+  `nvidia/ising-calibration-1.5-31b` (22 s). `google/diffusiongemma-26b-a4b-it` also sees images (it read the
+  app's title bar instead of the page heading, 1.5 s).
+- Cannot: the nemotron-3 family answers 400 "Received multimodal data but multimodal processing is not
+  enabled"; `openai/gpt-oss-20b` answers in words that it cannot see an image.
+- So scanned-page reading can work with NVIDIA when the customer picks a model that sees images, and the app
+  must turn that 400 into "This model cannot read page images. Choose another in Settings."
+- Not measured: several page images in one request, and the largest request NVIDIA accepts.

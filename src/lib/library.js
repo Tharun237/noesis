@@ -1,7 +1,7 @@
 import { createStore, uid } from './store.js'
 import { db, persistStorage } from './db.js'
 import { settings, hasKey } from './settings.js'
-import { hasAiKey, providerName } from './ai.js'
+import { hasAiKey, providerName, hostOf } from './ai.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -269,10 +269,14 @@ async function voiceOne(id, i) {
   const warm = engine.get().status === 'ready' && engine.get().voice === voice // the first call also downloads the voice
   const t0 = performance.now()
   const cloud = isCloudVoice(voice)
+  const own = typeof voice === 'string' && voice.startsWith('oa:')
+  const ownHost = own ? (hostOf(String(settings.get().voiceBase || '')) || 'The voice service') : null
   const onRetry = !cloud ? undefined : v => {
     if (!getDoc(id)) return
     if (v === 'offline') patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
     else if (v == null) patch(id, { stage: 'Generating audio' })
+    else if (typeof v === 'string') patch(id, { stage: v }) // pre-worded provider message (browser block)
+    else if (ownHost) patch(id, { stage: `${ownHost}'s quota is limiting requests. Retrying in about ${v} s.` })
     else patch(id, { stage: `NVIDIA's free quota is limiting requests. Retrying in about ${v} s.` })
   }
   try {
@@ -419,7 +423,9 @@ async function prepare(id) {
     const lang = (d.target && LANGS[d.target]) ? d.target : detectLang(finalText)
     const foreign = lang === 'en' && !isEnglish(finalText) // Latin letters, but not English: no voice of its own yet
     const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? (isCloudVoice(d.voice) ? cloudVoiceInfo(d.voice).lang : 'en'))
-    const voice = lang === curLang ? d.voice : defaultVoiceFor(lang)
+    // A custom (`oa:`) voice has no language of its own: the document keeps it whatever its language.
+    const keepOwn = typeof d.voice === 'string' && d.voice.startsWith('oa:')
+    const voice = keepOwn || lang === curLang ? d.voice : defaultVoiceFor(lang)
     const langNote = voice == null ? `No natural voice for ${LANGS[lang].name} yet. ${hasSystemVoice() ? "Your device's built-in voice reads this document." : 'This browser has no built-in voice to read it either.'}` : null
     const listening = await toListeningAsync(blocks, lang)
     if (!listening.length) {

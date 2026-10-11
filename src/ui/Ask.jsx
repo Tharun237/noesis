@@ -4,7 +4,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { go } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { hasAiKey, providerName } from '../lib/ai.js'
+import { hasAiKey, providerName, contextChars } from '../lib/ai.js'
 import { db } from '../lib/db.js'
 import { player, pause } from '../lib/player.js'
 import { synthesize, recordToBlob } from '../lib/tts.js'
@@ -12,7 +12,7 @@ import { sentences } from '../lib/text.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Pulse } from './kit.jsx'
 
-const STARTERS = ['What is this document about?', 'What are the key takeaways?', 'Explain what I just heard, simply.', 'What should I pay attention to?']
+const STARTERS = ['Recap what I have heard so far.', 'Explain what I just heard, simply.', 'What are the key takeaways?', 'What should I pay attention to next?']
 
 // Answers can be listened to in the document's own voice, so the user never has to switch to reading.
 const voiceOut = new Audio()
@@ -67,7 +67,7 @@ export function AskPanel({ d, doc, onClose }) {
     let answer = ''
     try {
       await askStream({
-        title: d.title, context: askContext(doc.blocks, doc.starts, at), history, question: question.trim(),
+        title: d.title, context: askContext(doc.blocks, doc.starts, at, contextChars()), history, question: question.trim(),
         nowHearing: doc.segs[at]?.t, signal: abort.current.signal,
         onText: t => { answer += t; setMsgs(m => [...m.slice(0, -1), { role: 'model', text: answer }]) },
       })

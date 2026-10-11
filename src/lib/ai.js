@@ -56,10 +56,33 @@ export function thinkFilter() {
   return push
 }
 
+// A long text cut into pieces of at most `max` characters, at paragraph ends where it can (a single
+// paragraph longer than `max` is cut at a sentence end, else hard).
+export function splitText(text, max) {
+  const out = []
+  let cur = ''
+  const push = piece => {
+    if (cur && cur.length + piece.length + 1 > max) { out.push(cur); cur = '' }
+    cur = cur ? cur + '\n' + piece : piece
+  }
+  for (const para of String(text).split('\n')) {
+    if (para.length <= max) { push(para); continue }
+    for (let rest = para; rest;) {
+      let cut = rest.length <= max ? rest.length : rest.lastIndexOf('. ', max) + 1
+      if (cut <= max * 0.5) cut = Math.min(rest.length, max)
+      push(rest.slice(0, cut).trim())
+      rest = rest.slice(cut)
+    }
+  }
+  if (cur) out.push(cur)
+  return out
+}
+
 // What an OpenAI-style error means for the customer, in words they can act on.
 export function explainError(status, detail, name) {
   if (status === 401 || status === 403) return `${name} did not accept the key. Check it in Settings.`
   if (status === 404 || status === 410) return `This model is not available for your ${name} account. Choose another in Settings.`
+  if (status === 400 && /multimodal|image|vision/i.test(detail || '')) return 'This model cannot read page images. Choose another in Settings.'
   return detail || `${name} error ${status}`
 }
 
@@ -97,6 +120,9 @@ export function provider(s = settings.get()) {
   return { id: 'gemini', kind: 'gemini', name: 'Gemini', key: String(s.geminiKey || '').trim(), model: s.geminiModel }
 }
 export const providerName = () => provider().name
+// How much of a book fits in one question. Gemini reads a whole book; most other models hold far less, and
+// a question that overflows fails outright, so they get a window around the listener's place.
+export const contextChars = () => (provider().kind === 'gemini' ? 600_000 : 60_000)
 
 // Enough to make a request with the CHOSEN provider. No model is ever chosen for the customer.
 export function hasAiKey(s = settings.get()) {
@@ -139,13 +165,16 @@ function openaiFail(e, p) {
 const openaiHeaders = p => ({ 'content-type': 'application/json', ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) })
 
 // One reply as a string.
+//   parts  — instead of `prompt`: [{ text } | { image: 'data:image/jpeg;base64,…' }] in order, for a model
+//            that reads page images.
 //   json   — the caller will parse JSON. Gemini is told by mime type (and `schema` when given); an OpenAI-style
 //            provider is told in words, with `shape` describing the JSON, since not every model has a JSON mode.
-export async function aiText({ prompt, system, json, schema, shape, signal, onRetry }) {
+export async function aiText({ prompt, parts, system, json, schema, shape, signal, onRetry }) {
   const p = provider()
+  const pieces = parts || [{ text: prompt }]
   if (p.kind === 'gemini') {
     const body = JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts: pieces.map(x => (x.image ? { inline_data: { mime_type: x.image.slice(5, x.image.indexOf(';')), data: x.image.slice(x.image.indexOf(',') + 1) } } : { text: x.text })) }],
       ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
       generationConfig: { temperature: 0.2, ...(json ? { responseMimeType: 'application/json', ...(schema ? { responseSchema: schema } : {}) } : {}) },
     })
@@ -157,7 +186,7 @@ export async function aiText({ prompt, system, json, schema, shape, signal, onRe
     return text
   }
   const sys = [system, json ? `Reply with JSON only${shape ? `, in exactly this shape: ${shape}` : ''}. No explanation, no code fence.` : ''].filter(Boolean).join('\n\n')
-  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: false, messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: prompt }] })
+  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: false, messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
   const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
     .catch(e => { throw openaiFail(e, p) })
   const text = stripThinking((await res.json()).choices?.[0]?.message?.content || '')

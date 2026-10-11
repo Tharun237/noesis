@@ -2,7 +2,7 @@
 // The browser cannot call NVIDIA directly (no CORS allow-origin header), so the app
 // calls same-origin /api/nvidia/* and this Function forwards it. Nothing is logged or stored.
 const UPSTREAM = 'https://integrate.api.nvidia.com/v1'
-const MAX_BODY = 1024 * 1024
+const MAX_BODY = 6 * 1024 * 1024 // a request that reads page images carries them inside
 
 const fail = (status, error) => new Response(JSON.stringify({ error }), {
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
@@ -22,11 +22,11 @@ export async function handleNvidia(request) {
     try { host = new URL(origin).host } catch { return fail(403, 'Forbidden') }
     if (host !== url.host) return fail(403, 'Forbidden')
   }
-  if (+request.headers.get('content-length') > MAX_BODY) return fail(413, 'Body is larger than 1 MB')
+  if (+request.headers.get('content-length') > MAX_BODY) return fail(413, 'Body is larger than 6 MB')
   let body
   if (request.method === 'POST') {
     const buf = await request.arrayBuffer()
-    if (buf.byteLength > MAX_BODY) return fail(413, 'Body is larger than 1 MB')
+    if (buf.byteLength > MAX_BODY) return fail(413, 'Body is larger than 6 MB')
     body = buf
   }
   let up

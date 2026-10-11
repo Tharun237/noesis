@@ -17,6 +17,10 @@ export const DEFAULTS = {
   nvidiaModel: '', // no default invented: the customer picks one from the list their key returns
   nvidiaVoices: {}, // lang → [full NVIDIA voice names], from /api/nvidia-tts/list_voices
   nvidiaVoicesAt: 0, // when the voice list was last fetched (once a day at most)
+  voiceBase: '', // the customer's own OpenAI-protocol voice service address, e.g. https://api.openai.com/v1
+  voiceKey: '', // optional key for that service: stored only here, sent only to that address
+  voiceModel: '', // model name as that service writes it, e.g. tts-1
+  voiceNames: '', // comma-separated voice names for that service, e.g. alloy, nova
   voice: 'en_GB-alba-medium', // default voice for new documents (voices.js)
   voiceTone: 'natural', // natural | clear | warm | bright — generation-time equalizer (tone.js)
   speed: 1,

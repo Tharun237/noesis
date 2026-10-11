@@ -1,7 +1,7 @@
 // Pure parts of the AI provider door.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isGeminiKey, isNvidiaKey, parseSse, cleanBase, hostOf, stripThinking, thinkFilter, explainError, provider, hasAiKey } from './ai.js'
+import { isGeminiKey, isNvidiaKey, parseSse, cleanBase, hostOf, stripThinking, thinkFilter, explainError, provider, hasAiKey, splitText } from './ai.js'
 
 test('isGeminiKey keeps the old rule: trimmed key longer than 20 characters', () => {
   assert.equal(isGeminiKey('  ' + 'x'.repeat(21) + '  '), true)
@@ -65,4 +65,17 @@ test('parseSse collects content, carries a half line, sees [DONE], skips what is
   assert.deepEqual(parseSse(a.rest + full.slice(20) + '\n').texts, ['hello'])
   const d = parseSse(': keep-alive\ndata: not json\ndata: {"choices":[{"delta":{"content":"x"}}]}\r\ndata: [DONE]\n')
   assert.deepEqual([d.texts, d.done], [['x'], true])
+})
+
+test('splitText: pieces within the limit, cut at paragraph ends, nothing lost', () => {
+  const paras = Array.from({ length: 12 }, (_, i) => `Paragraph ${i}. ` + 'word '.repeat(30).trim() + '.')
+  const text = paras.join('\n')
+  const parts = splitText(text, 400)
+  assert.ok(parts.length > 3 && parts.every(p => p.length <= 400))
+  assert.equal(parts.join('\n'), text)
+  const long = 'A sentence that is here. '.repeat(40).trim()
+  const cut = splitText(long, 200)
+  assert.ok(cut.every(p => p.length <= 200) && cut.every(p => p.endsWith('.')))
+  assert.equal(cut.join(' '), long)
+  assert.deepEqual(splitText('short', 100), ['short'])
 })

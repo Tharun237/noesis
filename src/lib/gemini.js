@@ -1,7 +1,7 @@
 // Gemini (bring-your-own-key). Called straight from the browser; the key never touches a Noesis server.
 // Docs: https://ai.google.dev/api/generate-content
 import { renderPage } from '../ingest/pdf.js'
-import { aiText, aiStream } from './ai.js'
+import { aiText, aiStream, contextChars, splitText, provider } from './ai.js'
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -57,14 +57,13 @@ const BLOCKS_SCHEMA = {
   required: ['blocks'],
 }
 
-async function blocksCall(key, model, parts, signal, onRetry) {
-  const r = await api(`/models/${model}:generateContent`, key, {
-    contents: [{ role: 'user', parts }],
-    generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema: BLOCKS_SCHEMA },
-  }, signal, onRetry)
-  const text = r.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('')
-  if (!text) throw new Error(r.promptFeedback?.blockReason ? `Gemini declined: ${r.promptFeedback.blockReason}` : 'Gemini returned no text')
-  return JSON.parse(text).blocks.filter(b => b.text?.trim())
+const BLOCKS_SHAPE = '{"blocks":[{"k":"h" for a heading, "p" for a paragraph, "fig", "table", "math" or "code","text":"..."}]}'
+// A reply that should be { blocks: [...] }, possibly inside a json code fence.
+function parseBlocks(raw) {
+  let s = String(raw).trim()
+  const fence = s.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/)
+  if (fence) s = fence[1].trim()
+  return JSON.parse(s).blocks.filter(b => b.text?.trim())
 }
 
 const NARRATE = `You are preparing a document to be LISTENED to as audio, like a professional audiobook narrator would.
@@ -83,7 +82,7 @@ Never add commentary, never summarise body text, never invent content.`
 // AI narration for PDFs: Gemini sees each page as an image (figures, tables, math) plus its text layer.
 // Pages go in small windows so any book length works and each response stays well under output limits.
 export async function narratePdf({ pdf, pageText, key, model, onProgress, signal, onRetry }) {
-  const WINDOW = 5
+  const WINDOW = provider().kind === 'gemini' ? 5 : 2 // other providers take smaller requests: fewer page images at a time
   const out = []
   const failed = []
   for (let start = 1; start <= pdf.numPages; start += WINDOW) {
@@ -91,11 +90,11 @@ export async function narratePdf({ pdf, pageText, key, model, onProgress, signal
     const parts = [{ text: `${NARRATE}\n\nThese are pages ${start}-${end} of ${pdf.numPages}.` }]
     for (let n = start; n <= end; n++) {
       const img = await renderPage(pdf, n, 1100)
-      parts.push({ inline_data: { mime_type: 'image/jpeg', data: img.slice(img.indexOf(',') + 1) } })
+      parts.push({ image: img })
       parts.push({ text: `--- Text layer of page ${n} ---\n${pageText[n - 1] || '(no text layer: scanned page, read it from the image)'}` })
     }
     try {
-      const blocks = await blocksCall(key, model, parts, signal, onRetry)
+      const blocks = parseBlocks(await aiText({ parts, json: true, schema: BLOCKS_SCHEMA, shape: BLOCKS_SHAPE, signal, onRetry }))
       onRetry?.(null)
       // Stitch a paragraph that was cut by the window boundary back together.
       const last = out[out.length - 1]
@@ -125,32 +124,42 @@ Write for the ear: clear, flowing sentences, no bullet symbols, no markdown. Use
 export async function summarize({ text, title, mode, key, model, signal, onRetry }) {
   // Summaries work with either provider: the prompt and the block output are unchanged,
   // only the door (aiText) picks the provider chosen in Settings.
+  // A book larger than the model can read at once is condensed part by part first; the summary is then
+  // written from those notes. (Gemini reads a whole book; most other models hold a few dozen pages.)
+  const max = contextChars()
+  if (text.length > max) {
+    const parts = splitText(text, Math.floor(max * 0.8))
+    const words = Math.max(80, Math.floor((max * 0.7) / parts.length / 6))
+    const notes = []
+    for (let i = 0; i < parts.length; i++) {
+      notes.push(await aiText({ prompt: `Condense this part (${i + 1} of ${parts.length}) of "${title}" for someone who will not read it: every main point, argument, name and number that matters, in plain paragraphs, in the language of the text. At most ${words} words.\n\n=== PART ===\n${parts[i]}`, signal, onRetry }))
+    }
+    text = notes.join('\n\n')
+  }
   const raw = await aiText({ prompt: `${SUMMARY[mode]}\n\nTitle: ${title}\n\n=== DOCUMENT ===\n${text}`, json: true, schema: BLOCKS_SCHEMA,
-    shape: '{"blocks":[{"k":"h" for a heading or "p" for a paragraph,"text":"..."}]}', signal, onRetry })
-  let s = String(raw).trim()
-  const fence = s.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/)
-  if (fence) s = fence[1].trim()
-  return JSON.parse(s).blocks.filter(b => b.text?.trim())
+    shape: BLOCKS_SHAPE, signal, onRetry })
+  return parseBlocks(raw)
 }
 
 // ── Ask about this document (streaming) ──────────────────────────────────────────────
 const ASK = `You are Noesis, a study companion. The user is LISTENING to the document below and asking about it.
 Answer accurately and concisely from the document, naming the section when it helps. If the document does not cover it, say so, then answer from general knowledge and label it as such.
-Your answer may be read aloud: write plain, flowing sentences. Avoid tables and heavy markdown; use short lists only when they truly help.`
+Your answer may be read aloud: write plain, flowing sentences. Avoid tables and heavy markdown; use short lists only when they truly help.
+Answer in the language the user asks in.`
 
 // ponytail: very long books are windowed around the listener's position (plus the full outline)
 // so each question stays within free-tier token limits; raise MAX_CONTEXT if quotas allow.
 const MAX_CONTEXT = 600_000
-export function askContext(blocks, starts, at) {
+export function askContext(blocks, starts, at, max = MAX_CONTEXT) {
   const outline = blocks.map((b, bi) => (b.k === 'h' ? `[${starts[bi]}] ${b.s.join(' ')}` : null)).filter(Boolean).join('\n')
   const lines = blocks.map(b => (b.k === 'h' ? `\n## ${b.s.join(' ')}\n` : b.s.join(' ')))
   const full = lines.join('\n')
-  if (full.length <= MAX_CONTEXT) return full
+  if (full.length <= max) return full
   const atBlock = Math.max(0, starts.findLastIndex(s => s <= at))
   let lo = atBlock, hi = atBlock, size = 0
-  while (size < MAX_CONTEXT && (lo > 0 || hi < lines.length - 1)) {
+  while (size < max && (lo > 0 || hi < lines.length - 1)) {
     if (hi < lines.length - 1) size += lines[++hi].length
-    if (lo > 0 && size < MAX_CONTEXT) size += lines[--lo].length
+    if (lo > 0 && size < max) size += lines[--lo].length
   }
   return `OUTLINE (whole book):\n${outline}\n\nEXCERPT around the listener's position:\n${lines.slice(lo, hi + 1).join('\n')}`
 }
