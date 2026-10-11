@@ -145,6 +145,7 @@ function DesktopHeader({ summary }) {
   const view = useStore(settings, s => s.view)
   const collections = useStore(library, s => s.collections)
   const hasDocs = useStore(library, s => s.docs.length > 0)
+  const hasBriefing = useStore(library, s => s.docs.length >= 2)
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
     <header style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
@@ -156,6 +157,7 @@ function DesktopHeader({ summary }) {
       <SortMenu />
       <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
       {hasDocs && <Button icon="sparkle" onClick={() => openSheet('libraryask')}>Ask your library</Button>}
+      {hasBriefing && <Button icon="list" onClick={() => openSheet('briefing')}>Make a briefing</Button>}
       <Button kind="primary" icon="plus" onClick={() => openSheet('add')}>Add document</Button>
     </header>
   )
@@ -204,6 +206,7 @@ function MobileHeader({ summary }) {
   const searching = useStore(ui, s => s.searching)
   const collections = useStore(library, s => s.collections)
   const hasDocs = useStore(library, s => s.docs.length > 0)
+  const hasBriefing = useStore(library, s => s.docs.length >= 2)
   const chips = [['queue', 'Queue'], ['all', 'All'], ['archived', 'Archived'], ...collections.map(c => [c.id, c.name])]
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
@@ -212,6 +215,7 @@ function MobileHeader({ summary }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 56, padding: '0 10px 0 12px' }}>
           <div style={{ flex: 1 }}><Wordmark size={24} /></div>
           {hasDocs && <IconButton icon="sparkle" label="Ask your library" onClick={() => openSheet('libraryask')} />}
+          {hasBriefing && <IconButton icon="list" label="Make a briefing" onClick={() => openSheet('briefing')} />}
           <SortMenu />
           <AccountChip compact />
         </div>

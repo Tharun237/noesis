@@ -16,6 +16,7 @@ import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle } from './kit.jsx'
 import { LibraryAsk } from './LibraryAsk.jsx'
+import { Briefing } from './Briefing.jsx'
 
 export function Sheets({ wide }) {
   const sheet = useStore(ui, s => s.sheet)
@@ -27,6 +28,7 @@ export function Sheets({ wide }) {
       <Sheet open={sheet === 'lockscreen'} onClose={closeSheet} wide={wide} title="Controls on your lock screen" width={520}><LockScreenGuide wide={wide} /></Sheet>
       <Sheet open={sheet === 'language'} onClose={closeSheet} wide={wide} title="Listen in another language" width={520}><LanguagePicker /></Sheet>
       <Sheet open={sheet === 'libraryask'} onClose={closeSheet} wide={wide} title="Ask your library"><LibraryAsk wide={wide} /></Sheet>
+      <Sheet open={sheet === 'briefing'} onClose={closeSheet} wide={wide} title="Make a briefing"><Briefing wide={wide} /></Sheet>
     </>
   )
 }

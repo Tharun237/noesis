@@ -87,42 +87,61 @@ export function useActivity() {
   return null
 }
 
+// The live island: a small pill that sits above the player and says, in a few words, what is happening now.
+// It widens into the full card when there is something to read or do (a tap, an error, a retry), and its
+// text slides when the news changes. Size changes are done by layout animation: transforms only.
+const ISLAND = { type: 'spring', stiffness: 520, damping: 38, mass: 0.9 }
+
 export function ActivityStrip({ activity, bottom }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => { setOpen(false) }, [activity?.key]) // new work starts small
+  const wide = !!activity && (open || !!activity.error || !!activity.action)
+  const pct = activity?.progress != null ? `${Math.floor(activity.progress * 100)}%` : null
   return (
-    <AnimatePresence>
-      {activity && (
-        <motion.div key="activity" role="status" aria-live="polite"
-          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 16 }} transition={T.spring}
-          onClick={activity.open ? () => go('reader', activity.open) : undefined}
-          style={{
-            position: 'fixed', left: 8, right: 8, margin: '0 auto', maxWidth: 460, zIndex: 34,
-            bottom: `calc(env(safe-area-inset-bottom) + ${bottom + 8}px)`, height: ACTIVITY_H - 8,
-            borderRadius: T.r.md, background: T.bg, border: `1px solid ${activity.error ? T.danger : T.borderHi}`, overflow: 'hidden',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.85)', cursor: activity.open ? 'pointer' : 'default',
-            display: 'flex', alignItems: 'center', gap: 10, padding: '0 8px 0 14px',
-          }}>
-          <Pulse color={activity.error ? T.danger : T.lime} />
-          <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activity.text}</div>
-            {activity.detail && <div style={{ fontFamily: T.mono, fontSize: 11, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activity.detail}</div>}
-          </div>
-          {activity.progress != null && <div style={{ fontFamily: T.mono, fontSize: 12, color: T.text, paddingRight: 6 }}>{Math.floor(activity.progress * 100)}%</div>}
-          {activity.action && (
-            <button type="button" onClick={e => { e.stopPropagation(); activity.action.run() }}
-              style={{ height: 30, padding: '0 14px', borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-              {activity.action.label}
-            </button>
-          )}
-          {/* Progress line: known → fills; unknown → a soft sweep. Transform only. */}
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: T.surfaceHi, overflow: 'hidden' }}>
-            {activity.progress != null
-              ? <motion.div initial={false} animate={{ scaleX: Math.max(0.02, Math.min(1, activity.progress)) }} transition={{ duration: T.dur.base, ease: T.ease }}
-                  style={{ height: '100%', background: T.text, transformOrigin: '0 50%' }} />
-              : !activity.error && <motion.div animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                  style={{ height: '100%', width: '34%', background: T.text }} />}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div style={{ position: 'fixed', left: 8, right: 8, zIndex: 34, bottom: `calc(env(safe-area-inset-bottom) + ${bottom + 8}px)`, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+      <AnimatePresence>
+        {activity && (
+          <motion.div key="activity" layout role="status" aria-live="polite" aria-expanded={wide}
+            initial={{ opacity: 0, y: 14, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 14, scale: 0.9 }} transition={ISLAND}
+            onClick={() => setOpen(o => !o)}
+            style={{
+              pointerEvents: 'auto', position: 'relative', overflow: 'hidden', cursor: 'pointer',
+              width: wide ? '100%' : 'auto', maxWidth: wide ? 460 : 'min(100%, 300px)', height: wide ? ACTIVITY_H - 8 : 34,
+              borderRadius: wide ? T.r.md : 17, background: T.bg, border: `1px solid ${activity.error ? T.danger : T.borderHi}`,
+              boxShadow: '0 12px 32px rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', gap: wide ? 10 : 8, padding: wide ? '0 8px 0 14px' : '0 14px 0 12px',
+            }}>
+            <motion.span layout="position" style={{ display: 'inline-flex', flexShrink: 0 }}><Pulse color={activity.error ? T.danger : T.lime} /></motion.span>
+            <motion.div layout="position" style={{ flex: wide ? 1 : '0 1 auto', minWidth: 0, display: 'grid', gap: 1 }}>
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div key={activity.text} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: T.dur.fast }}
+                  style={{ fontSize: 13.5, fontWeight: 600, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activity.text}</motion.div>
+              </AnimatePresence>
+              {wide && activity.detail && <div style={{ fontFamily: T.mono, fontSize: 11, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activity.detail}</div>}
+            </motion.div>
+            {pct && <motion.div layout="position" style={{ fontFamily: T.mono, fontSize: 12, color: wide ? T.text : T.sub, paddingRight: wide ? 6 : 0, flexShrink: 0 }}>{pct}</motion.div>}
+            {wide && activity.open && !activity.action && (
+              <button type="button" onClick={e => { e.stopPropagation(); go('reader', activity.open) }}
+                style={{ height: 30, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                Open
+              </button>
+            )}
+            {activity.action && (
+              <button type="button" onClick={e => { e.stopPropagation(); activity.action.run() }}
+                style={{ height: 30, padding: '0 14px', borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                {activity.action.label}
+              </button>
+            )}
+            {/* Progress line: known → fills; unknown → a soft sweep. Transform only. */}
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: T.surfaceHi, overflow: 'hidden' }}>
+              {activity.progress != null
+                ? <motion.div initial={false} animate={{ scaleX: Math.max(0.02, Math.min(1, activity.progress)) }} transition={{ duration: T.dur.base, ease: T.ease }}
+                    style={{ height: '100%', background: T.text, transformOrigin: '0 50%' }} />
+                : !activity.error && <motion.div animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ height: '100%', width: '34%', background: T.text }} />}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
