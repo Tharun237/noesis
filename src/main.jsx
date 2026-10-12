@@ -21,7 +21,13 @@ if (q.has('url') || q.has('text')) {
 }
 
 // Back from Google sign-in: /#signed-in or /#signin-failed=<reason> (set by /api/auth/callback).
-const FAILED = { cancelled: 'Sign-in was cancelled.', access_denied: 'Sign-in was cancelled.', expired: 'Sign-in took too long. Please try again.' }
+const FAILED = {
+  cancelled: 'Sign-in was cancelled.', access_denied: 'Sign-in was cancelled.',
+  expired: 'Sign-in took too long. Please try again.', invalid_grant: 'That sign-in had expired or was already used. Please try again.',
+  // not the customer's doing, and trying again will not help: say so
+  invalid_client: 'Sign-in is set up wrongly on our side: Google refused the server, not your account.',
+  redirect_uri_mismatch: 'Sign-in is set up wrongly on our side: Google does not know this address.',
+}
 if (location.hash === '#signed-in' || location.hash.startsWith('#signin-failed')) {
   const failed = location.hash.startsWith('#signin-failed') && decodeURIComponent(location.hash.split('=')[1] || '')
   history.replaceState({ view: 'library' }, '', location.pathname + location.search)

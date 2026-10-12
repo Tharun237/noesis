@@ -108,7 +108,14 @@ export async function handleAuth(request, env) {
         redirect_uri: redirectUri, grant_type: 'authorization_code', code_verifier: verifier,
       }),
     })
-    if (!res.ok) return backToApp(request, '#signin-failed=google')
+    if (!res.ok) {
+      // Google says why in a short code (invalid_client: the server's own key was refused; invalid_grant: this
+      // sign-in was already used or took too long). The code is passed on, so the message can be a true one
+      // and whoever runs the server can tell a wrong key from a slow customer. It names no secret.
+      const why = String((await res.json().catch(() => ({}))).error || 'google').replace(/[^a-z_]/g, '').slice(0, 40) || 'google'
+      console.warn('Google sign-in: token exchange refused:', why)
+      return backToApp(request, `#signin-failed=${why}`)
+    }
     const { id_token: idToken } = await res.json()
     // The ID token came straight from Google's token endpoint over TLS (not via the browser),
     // so its origin is established by the channel; the claims are still checked.
