@@ -151,9 +151,9 @@ export function Landing({ wide, hasLibrary }) {
             <p style={say}>The voice runs on your phone or your computer. Nothing is uploaded to make the audio, there is no account to open, and it keeps working without a connection.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', borderRadius: T.r.xl, border: `1px solid ${T.border}`, background: T.surface }}>
-            {[['₹0', 'Free forever'], ['Offline', 'Audio'], [String(VOICES.length), 'Natural voices']].map(([value, name], i) => (
+            {[['Everyone', 'Has access'], ['Offline', 'Audio'], [String(VOICES.length), 'Natural voices']].map(([value, name], i) => (
               <div key={name} style={{ minWidth: 0, padding: wide ? '36px 22px' : '26px 14px', borderLeft: i ? `1px solid ${T.border}` : 'none', display: 'grid', gap: 10, alignContent: 'center' }}>
-                <div style={{ fontFamily: T.mono, fontSize: wide ? 26 : 21, fontWeight: 600, color: T.text, whiteSpace: 'nowrap' }}>{value}</div>
+                <div style={{ fontFamily: T.mono, fontSize: wide ? 26 : 17, fontWeight: 600, color: T.text, whiteSpace: 'nowrap' }}>{value}</div>
                 <div style={{ ...eyebrow, fontSize: 10, letterSpacing: '0.16em' }}>{name}</div>
               </div>
             ))}

@@ -155,7 +155,7 @@
         const h = el('div', 'h2 abs', `${words('Made on')}<br>${words('your device.')}`, 'left:166px;top:340px')
         const say = el('div', 'abs', 'No account. Nothing uploaded to make<br>the audio. It keeps working<br>without a connection.', 'left:172px;top:690px;font-size:40px;line-height:1.5;color:var(--sub)')
         cam.append(tag, h, say)
-        const tiles = [['₹0', 'Free forever'], ['Offline', 'Audio'], ['13', 'Natural voices']].map(([v, n], i) => {
+        const tiles = [['Everyone', 'Has access'], ['Offline', 'Audio'], ['13', 'Natural voices']].map(([v, n], i) => {
           const e = el('div', 'card abs', `<div style="font-family:'JetBrains Mono';font-weight:600;font-size:76px;line-height:1;letter-spacing:-0.02em">${v}</div><div class="mono" style="font-size:22px;margin-top:20px">${n}</div>`, `left:1150px;top:${220 + i * 226}px;width:600px;height:196px;box-sizing:border-box;padding:38px 48px`)
           cam.append(e)
           return e

@@ -72,7 +72,7 @@ export function InstallPrompt({ wide, full, lift = 0 }) {
             <div style={{ fontSize: 12.5, color: T.sub, marginTop: 3, lineHeight: 1.45 }}>
               {ios
                 ? <>Tap <ShareGlyph /> then <b style={{ color: T.text }}>Add to Home Screen</b>.</>
-                : 'Free, no app store. Works offline and updates itself.'}
+                : 'No app store. Works offline and updates itself.'}
             </div>
           </div>
           {!ios && <Button kind="primary" onClick={install} style={{ height: 36, padding: '0 16px' }}>Install</Button>}
