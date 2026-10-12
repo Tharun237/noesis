@@ -28,6 +28,7 @@ export const DEFAULTS = {
   voiceEngine: 'natural', // natural (Piper, generated on the device) | system (built-in TTS) — see engine.js
   systemVoice: '', // voiceURI of the built-in voice ('' = device default)
   voiceSpeed: 0, // measured on this device: seconds of audio generated per second (0 = not measured yet)
+  translateCps: 0, // measured on this device: characters translated a second (0 = not measured yet); for estimates
   aiNarration: true, // use Gemini for PDFs when a key is set
   skipVisuals: false, // skip figure/table/math/code descriptions during playback
   mode: 'full', // full | long | short

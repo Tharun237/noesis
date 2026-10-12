@@ -98,7 +98,10 @@ const DEVICE_CHUNK = 1500 // characters: small, so progress moves and a stopped 
 
 // The same contract as below, done by the device's own translator. One text in, one text out, so there is
 // no reply to parse and nothing to retry; letters of an alphabet the voice cannot say are dropped as there.
-async function translateOnDevice(blocks, target, { source, onProgress, onLoad, saved, onChunk }) {
+// Asked to stop between two chunks: what is done is kept (onChunk saved it), so starting again carries on.
+export class Paused extends Error { constructor() { super('Translation paused'); this.name = 'Paused' } }
+
+async function translateOnDevice(blocks, target, { source, onProgress, onLoad, saved, onChunk, stopped }) {
   const { translateTexts, doneTranslating } = await import('./localtranslate.js')
   const chunks = chunkBlocks(blocks, DEVICE_CHUNK)
   if (!chunks.length) return blocks.map(b => ({ ...b }))
@@ -107,6 +110,7 @@ async function translateOnDevice(blocks, target, { source, onProgress, onLoad, s
   let done = 0
   try {
     for (let ci = 0; ci < chunks.length; ci++) {
+      if (stopped?.()) throw new Paused()
       const idx = chunks[ci]
       const prev = saved?.get?.(ci)
       const kept = Array.isArray(prev) && prev.length === idx.length && prev.every(x => typeof x === 'string')
@@ -114,7 +118,7 @@ async function translateOnDevice(blocks, target, { source, onProgress, onLoad, s
       if (!kept) await onChunk?.(ci, strings)
       idx.forEach((bi, k) => byBlock.set(bi, strings[k]))
       done += idx.reduce((a, i) => a + (blocks[i].text || '').length, 0)
-      onProgress?.(total ? done / total : 1)
+      onProgress?.(total ? done / total : 1, { done, total, block: idx[idx.length - 1], fresh: !kept })
     }
   } finally {
     doneTranslating()
@@ -124,7 +128,7 @@ async function translateOnDevice(blocks, target, { source, onProgress, onLoad, s
 
 export async function translateBlocks(blocks, target, opts = {}) {
   if (opts.onDevice) return translateOnDevice(blocks, target, opts)
-  const { onProgress, signal, onRetry, saved, onChunk } = opts
+  const { onProgress, signal, onRetry, saved, onChunk, stopped } = opts
   const languageName = LANGS[target]?.name || target
   const chunks = chunkBlocks(blocks)
   const total = chunks.flat().reduce((a, i) => a + (blocks[i].text || '').length, 0)
@@ -132,6 +136,7 @@ export async function translateBlocks(blocks, target, opts = {}) {
   const results = new Array(chunks.length)
   let done = 0
   for (let ci = 0; ci < chunks.length; ci++) {
+    if (stopped?.()) throw new Paused()
     const idx = chunks[ci]
     const texts = idx.map(i => blocks[i].text)
     const prev = saved?.get?.(ci)
@@ -162,7 +167,7 @@ export async function translateBlocks(blocks, target, opts = {}) {
     results[ci] = strings
     await onChunk?.(ci, strings)
     done += idx.reduce((a, i) => a + (blocks[i].text || '').length, 0)
-    onProgress?.(total ? done / total : 1)
+    onProgress?.(total ? done / total : 1, { done, total, block: idx[idx.length - 1], fresh: !(Array.isArray(prev) && prev === strings) })
   }
   const byBlock = new Map()
   chunks.forEach((idx, ci) => idx.forEach((bi, k) => byBlock.set(bi, results[ci][k])))

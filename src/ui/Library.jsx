@@ -362,6 +362,7 @@ export function StatusLine({ d }) {
   const qkey = useStore(library, s => s.docs.filter(x => x.status === 'queued' || x.status === 'reading' || x.status === 'narrating' || x.status === 'syncing').sort((a, b) => a.createdAt - b.createdAt).map(x => x.id).join(','))
   if (d.status === 'error') return <span style={{ color: T.danger }}>Could not read this file. Try again from the menu (⋯).{d.error ? <span style={{ color: T.faint }}> · {d.error}</span> : null}</span>
   if (d.status === 'ready') return null
+  if (d.status === 'paused') return <span style={{ color: T.sub }}>{d.stage || 'Paused'}{d.prep >= 0.01 ? ` · ${Math.floor(d.prep * 100)}%` : ''}</span>
   if (d.status === 'voicing') {
     if (sys) return null // built-in voice: playable as soon as the text is ready
     if (engStatus === 'error' && d.id === playId) return <span style={{ color: T.danger }}>The voice didn't load</span>

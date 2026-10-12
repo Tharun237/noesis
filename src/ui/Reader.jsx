@@ -5,7 +5,7 @@ import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet, tab as showTab } from '../lib/nav.js'
-import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '../lib/library.js'
+import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate } from '../lib/player.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
@@ -694,6 +694,7 @@ function Preparing({ d, doc, pos }) {
   const behind = voicing && !failed && eng.voice !== d.voice && eng.status === 'loading'
   if (ready?.wait != null) longest.current = Math.max(longest.current, ready.wait)
   const slow = speed > 0 && speed < 1 && hasSystemVoice()
+  const translating = d.status === 'narrating' && !!d.target && /^Translating/.test(d.stage || '')
   const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : T.lime} />{text}</span>
   // head: what is being waited for · bar: null (none), undefined (no known length) or 0..1 · next: what happens then
   const [head, bar, next] = d.status === 'error' ? [<StatusLine d={d} />, null, null]
@@ -705,6 +706,9 @@ function Preparing({ d, doc, pos }) {
         ready.wait == null || !longest.current ? undefined : 1 - ready.wait / longest.current,
         gated ? 'It is made on your device. Play starts by itself.' : 'It is made on your device. Press Play and it starts by itself when ready.',
       ]
+    : d.status === 'paused' ? [<StatusLine d={d} />, d.prep || 0, 'What is translated so far is kept. Resume carries on from there.']
+    : translating ? [<StatusLine d={d} />, d.prep >= 0.01 ? d.prep : undefined,
+        `${d.eta != null ? `${waitWords(d.eta).replace(/^./, ch => ch.toUpperCase())} left. ` : ''}It carries on if you leave this page.`]
     : [<StatusLine d={d} />, d.prep >= 0.01 ? d.prep : undefined,
         d.status === 'queued' ? 'Starts when the document before it is done.'
         : d.status === 'syncing' ? 'It is coming from your other device.'
@@ -714,6 +718,9 @@ function Preparing({ d, doc, pos }) {
       <div style={{ fontSize: 14, fontWeight: 600, color: failed ? T.danger : T.text }}>{head}</div>
       {bar !== null && <Progress value={bar} unknown={bar === undefined} />}
       {next && <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>{next}</div>}
+      {/* A long translation is the customer's to stop: a book takes minutes on a phone, and it is their battery. */}
+      {translating && <div><Button icon="pause" onClick={() => pauseTranslation(d.id)}>Pause</Button></div>}
+      {d.status === 'paused' && <div><Button kind="primary" icon="play" onClick={() => resumeTranslation(d.id)}>Resume</Button></div>}
       {failed && !voiceOff && (
         <div><Button icon="refresh" onClick={() => loadEngine(engVoice).then(kickVoice).catch(() => {})}>Retry</Button></div>
       )}
@@ -723,7 +730,7 @@ function Preparing({ d, doc, pos }) {
           <Button kind="accent" onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>
         </div>
       )}
-      {!asked && d.status !== 'error' && !failed && !voice && !(ready && !(ready.wait > NOTIFY_OVER_S)) && (
+      {!asked && d.status !== 'error' && d.status !== 'paused' && !failed && !voice && !(ready && !(ready.wait > NOTIFY_OVER_S)) && !(translating && !(d.eta > NOTIFY_OVER_S)) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Leave it running and get a notification when it's ready.</span>
           <Button icon="bell" onClick={async () => { await askNotify(); setAsked(true) }}>Notify me</Button>

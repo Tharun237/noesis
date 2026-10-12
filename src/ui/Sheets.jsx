@@ -7,7 +7,9 @@ import { settings, hasKey } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { canTranslateHere } from '../lib/localtranslate.js'
 import { LANGS } from '../lib/lang.js'
-import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn } from '../lib/library.js'
+import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn, loadDoc } from '../lib/library.js'
+import { partsOf, secondsFor } from '../lib/parts.js'
+import { waitWords } from '../lib/readiness-math.js'
 import { synthesize, recordToBlob, loadEngine, engine, voiceWait } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
 import { looksMarkdown } from '../ingest/text.js'
@@ -300,6 +302,8 @@ function VoicePicker() {
   )
 }
 
+const LONG_CHARS = 40000 // about 7,000 words: under this a document is translated in well under a minute, so nothing is asked
+
 // ── listen in another language ─────────────────────────────────────────────────
 function LanguagePicker() {
   const docId = useStore(ui, s => s.docId)
@@ -307,7 +311,28 @@ function LanguagePicker() {
   useStore(settings)
   const keyed = hasAiKey()
   const [busy, setBusy] = useState(null)
+  // A long document can be translated whole, from where the customer is, or just the chapter they are in
+  // (lib/parts.js): each with how long it takes on THIS device, said before they choose. A short one is simply
+  // translated: a choice there would be a question nobody needs to be asked.
+  const cps = useStore(settings, st => st.translateCps)
+  const [parts, setParts] = useState(null)
+  const [which, setWhich] = useState('all')
+  const rootId = d?.from || d?.id
+  useEffect(() => {
+    let live = true
+    if (!d) return undefined
+    Promise.all([loadDoc(d.id), d.from ? loadDoc(d.from) : null]).then(([c, root]) => {
+      const src = root || c
+      if (!live || !c || !src) return
+      const at = (c.segs[Math.min(d.pos || 0, c.segs.length - 1)]?.b ?? 0) + (d.part?.from || 0)
+      const found = partsOf(src.blocks, at)
+      setParts(found[0].chars >= LONG_CHARS && found.length > 1 ? found : null)
+    })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootId])
   if (!d) return null
+  const chosen = parts?.find(p => p.key === which) || parts?.[0] || null
   // With the customer's own AI key the AI translates. Without one the device does, free, for every pair of
   // languages it has a translator for (lib/localtranslate.js). A language is offered when one of the two can.
   const from = d.foreign ? null : d.lang || 'en'
@@ -316,7 +341,7 @@ function LanguagePicker() {
     if (busy || !can(lang)) return
     setBusy(lang)
     try {
-      const nid = await listenIn(d.id, lang)
+      const nid = await listenIn(d.id, lang, chosen?.part || null)
       go('reader', nid)
     } finally {
       setBusy(null)
@@ -334,6 +359,14 @@ function LanguagePicker() {
           ? 'Translated with your AI key. A long book takes several minutes the first time.'
           : 'Translated on your device, free. The first time you choose a language its translator downloads once (20 to 55 MB); after that it works offline.'}
       </div>
+      {parts && (
+        <div style={{ padding: '0 12px 14px', display: 'grid', gap: 8 }}>
+          <Segmented value={chosen.key} onChange={setWhich} size="sm" options={parts.map(p => ({ value: p.key, label: p.name }))} />
+          <div key={chosen.key} data-fade="" style={{ fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>
+            {[chosen.part?.label && (chosen.key === 'chapter' ? `“${chosen.part.label}”` : chosen.part.label.replace(/^from /, 'From ')), chosen.pages > 1 && `${chosen.pages} pages`, !keyed && `${waitWords(secondsFor(chosen.chars, cps))} on this device`].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'grid', gap: 2 }}>
         {langs.map(([code, l]) => (
           <button key={code} type="button" disabled={!can(code) || !!busy} onClick={() => choose(code)}

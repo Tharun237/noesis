@@ -1,6 +1,7 @@
 import { createStore, uid } from './store.js'
 import { db, persistStorage, canStore } from './db.js'
 import { onShelf } from './shelf.js'
+import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf } from './ai.js'
 import { synthesize, engine } from './tts.js'
@@ -158,6 +159,16 @@ function makeLoop(step) {
 }
 
 const PREP = new Set(['queued', 'reading', 'narrating'])
+// Translations the customer asked to pause: the run stops at its next piece (translate.js Paused).
+const held = new Set()
+export function pauseTranslation(id) { if (getDoc(id)?.status === 'narrating') held.add(id) }
+export function resumeTranslation(id) { if (getDoc(id)?.status === 'paused') { patch(id, { status: 'queued', stage: 'Waiting' }); kickPrep() } }
+// How fast this device translates (characters a second), kept so the next estimate is this device's own.
+function rememberTranslateSpeed(cps) {
+  const prev = settings.get().translateCps
+  const next = Math.round(prev ? prev * 0.7 + cps * 0.3 : cps)
+  if (!prev || Math.abs(next - prev) / prev > 0.1) settings.set({ translateCps: next })
+}
 export const kickPrep = makeLoop(async () => {
   const doc = [...library.get().docs].reverse().find(d => PREP.has(d.status))
   if (!doc) return false
@@ -349,7 +360,10 @@ async function prepare(id) {
       const orig = await db.getDoc(refFrom)
       if (!orig?.blocks?.length) throw new Error('The original document was removed from this device.')
       const o = getDoc(refFrom)
-      fromOriginal = { blocks: orig.blocks.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p, data: b.d, src: b.x })), refs: orig.refs, title: d.title, author: o?.author, cover: o?.cover }
+      // A version may be one part of the original (parts.js): a chapter, or from a page on. Block n of a part
+      // is block part.from + n of the original, which is how the place is carried between them (listenIn).
+      const own = d.part ? orig.blocks.slice(d.part.from, d.part.to ?? undefined) : orig.blocks
+      fromOriginal = { blocks: own.map(b => ({ k: b.k, text: b.s.join(' '), page: b.p, data: b.d, src: b.x })), refs: orig.refs, title: d.title, author: o?.author, cover: o?.cover }
       patch(id, { kind: o?.kind || 'text' })
     }
     if (src.kind === 'link') {
@@ -426,12 +440,29 @@ async function prepare(id) {
       const stored = await db.getTranslation(id)
       const saved = stored instanceof Map ? stored : new Map()
       const progress = stepped(id), loading = stepped(id) // each moves the bar a whole per cent at a time, not on every message
+      const pages = blocks.reduce((a, b) => (typeof b.page === 'number' && b.page > a ? b.page : a), 0)
+      const firstPage = blocks.find(b => typeof b.page === 'number')?.page ?? 0
+      let startedAt = 0, startedDone = 0, lastWhere = ''
+      held.delete(id)
       const fetching = `Downloading the ${languageName} translator`
       blocks = await translateBlocks(blocks, d.target, {
         onDevice, source,
         // the first time a language is used its translator comes down once: say that, in the app's words for a download
         onLoad: (got, all) => { if (getDoc(id)?.stage !== fetching) patch(id, { stage: fetching }); loading(all ? got / all : 0) },
-        onProgress: f => { if (getDoc(id)?.stage !== stage) patch(id, { stage }); progress(f) },
+        stopped: () => held.has(id),
+        // Where it is and how long is left, said in whole pages and a rounded time so the line does not flicker.
+        // The clock starts at the first piece really translated now: pieces kept from an earlier run are instant.
+        onProgress: (f, at) => {
+          if (at?.fresh && !startedAt) { startedAt = Date.now(); startedDone = at.done }
+          const p = at ? progressOf({ done: at.done - startedDone, total: at.total - startedDone, startedAt: startedAt || Date.now(), now: Date.now(), page: blocks[at.block]?.page, pages }) : null
+          const where = p?.where && pages - firstPage > 0 ? p.where : ''
+          const left = p?.left == null ? null : p.left < 60 ? Math.ceil(p.left / 10) * 10 : Math.round(p.left / 30) * 30
+          const now = getDoc(id)
+          const say = where ? `${stage} · ${where}` : stage
+          if (now?.stage !== say || (now?.eta ?? null) !== left || where !== lastWhere) { lastWhere = where; patch(id, { stage: say, eta: left }) }
+          if (p?.cps > 0 && at.done - startedDone > 20000 && onDevice) rememberTranslateSpeed(p.cps)
+          progress(f)
+        },
         onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }),
         saved,
         onChunk: (index, strings) => { saved.set(index, strings); return db.putTranslation(id, saved) },
@@ -481,6 +512,8 @@ async function prepare(id) {
     patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, foreign, voice, contentVer: Date.now() })
     kickVoice()
   } catch (e) {
+    // Paused by the customer: not a failure. What was translated is kept, and Resume carries on from there.
+    if (e?.name === 'Paused') { held.delete(id); const at = (getDoc(id)?.stage || '').split(' · ')[1]; patch(id, { status: 'paused', stage: at ? `Paused at ${at}` : 'Paused', eta: null }); return }
     console.error(e)
     patch(id, { status: 'error', stage: 'Failed', error: e.message || String(e) })
   } finally {
@@ -638,7 +671,7 @@ export async function addDocument(src, overrides = {}) {
 
 // The reader's language switch. Returns the wanted document's id; does not navigate.
 // Deleting an original never touches its translated versions (deleteDoc is per-id).
-export async function listenIn(id, target) {
+export async function listenIn(id, target, part = null) {
   const cur = getDoc(id)
   const rootId = cur?.from || id
   const root = getDoc(rootId) || cur
@@ -646,20 +679,22 @@ export async function listenIn(id, target) {
   if (target === root?.lang && !root?.foreign) {
     wantedId = rootId
   } else {
-    const existing = library.get().docs.find(x => x.from === rootId && x.target === target)
+    const existing = library.get().docs.find(x => x.from === rootId && x.target === target && samePart(x.part, part))
     if (existing) wantedId = existing.id
     else {
+      const name = `${root?.title || 'Untitled'} (${LANGS[target].name}${part?.label ? `, ${part.label}` : ''})`
       wantedId = await addDocument({ kind: 'ref', from: rootId },
-        { target, title: `${root?.title || 'Untitled'} (${LANGS[target].name})`, renamed: true, mode: 'full', from: rootId })
+        { target, title: name, renamed: true, mode: 'full', from: rootId, ...(part ? { part: { from: part.from, to: part.to ?? null, label: part.label } } : {}) })
     }
   }
-  // Carry the place: the block number being read in the current document.
-  // A version that has no text yet (still translating, or failed) has no place to carry: leaving it must
-  // not move the other version back to its start.
+  // Carry the place: the block number being read in the current document, counted in the ORIGINAL's blocks
+  // (a part starts at its own first block). A version that has no text yet (still translating, or failed)
+  // has no place to carry: leaving it must not move the other version back to its start.
   const c = await loadDoc(id)
   if (!c?.segs?.length) return wantedId
-  const block = c.segs[Math.min(cur?.pos || 0, c.segs.length - 1)]?.b ?? 0
   const wanted = getDoc(wantedId)
+  const inRoot = (c.segs[Math.min(cur?.pos || 0, c.segs.length - 1)]?.b ?? 0) + (cur?.part?.from || 0)
+  const block = Math.max(0, inRoot - (wanted?.part?.from || 0))
   if (wanted && (wanted.status === 'voicing' || wanted.status === 'ready')) {
     const wc = await loadDoc(wantedId)
     if (wc) {
