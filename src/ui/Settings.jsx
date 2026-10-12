@@ -2,6 +2,7 @@
 // screen). It used to be twelve cards in one long scroll, with settings about the same thing in three
 // different cards (design skill: what is this screen for, is there one of everything, no repetition).
 // Every setting lives in exactly one section, and a section's row says what it is set to.
+import { shelvesAway, removeShelvesAway } from '../lib/shelf.js'
 import { useEffect, useRef, useState } from 'react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
@@ -214,6 +215,7 @@ const MODEL_CACHE = 'noesis-voices'
 function StorageBody() {
   const [est, setEst] = useState(null)
   const [hasModel, setHasModel] = useState(false)
+  const [away, setAway] = useState(() => shelvesAway().length)
   const refresh = () => {
     navigator.storage?.estimate?.().then(setEst)
     globalThis.caches?.has(MODEL_CACHE).then(setHasModel)
@@ -231,6 +233,12 @@ function StorageBody() {
           if (!confirm('Delete all generated audio? Your documents stay; audio regenerates when you play them.')) return
           await deleteAllAudio(); refresh(); toast('Audio deleted')
         }}>Delete generated audio</Button>
+        {away > 0 && (
+          <Button kind="danger" icon="trash" onClick={async () => {
+            if (!confirm(`Remove ${away === 1 ? 'the library' : `the ${away} libraries`} of signed-out accounts from this device? They stay in those accounts' Google Drive; their audio is made again after signing in.`)) return
+            await removeShelvesAway(); setAway(0); refresh(); toast('Removed from this device')
+          }}>Remove signed-out {away === 1 ? 'library' : 'libraries'}</Button>
+        )}
         {hasModel && (
           <Button kind="danger" icon="trash" onClick={async () => {
             if (!confirm('Remove the downloaded natural voices? Your documents and audio stay. A voice downloads again the next time it is needed.')) return

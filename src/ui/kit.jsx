@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useDragControls, useMotionValue, useSpring, us
 import { T, label } from '../theme.js'
 import { Icon } from './icons.jsx'
 import { reducedMotion } from '../lib/motion.js'
+import { during } from '../lib/nav.js'
 import { menuRow } from './press.js' // the style sheet behind data-press, data-ico, data-rise, Swap
 
 // Shared primitives. Motion is transform/opacity only (GPU-composited); no layout properties animate.
@@ -33,7 +34,34 @@ export function Reveal({ children, style }) {
   )
 }
 
-export function Button({ children, onClick, kind = 'ghost', icon, disabled, full, type = 'button', style, title }) {
+// A tap is answered at once. If what a button does takes time (its handler hands back a promise), the button
+// itself shows that it is working, from the moment that becomes worth saying until the work is over, and it
+// cannot be pressed again meanwhile. No screen has to remember to do this: Tharun pressed "preview" on a
+// voice, saw nothing for twenty seconds, and could not tell a working app from a dead one (2026-10-12).
+// What the work IS (a download, how far along) is still for the screen to say, in words, beside it.
+const BUSY_AFTER_MS = 140 // quicker than this needs no sign: a flash of one would be noise
+export function useBusy(onClick) {
+  const [busy, setBusy] = useState(false)
+  const here = useRef(true)
+  useEffect(() => { here.current = true; return () => { here.current = false } }, [])
+  const run = e => {
+    if (busy) return
+    const work = onClick?.(e)
+    if (!work || typeof work.then !== 'function') return
+    const sign = setTimeout(() => here.current && setBusy(true), BUSY_AFTER_MS)
+    const over = () => { clearTimeout(sign); if (here.current) setBusy(false) }
+    work.then(over, err => { over(); throw err }) // a failure is still a failure for whoever is watching for one
+  }
+  return [busy, run]
+}
+// The sign itself: a ring that turns, in the colour of the text around it.
+export function Working({ size = 16 }) {
+  return <span data-spin aria-hidden style={{ width: size, height: size, boxSizing: 'border-box', borderRadius: T.r.pill, border: '2px solid currentColor', borderTopColor: 'transparent', opacity: 0.85, flexShrink: 0 }} />
+}
+
+export function Button({ children, onClick, kind = 'ghost', icon, disabled, full, type = 'button', style, title, busy: told }) {
+  const [own, run] = useBusy(onClick)
+  const busy = told || own
   const base = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, padding: '0 16px',
     borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: T.surface, color: T.text,
@@ -47,22 +75,24 @@ export function Button({ children, onClick, kind = 'ghost', icon, disabled, full
     ghost: {},
   }
   return (
-    <button type={type} title={title} onClick={onClick} disabled={disabled} data-press="" style={{ ...base, ...kinds[kind], ...style }}>
-      {icon && <Icon name={icon} size={17} />}
+    <button type={type} title={title} onClick={run} disabled={disabled} aria-busy={busy || undefined} data-press="" style={{ ...base, ...kinds[kind], ...style, ...(busy ? { pointerEvents: 'none' } : {}) }}>
+      {busy ? <Working size={15} /> : icon && <Icon name={icon} size={17} />}
       {typeof children === 'string' ? <Swap>{children}</Swap> : children}
     </button>
   )
 }
 
-export function IconButton({ icon, onClick, label: aria, size = 40, iconSize = 20, active, style, fill }) {
+export function IconButton({ icon, onClick, label: aria, size = 40, iconSize = 20, active, style, fill, busy: told }) {
+  const [own, run] = useBusy(onClick)
+  const busy = told || own
   return (
-    <button type="button" aria-label={aria} title={aria} onClick={onClick} data-press=""
+    <button type="button" aria-label={aria} title={aria} onClick={run} aria-busy={busy || undefined} data-press=""
       style={{
         '--press': T.tap.icon,
         width: size, height: size, borderRadius: T.r.pill, border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer',
         background: active ? T.accentSoft : 'transparent', color: active ? T.accent : T.text, flexShrink: 0, padding: 0, ...style,
       }}>
-      <Icon name={icon} size={iconSize} fill={fill} />
+      {busy ? <Working size={Math.round(iconSize * 0.8)} /> : <Icon name={icon} size={iconSize} fill={fill} />}
     </button>
   )
 }
@@ -132,11 +162,14 @@ export const inputStyle = {
   color: T.text, fontFamily: T.font, fontSize: 15, outline: 'none',
 }
 
-export function Progress({ value, height = 3, color = T.accent, track = T.surfaceHi }) {
+// `unknown`: the work has no known length, so the bar sweeps instead of showing a made-up amount.
+export function Progress({ value, height = 3, color = T.accent, track = T.surfaceHi, unknown }) {
   return (
     <div style={{ height, borderRadius: height, background: track, overflow: 'hidden' }}>
-      <motion.div initial={false} animate={{ scaleX: Math.max(0, Math.min(1, value || 0)) }} transition={{ duration: T.dur.base, ease: T.ease }}
-        style={{ height: '100%', background: color, transformOrigin: '0 50%' }} />
+      {unknown
+        ? <motion.div key="sweep" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ height: '100%', width: '34%', background: color }} />
+        : <motion.div key="fill" initial={false} animate={{ scaleX: Math.max(0, Math.min(1, value || 0)) }} transition={{ duration: T.dur.base, ease: T.ease }}
+        style={{ height: '100%', background: color, transformOrigin: '0 50%' }} />}
     </div>
   )
 }
@@ -274,7 +307,7 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
               <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{it.heading}</div>
             ) : (
               <button key={i} role="menuitem" type="button" disabled={it.disabled} data-press="" data-rise={menuRow(i)}
-                onClick={() => { setOpen(false); it.onClick() }}
+                onClick={() => { setOpen(false); const work = it.onClick(); if (typeof work?.then === 'function') during(it.doing || `${it.label}…`, work) }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', border: 'none', borderRadius: T.r.sm,
                   background: 'transparent', color: it.danger ? T.danger : T.text, fontFamily: T.font, fontSize: 14,

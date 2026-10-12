@@ -7,7 +7,7 @@ import { settings, hasKey } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { LANGS } from '../lib/lang.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn } from '../lib/library.js'
-import { synthesize, recordToBlob, loadEngine, engine } from '../lib/tts.js'
+import { synthesize, recordToBlob, loadEngine, engine, voiceWait } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
 import { looksMarkdown } from '../ingest/text.js'
 import { voiceName, voicesFor } from '../lib/voices.js'
@@ -15,7 +15,7 @@ import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
-import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle, Appear, rowIn } from './kit.jsx'
+import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle, Appear, rowIn, Pulse } from './kit.jsx'
 import { LibraryAsk } from './LibraryAsk.jsx'
 import { ConceptMap } from './ConceptMap.jsx'
 import { Briefing } from './Briefing.jsx'
@@ -77,26 +77,54 @@ const PHONE_PATHS = [
 // ── voice preview ──────────────────────────────────────────────────────────────
 const previewAudio = new Audio()
 let previewUrl = null
+// `busy` is { voice, phase }: 'getting' (the voice is being downloaded or opened and the line is being made)
+// then 'playing'. The first preview of a voice on a device downloads the voice, which can take half a minute
+// on a phone: the row says so, with how far along it is, from the moment of the tap.
 async function preview(voice, setBusy) {
-  setBusy(voice)
+  previewAudio.pause()
+  setBusy({ voice, phase: 'getting' })
   try {
     const rec = await synthesize(`Hi, I'm ${voiceName(voice)}. I'll read your documents to you, clearly and calmly.`, voice)
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     previewUrl = URL.createObjectURL(recordToBlob(rec))
     previewAudio.src = previewUrl
+    previewAudio.onended = previewAudio.onpause = () => setBusy(b => (b?.voice === voice ? null : b))
     await previewAudio.play()
+    setBusy({ voice, phase: 'playing' })
   } catch (e) {
     toast("Preview couldn't play. Check your connection and try again.")
-  } finally {
     setBusy(null)
   }
 }
 
+// The sample belongs to the sheet that asked for it: it stops when that sheet goes.
+function usePreview() {
+  const state = useState(null)
+  useEffect(() => () => previewAudio.pause(), [])
+  return state
+}
+
 function PreviewButton({ voice, busy, setBusy }) {
-  const mine = busy === voice
+  const mine = busy?.voice === voice
+  const playing = mine && busy.phase === 'playing'
   return (
-    <IconButton icon={mine ? 'waves' : 'play'} label={`Preview ${voiceName(voice)}`} fill={!mine} iconSize={16} size={36}
-      active={mine} onClick={() => !busy && preview(voice, setBusy)} style={{ opacity: busy && !mine ? 0.35 : 1 }} />
+    <IconButton icon={playing ? 'stop' : 'play'} label={playing ? `Stop ${voiceName(voice)}` : `Preview ${voiceName(voice)}`} fill iconSize={16} size={36}
+      active={mine} busy={mine && !playing} onClick={() => { if (playing) previewAudio.pause(); else if (!busy) preview(voice, setBusy) }} style={{ opacity: busy && !mine ? 0.35 : 1 }} />
+  )
+}
+
+// What is happening to the voice being previewed, in the app's one set of words for it (tts.js voiceWait).
+function PreviewLine({ busy }) {
+  const eng = useStore(engine)
+  const name = voiceName(busy.voice)
+  const wait = eng.voice === busy.voice ? voiceWait(eng) : null
+  const text = busy.phase === 'playing' ? `Playing ${name}`
+    : wait ? (wait.progress != null ? `${wait.text} · ${Math.floor(wait.progress * 100)}%` : wait.text)
+    : `Making ${name}'s sample`
+  return (
+    <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 12px 10px 42px', fontSize: 12.5, color: busy.phase === 'playing' ? T.lime : T.sub }}>
+      <Pulse color={busy.phase === 'playing' ? T.lime : T.accent} />{text}
+    </div>
   )
 }
 
@@ -120,7 +148,7 @@ function AddForm({ wide }) {
   const langVoices = voicesFor(voiceLang)
   const picked = langVoices.some(v => v.id === voice) ? voice : langVoices[0]?.id
   const [ai, setAi] = useState(keyed && s.aiNarration)
-  const [busy, setBusy] = useState(null)
+  const [busy, setBusy] = usePreview()
   const [over, setOver] = useState(false)
   const inputRef = useRef(null)
 
@@ -217,6 +245,7 @@ function AddForm({ wide }) {
             {voiceLang === 'en' && <PreviewButton voice={picked} busy={busy} setBusy={setBusy} />}
           </div>
         )}
+        {busy && <div style={{ marginLeft: -42, marginBottom: -10, paddingTop: 8 }}><PreviewLine busy={busy} /></div>}
       </Field>
       )}
 
@@ -235,7 +264,7 @@ function VoicePicker() {
   const docId = useStore(ui, s => s.docId)
   const d = useStore(library, s => s.docs.find(x => x.id === docId))
   const sys = useStore(settings, s => activeEngine(s) === 'system')
-  const [busy, setBusy] = useState(null)
+  const [busy, setBusy] = usePreview()
   if (!d) return null
   if (sys) {
     return (
@@ -250,12 +279,12 @@ function VoicePicker() {
   return (
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ padding: '0 12px 6px', fontSize: 20, fontWeight: 700 }}>Voice</div>
-      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Changing the voice regenerates this document's audio, starting where you are. A voice downloads once on each device (about 63 MB).</div>
+      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub }}>Choose a voice and this document's audio is made again in it, from where you are. Each voice downloads once on a device (about 63 MB), then works offline.</div>
       {d.voice && isCloudVoice(d.voice) && (
         <div style={{ padding: '0 12px 14px', fontSize: 12.5, color: T.sub, lineHeight: 1.55 }}>{cloudTruth(d.voice)}</div>
       )}
       {voicesFor(d.lang || 'en').map((v, i) => (
-        <motion.div key={v.id} {...rowIn(i)} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
+        <motion.div key={v.id} {...rowIn(i)} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
           <button type="button" onClick={() => { changeVoice(d.id, v.id); toast(`Switching to ${v.name}`); closeSheet() }}
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', fontFamily: T.font }}>
             <span style={{ width: 18, color: T.accent }}>{v.id === d.voice && <Icon name="check" size={17} />}</span>
@@ -263,6 +292,7 @@ function VoicePicker() {
             <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.cloud ? v.accent : `${v.accent} · ${v.g}`}</span>
           </button>
           <PreviewButton voice={v.id} busy={busy} setBusy={setBusy} />
+          {busy?.voice === v.id && <div style={{ flexBasis: '100%' }}><PreviewLine busy={busy} /></div>}
         </motion.div>
       ))}
     </div>

@@ -15,7 +15,9 @@
 // stack: there it is a Motion value per word, here it is one style rule and no script.
 import { useState } from 'react'
 import { T, eyebrow, label } from '../theme.js'
-import { go, openSheet, closeWelcome } from '../lib/nav.js'
+import { go, openSheet, closeWelcome, pushPanel } from '../lib/nav.js'
+import { useStore } from '../lib/store.js'
+import { account } from '../lib/sync.js'
 import { addDocument } from '../lib/library.js'
 import { VOICES } from '../lib/voices.js'
 import { LANGS } from '../lib/lang.js'
@@ -85,6 +87,8 @@ const VIEW_SAYS = {
 }
 
 export function Landing({ wide, hasLibrary }) {
+  // someone coming back (a new device, or after signing out) looks for this here, not three taps into Settings
+  const canSignIn = useStore(account, a => a.checked && (a.google || a.dev) && !a.user)
   const add = () => openSheet('add')
   const sample = async () => { const id = await addDocument({ kind: 'text', name: SAMPLE.title, title: SAMPLE.title, text: SAMPLE.text }); go('reader', id) }
   const pad = wide ? 40 : 24
@@ -97,6 +101,7 @@ export function Landing({ wide, hasLibrary }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: NAV_H, maxWidth: PAGE_W, margin: '0 auto', padding: `0 ${wide ? pad : 12}px` }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex' }}><Wordmark size={24} reveal /></div>
           {/* someone who already has a library came here by the page's own address: their way back */}
+          {canSignIn && <Button onClick={() => { go('settings'); pushPanel('settings:account') }} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Sign in</Button>}
           {hasLibrary && <Button onClick={closeWelcome} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Your library</Button>}
           <IconButton icon="settings" label="Settings" onClick={() => go('settings')} />
           <IconButton icon="plus" label="Add" onClick={add} size={34} iconSize={18} style={{ background: T.text, color: T.bg, marginLeft: 2 }} />

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { go } from '../lib/nav.js'
@@ -42,8 +43,9 @@ export function Avatar({ user, size = 32 }) {
 
 // Google's sign-in button (dark theme) per Google's branding guidelines; colours are Google's spec, not Noesis tokens.
 export function GoogleButton({ onClick = signInWithGoogle, disabled, full }) {
+  const [going, setGoing] = useState(false) // the page is leaving for Google's: a second or two of nothing, unless it is said
   return (
-    <button type="button" onClick={onClick} disabled={disabled}
+    <button type="button" onClick={() => { setGoing(true); onClick() }} disabled={disabled} aria-busy={going || undefined}
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 10, height: 42, padding: '0 16px', width: full ? '100%' : undefined,
         borderRadius: T.r.pill, border: '1px solid #8E918F', background: '#131314', color: '#E3E3E3', fontFamily: T.font, fontSize: 14, fontWeight: 600,
@@ -55,7 +57,7 @@ export function GoogleButton({ onClick = signInWithGoogle, disabled, full }) {
         <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
         <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
       </svg>
-      Sign in with Google
+      {going ? 'Opening Google…' : 'Sign in with Google'}
     </button>
   )
 }

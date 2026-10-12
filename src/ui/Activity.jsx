@@ -7,8 +7,8 @@ import { library, kickVoice } from '../lib/library.js'
 import { player } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
 import { activeEngine } from '../lib/engine.js'
-import { engine, loadEngine } from '../lib/tts.js'
-import { voiceName } from '../lib/voices.js'
+import { engine, loadEngine, voiceWait } from '../lib/tts.js'
+import { waitWords } from '../lib/readiness-math.js'
 import { Pulse } from './kit.jsx'
 
 // One place, on every screen, that says what Noesis is doing in the background and how far along it is:
@@ -18,8 +18,6 @@ import { Pulse } from './kit.jsx'
 export const ACTIVITY_H = 52 // strip height + gap, for stacking toasts above it
 
 const PREP = new Set(['queued', 'reading', 'narrating', 'syncing'])
-const mb = n => Math.round(n / 1048576)
-const wait = s => (s < 90 ? 'under 2 minutes' : s < 3600 ? `about ${Math.round(s / 60)} minutes` : `about ${(s / 3600).toFixed(1)} hours`)
 const offlineVoice = e => !navigator.onLine || /failed to fetch|networkerror|load failed|offline|network request failed/i.test(e || '')
 
 function useOnline() {
@@ -47,6 +45,9 @@ export function useActivity() {
       || docs.find(d => d.status === 'queued')
       || null
   })
+  // A voice that starts downloading by itself looks random ("some voice is loading when I open the app"):
+  // it is always FOR a document whose audio is still being made, so the island says which.
+  const voiceFor = useStore(library, s => s.docs.find(d => d.status === 'voicing' && d.voice === eng.voice) || null)
   const gate = useStore(player, s => s.gate)
   const playId = useStore(player, s => s.id)
   const view = useStore(ui, s => s.view)
@@ -63,22 +64,20 @@ export function useActivity() {
   }
   // (2) the listener's own wait comes before everything else.
   if (gate != null && playId && !onReaderOf(playId)) {
-    return { key: 'gate', text: 'Preparing audio', detail: `Ready in ${wait(gate)}. Play starts by itself.`, open: playId }
+    return { key: 'gate', text: 'Making the audio', detail: `Ready in ${waitWords(gate)}. Play starts by itself.`, open: playId }
   }
   // (3) a real voice download. A load from this device's storage (every launch) is routine: silent.
   // `total` is only set when the voice really comes from the network.
-  if (natural && eng.status === 'loading' && eng.total > 0 && !eng.opening) {
-    return { key: 'voice', text: `Downloading the ${voiceName(eng.voice)} voice`, detail: `${mb(eng.loaded)} of ${mb(eng.total)} MB`, progress: eng.loaded / eng.total >= 0.01 ? eng.loaded / eng.total : undefined }
-  }
-  if (natural && eng.status === 'loading' && gate != null) {
-    return { key: 'voice', text: `Getting the ${voiceName(eng.voice)} voice ready`, detail: 'A few seconds' }
+  const voice = natural ? voiceWait(eng) : null
+  if (voice && (voice.download || gate != null) && !(voiceFor && onReaderOf(voiceFor.id))) {
+    return { key: 'voice', text: voice.text, detail: [voice.download && `${voice.mb} MB, one time`, voiceFor && `for “${voiceFor.title}”`].filter(Boolean).join(' · ') || undefined, progress: voice.progress, open: voiceFor?.id }
   }
   // (4) the document actually being processed now.
   if (prep && !onReaderOf(prep.id)) {
     if (prep.status === 'syncing' && !prep.contentVer) {
       return { key: 'prep-' + prep.id, text: 'Waiting for your other device to finish preparing', detail: prep.title, open: prep.id }
     }
-    return { key: 'prep-' + prep.id, text: prep.stage || 'Preparing', detail: prep.title, progress: prep.prep >= 0.01 ? prep.prep : undefined, open: prep.id }
+    return { key: 'prep-' + prep.id, text: prep.stage || 'Reading the document', detail: prep.title, progress: prep.prep >= 0.01 ? prep.prep : undefined, open: prep.id }
   }
   // (5) offline, only while an action that needs the network is actually pending.
   if (!online && (eng.status === 'loading' || (prep && (prep.status === 'narrating' || prep.status === 'syncing')))) {

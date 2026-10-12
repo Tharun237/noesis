@@ -32,7 +32,7 @@ export function BlockTool({ tool, doc, d, onClose }) {
       </div>
       {voice && (
         <Appear style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px 0', fontSize: 13.5, color: T.sub }}>
-          <Pulse /><span style={{ flex: 1 }}>{voice === 'preparing' ? 'Preparing the voice' : 'Speaking'}</span>
+          <Pulse /><span style={{ flex: 1 }}>{voice === 'preparing' ? 'Making the audio' : 'Speaking'}</span>
           <Button onClick={() => { stopSpeaking(); setVoice(null) }}>Stop</Button>
         </Appear>
       )}

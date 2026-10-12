@@ -19,7 +19,7 @@ function useVoiceLabel(d) {
   return sys ? systemVoiceLabel(pickSystemVoice()) : voiceName(d.voice)
 }
 import { Icon } from './icons.jsx'
-import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap } from './kit.jsx'
+import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap, useBusy } from './kit.jsx'
 import { Cover } from './Library.jsx'
 import { ArcScrubber } from './ArcScrubber.jsx'
 
@@ -110,10 +110,11 @@ function Transport({ size = 58 }) {
 }
 
 function PlayButton({ playing, waiting, size }) {
+  const [busy, run] = useBusy(toggle) // working out whether it can start is a wait too, on a long book and a slow phone
   return (
-    <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} data-press=""
+    <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={run} aria-busy={waiting || busy || undefined} data-press=""
       style={{ '--press': T.tap.icon, width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
-      {waiting && (
+      {(waiting || busy) && (
         <span data-spin style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
       )}
       <motion.span key={playing ? 'pause' : 'play'} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.spring} style={{ display: 'grid' }}>

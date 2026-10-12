@@ -230,7 +230,7 @@ try {
       while (Date.now() - t0 < 240000) {
         meta = await metaRecord()
         const txt = await page.evaluate(() => document.body.innerText)
-        for (const m of txt.matchAll(/(Downloading|Preparing|Generating audio|Opening|Ready to play|Reading document|still being prepared)[^\n]{0,60}/gi)) phrases.add(m[0].slice(0, 70))
+        for (const m of txt.matchAll(/(Downloading|Starting the|Making the audio|Preparing|Generating audio|Opening|Ready to play|Reading document|still being prepared)[^\n]{0,60}/gi)) phrases.add(m[0].slice(0, 70))
         if (meta && (meta.status === 'ready' || meta.status === 'error')) break
         await sleep(3000)
       }

@@ -1,3 +1,4 @@
+import { onShelf } from '../lib/shelf.js'
 import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { later } from './later.jsx'
 import { motion, AnimatePresence } from 'motion/react'
@@ -15,7 +16,7 @@ import { activeEngine } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur, Swap } from './kit.jsx'
 import { AccountChip } from './SyncStatus.jsx'
-import { waitSeconds } from '../lib/readiness-math.js'
+import { waitSeconds, waitWords } from '../lib/readiness-math.js'
 
 const KIND = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', html: 'WEB', md: 'MD', txt: 'TXT', text: 'TEXT', link: 'LINK' }
 const MODE = { long: 'Long summary', short: 'Short summary' }
@@ -61,7 +62,7 @@ function useVisibleDocs() {
 // answer from last time is kept: a new visitor's landing page is fetched straight away, and nobody is shown
 // the wrong one of the two first.
 const Landing = later(() => import('./Landing.jsx').then(m => m.Landing))
-const HAD_DOCS = 'noesis.had-docs'
+const HAD_DOCS = onShelf('noesis.had-docs')
 const hadDocs = (() => { try { return localStorage.getItem(HAD_DOCS) === '1' } catch { return false } })()
 if (!hadDocs || ui.get().welcome) Landing.fetch()
 // Is there nothing to list? Before the library has been read: what it was last time. (The app's bottom bars
@@ -362,8 +363,7 @@ export function StatusLine({ d }) {
     if (sys) return null // built-in voice: playable as soon as the text is ready
     if (engStatus === 'error' && d.id === playId) return <span style={{ color: T.danger }}>The voice didn't load</span>
     if (d.id !== playId || gate == null) return null
-    const when = ` · ready in ${gate < 90 ? 'under 2 min' : gate < 3600 ? `about ${Math.round(gate / 60)} min` : `about ${(gate / 3600).toFixed(1)} h`}`
-    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Preparing audio{when}</span>
+    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Making the audio · ready in {waitWords(gate)}</span>
   }
   if (d.status === 'queued') return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> {queuedText(d.id, qkey)}</span>
   const pct = d.prep || 0
@@ -441,8 +441,8 @@ export function docMenu(d, { keeping = true } = {}) {
       { label: d.archived ? 'Move to queue' : 'Archive', icon: 'archive', onClick: () => patch(d.id, { archived: !d.archived }) },
       '-',
     ] : []),
-    { label: 'Export transcript', icon: 'text', disabled: !d.total, onClick: () => exportTranscript(d.id) },
-    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'not yet', onClick: () => exportAudio(d.id) },
+    { label: 'Export transcript', doing: 'Writing the transcript', icon: 'text', disabled: !d.total, onClick: () => exportTranscript(d.id) },
+    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'not yet', doing: 'Putting the audio into one file', onClick: () => exportAudio(d.id) },
     d.status === 'error' && { label: 'Try again', icon: 'refresh', onClick: () => reprocess(d.id) },
     ...(keeping ? [
       '-',

@@ -165,7 +165,7 @@ export function FocusView({ doc, active, onSeek, playing, stickTop = 0 }) {
   if (!doc || curSent == null || curSent < 0 || !words.length) {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center', fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
-        {!doc ? 'Preparing the text.' : 'Nothing readable in this document yet.'}
+        {!doc ? 'Reading the document.' : 'Nothing readable in this document yet.'}
       </div>
     )
   }

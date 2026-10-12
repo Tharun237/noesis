@@ -2,11 +2,28 @@ import { createStore } from './store.js'
 import { settings } from './settings.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { isCloudVoice, cloudSynthesize } from './cloudvoice.js'
+import { voiceName } from './voices.js'
 
 // The on-device voice engine (Piper, tts.worker.js). The worker starts on first use; each voice is one
 // download, cached on the device. status: idle | loading (downloading/opening `voice`) | ready | error
 // A cloud voice (nv:…) needs no download: loadEngine reads ready for it at once.
 export const engine = createStore({ status: 'idle', voice: null, loaded: 0, total: 0, opening: false, error: null })
+
+// What the customer is waiting for when a voice is not ready yet, in the ONE set of words the app has for it.
+// The reader, the island above the player and the voice list all say this sentence, so the same wait never
+// has two names (it had five: "Preparing the voice", "Getting the voice ready", "Preparing audio"...).
+// The app's words for its waits:  Downloading the <name> voice  (from the network, once per device)
+//                                 Starting the <name> voice     (opening it from this device)
+//                                 Making the audio              (this device speaking the text into sound)
+//                                 Reading the document          (turning the file into text)
+// → null | { text, download, progress? (0..1; absent = no known length), mb?, detail? }
+export function voiceWait(e = engine.get()) {
+  if (e.status !== 'loading') return null
+  const name = voiceName(e.voice)
+  if (!(e.total > 0) || e.opening) return { text: `Starting the ${name} voice`, download: false }
+  const part = e.loaded / e.total
+  return { text: `Downloading the ${name} voice`, download: true, progress: part >= 0.01 ? part : undefined, mb: Math.round(e.total / 1048576), detail: `One time, ${Math.round(e.total / 1048576)} MB. After this it works offline.` }
+}
 
 let worker = null
 let loading = null // { voice, promise } — concurrent callers share one load

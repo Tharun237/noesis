@@ -156,7 +156,7 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
                       else { setPreparingVoice(k); speak(m.text, voiceForText(m.text, d), on => { if (on) { setPreparingVoice(null); setSpeaking(k) } else { setSpeaking(null); setPreparingVoice(null) } }) }
                     }}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: 'transparent', color: speaking === k ? T.accent : T.sub, fontFamily: T.font, fontSize: 12, cursor: 'pointer' }}>
-                      <Icon name={speaking === k ? 'stop' : 'speaker'} size={13} /> {preparingVoice === k ? 'Preparing the voice...' : speaking === k ? 'Stop' : 'Listen'}
+                      <Icon name={speaking === k ? 'stop' : 'speaker'} size={13} /> {preparingVoice === k ? 'Making the audio' : speaking === k ? 'Stop' : 'Listen'}
                     </button>
                     {m.skim && onSeek && doc && nextSection() >= 0 && (
                       <button type="button" onClick={() => { stopSpeaking(); setSpeaking(null); setPreparingVoice(null); onSeek(nextSection()) }}
@@ -178,7 +178,7 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
             ))}
           </div>
           <form onSubmit={e => { e.preventDefault(); ask(q) }} style={{ display: 'flex', gap: 8, padding: 12 }}>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={doc ? 'Ask anything about this document' : 'Preparing the document…'} disabled={!doc}
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={doc ? 'Ask anything about this document' : 'Reading the document'} disabled={!doc}
               style={{ flex: 1, minWidth: 0, height: 44, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: T.surface, color: T.text, fontFamily: T.font, fontSize: 14.5, outline: 'none' }} />
             <IconButton icon="send" label="Send" onClick={() => ask(q)} size={44} style={{ background: q.trim() ? T.text : T.surfaceHi, color: q.trim() ? T.bg : T.faint }} />
           </form>

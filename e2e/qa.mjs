@@ -491,7 +491,7 @@ await step('natural voice: readiness gate instead of stalling', async () => {
   await page.reload()
   await openDoc('Traction')
   await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
-  await until(() => page.getByText(/still being prepared on this device/).isVisible(), 5000, 'gate message')
+  await until(() => page.getByText(/Play starts by itself/).first().isVisible(), 5000, 'gate message')
   const s1 = await playerState()
   expect(!s1.playing && s1.gate > 0, `expected gated, got playing=${s1.playing} gate=${s1.gate}`)
   await page.getByRole('button', { name: 'Use built-in voice now' }).click()

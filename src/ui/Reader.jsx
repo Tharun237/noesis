@@ -18,7 +18,8 @@ import { useRoute } from '../lib/route.js'
 import { pushPanel, popPanel } from '../lib/nav.js'
 import { scrollBehavior, whenIdle } from '../lib/motion.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
-import { engine, loadEngine } from '../lib/tts.js'
+import { engine, loadEngine, voiceWait } from '../lib/tts.js'
+import { waitWords } from '../lib/readiness-math.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { useLitWord } from './litword.js'
@@ -657,79 +658,66 @@ function DocNote({ d }) {
   )
 }
 
-const fmtWait = w => (w == null ? null : w < 90 ? 'under 2 minutes' : w < 3600 ? `about ${Math.round(w / 60)} minutes` : `about ${(w / 3600).toFixed(1)} hours`)
 const offlineErr = e => !navigator.onLine || /failed to fetch|networkerror|load failed|offline|network request failed/i.test(e || '')
 
+const NOTIFY_OVER_S = 60 // a shorter wait is over before a notification would be worth asking for
+// What stands between the customer and this document playing, in the app's one set of words for a wait
+// (tts.js voiceWait). When nothing does, there is no card: a Play button that works is how "ready" is said.
+// Tharun was shown "Ready to play" over a bar a quarter full (the share of the WHOLE book made so far) and
+// "The rest is prepared ahead of you", and could not tell what any of it meant (2026-10-12). So: one
+// sentence saying what is being waited for, a bar that measures exactly that sentence (or sweeps when the
+// length is not known), and one line saying what happens next.
 function Preparing({ d, doc, pos }) {
-  const eng = useStore(engine, s => s.status)
-  const engVoice = useStore(engine, s => s.voice)
-  const engErr = useStore(engine, s => s.error)
-  const loaded = useStore(engine, s => s.loaded)
-  const total = useStore(engine, s => s.total)
-  const opening = useStore(engine, s => s.opening)
+  const eng = useStore(engine)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const speed = useStore(settings, s => s.voiceSpeed)
   const playId = useStore(player, s => s.id)
   const gate = useStore(player, s => s.gate)
   const textReady = d.status === 'voicing' || d.status === 'ready'
   const [asked, setAsked] = useState(notifyAsked)
-  if (sys && textReady) return null // the built-in voice speaks straight away: nothing to prepare
+  const longest = useRef(0) // the longest wait seen here: what "ready in" is measured against
+  if (sys && textReady) return null // the built-in voice speaks straight away: nothing to wait for
   const gated = playId === d.id && gate != null
-  const realDownload = total > 0 && !opening
-  // A load from this device's storage that nobody is waiting on is routine: silent.
-  const downloading = d.status === 'voicing' && eng !== 'ready' && eng !== 'error' && (gated || realDownload)
-  const pct = downloading ? (total ? loaded / total : 0) : d.status === 'voicing' ? d.done / Math.max(1, d.total) : d.prep || 0
-  const ready = d.status === 'voicing' && !downloading ? readiness(d, doc, pos) : null
+  const voicing = d.status === 'voicing'
+  const failed = voicing && eng.status === 'error'
+  const voiceOff = failed && offlineErr(eng.error)
+  const engVoice = eng.voice
+  const ready = voicing && !failed ? readiness(d, doc, pos) : null
+  if (ready?.ready) return null
+  // Not playable yet, and the voice itself is not up: that is the wait, before any audio can be made. (It
+  // said "ready in about 10 seconds" for seven seconds before a 60 MB download had even begun.)
+  const voice = voicing && !failed ? voiceWait(eng) : null
+  if (ready?.wait != null) longest.current = Math.max(longest.current, ready.wait)
   const slow = speed > 0 && speed < 1 && hasSystemVoice()
-  const voiceOff = eng === 'error' && offlineErr(engErr)
+  const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : T.lime} />{text}</span>
+  // head: what is being waited for · bar: null (none), undefined (no known length) or 0..1 · next: what happens then
+  const [head, bar, next] = d.status === 'error' ? [<StatusLine d={d} />, null, null]
+    : failed ? [said(voiceOff ? "You're offline" : `The ${voiceName(engVoice)} voice couldn't start`), null, voiceOff ? `The ${voiceName(engVoice)} voice downloads when you are back online.` : null]
+    : voice ? [said(voice.progress != null ? `${voice.text} · ${Math.floor(voice.progress * 100)}%` : voice.text), voice.progress, [voice.detail, gated && 'Play starts by itself.'].filter(Boolean).join(' ') || null]
+    : !voice && ready ? [
+        said(ready.wait == null ? 'Making the audio' : `Making the audio · ready in ${waitWords(ready.wait)}`),
+        ready.wait == null || !longest.current ? undefined : 1 - ready.wait / longest.current,
+        gated ? 'It is made on your device. Play starts by itself.' : 'It is made on your device. Press Play and it starts by itself when ready.',
+      ]
+    : [<StatusLine d={d} />, d.prep >= 0.01 ? d.prep : undefined,
+        d.status === 'queued' ? 'Starts when the document before it is done.'
+        : d.status === 'syncing' ? 'It is coming from your other device.'
+        : 'The text appears here as it is read.']
   return (
-    <div style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${d.status === 'error' || eng === 'error' ? T.danger : T.border}`, background: T.surface, display: 'grid', gap: 12, marginBottom: 32 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {eng === 'error' && d.status === 'voicing'
-          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.danger }}>
-              <Pulse color={T.danger} />
-              {voiceOff ? "You're offline. The voice downloads when you're back online." : "The voice couldn't start."}
-            </span>
-          : downloading
-          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: eng === 'error' ? T.danger : T.accent }}>
-              <Pulse color={eng === 'error' ? T.danger : T.accent} />
-              {realDownload && pct >= 0.01 ? `Downloading the voice · ${Math.floor(pct * 100)}%` : realDownload ? 'Downloading the voice' : 'Getting the voice ready'}
-            </span>
-          : ready
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: ready.ready ? T.lime : T.text }}>
-                {ready.ready ? <Icon name="check" size={15} /> : <Pulse />}
-                {ready.ready ? 'Ready to play' : ready.wait == null ? 'Preparing the voice' : `Preparing the natural voice · ready in ${fmtWait(ready.wait)}`}
-              </span>
-            : <StatusLine d={d} />}
-      </div>
-      {d.status !== 'error' && <Progress value={pct} />}
-      <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
-        {eng === 'error' && d.status === 'voicing'
-          ? voiceOff ? "The voice downloads when you're back online." : 'Tap Retry to try again.'
-          : downloading
-          ? realDownload ? 'One time only. After this, this voice works offline on this device.' : 'A few seconds.'
-          : ready
-            ? ready.ready
-              ? 'The rest is prepared ahead of you as you listen.'
-              : gated
-                ? `Noesis prepares enough audio to play to the end without pauses (this device generates at ${speed ? speed.toFixed(2) : '…'}× speaking speed). Play starts by itself when ready.`
-                : "Noesis prepares enough audio to play to the end without pauses. Press Play when it's ready."
-            : d.status === 'error' ? 'Use the menu above to try again.'
-            : d.status === 'queued' ? 'Starts when the earlier book is done.'
-            : d.status === 'syncing' ? 'Waiting for your other device or the download.'
-            : d.status === 'reading' ? 'Reading the file on this device.'
-            : 'Preparing the text. This page fills in when it is ready.'}
-      </div>
-      {eng === 'error' && d.status === 'voicing' && !voiceOff && (
+    <div data-rise="0" role="status" style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${d.status === 'error' || failed ? T.danger : T.border}`, background: T.surface, display: 'grid', gap: 12, marginBottom: 32 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: failed ? T.danger : T.text }}>{head}</div>
+      {bar !== null && <Progress value={bar} unknown={bar === undefined} />}
+      {next && <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>{next}</div>}
+      {failed && !voiceOff && (
         <div><Button icon="refresh" onClick={() => loadEngine(engVoice).then(kickVoice).catch(() => {})}>Retry</Button></div>
       )}
-      {ready && !ready.ready && slow && (
+      {!voice && ready && slow && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Don't want to wait? Your device's built-in voice starts instantly.</span>
           <Button kind="accent" onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>
         </div>
       )}
-      {!asked && d.status !== 'error' && !ready?.ready && (
+      {!asked && d.status !== 'error' && !failed && !voice && !(ready && !(ready.wait > NOTIFY_OVER_S)) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Leave it running and get a notification when it's ready.</span>
           <Button icon="bell" onClick={async () => { await askNotify(); setAsked(true) }}>Notify me</Button>

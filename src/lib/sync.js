@@ -13,11 +13,12 @@
 // send what of ours is newer". If two devices write the same record in the same moment, whichever write
 // landed second is what the folder holds; the device whose copy is newer notices on its next round that the
 // folder is behind and sends its copy again. So they end on the newest, whatever the order.
-import { createStore as idbStore, get, set, del } from 'idb-keyval'
+import { createStore as idbStore, get, set } from 'idb-keyval'
 import { createStore } from './store.js'
 import * as drive from './drive.js'
+import { onShelf, takeShelf, leaveShelf } from './shelf.js'
 
-const store = idbStore('noesis-sync', 'sync')
+const store = idbStore(onShelf('noesis-sync'), 'sync')
 export const account = createStore({ user: null, checked: false, google: false, dev: false, reachable: true })
 export const syncState = createStore({ status: 'idle', last: 0, error: null })
 
@@ -269,6 +270,9 @@ export async function startSync() {
     if (uid) { syncState.set({ status: 'offline' }); wire() }
     return
   }
+  // Each account has its own shelf on this device (shelf.js). If this account's is not the one that is open,
+  // open it: the page starts again on it, and nothing of the other library is shown or uploaded meanwhile.
+  if (me.user && takeShelf(me.user.id)) { location.reload(); return new Promise(() => {}) }
   account.set({ user: me.user, checked: true, reachable: true })
   if (!me.user) return
   if (mine(me.user.id)) ({ uid, cursor, clock, dirty, ids } = saved)
@@ -295,12 +299,23 @@ function signedOutHere() {
   syncState.set({ status: 'idle', last: 0, error: null })
 }
 
-// Signing out keeps this device's library; it just stops syncing.
+// Signing out puts this account's library away and opens a fresh, empty Noesis (shelf.js). The library is
+// kept on the device, with its audio and what it knows about the Drive folder, so signing in again shows
+// it at once and only fetches what changed. It needs the server (the session is a cookie only the server
+// can end): offline, it says so and nothing changes, rather than seeming to sign out and coming back.
 export async function signOut() {
   if (Object.keys(dirty).length) await flush().catch(() => {})
-  await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+  const res = await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null)
+  if (!res?.ok) throw new Error("You're offline. Signing out needs a connection.")
+  const was = uid
+  await persist()
   signedOutHere()
-  await del('state', store)
+  leaveShelf(was)
+  // The page starts again at the library, not on the Settings page it was asked from (a reload keeps the
+  // history entry's own state, and that state says "settings").
+  history.replaceState({ view: 'library', docId: null, depth: history.state?.depth || 0 }, '', '/')
+  location.reload()
+  return new Promise(() => {}) // the page is starting again: whoever waits on this shows "working" until it does
 }
 
 export const deviceName = () => {

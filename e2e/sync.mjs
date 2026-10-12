@@ -93,9 +93,18 @@ try {
   })
   check('an emptied folder is filled again on the next round', emptied > 0 && back.includes('meta') && back.includes('pos') && back.includes('doc') && (await a.lib('m.sync.syncState.get().error')) == null, `${emptied} files removed, ${back.length} back`)
 
-  await b.lib('m.sync.signOut()')
+  const had = await b.titles()
+  await b.lib('(m.sync.signOut(), 0)') // the page starts again on an empty shelf
+  await b.page.getByRole('heading', { name: /Listen to\s*anything/ }).waitFor({ timeout: 15000 })
   const after = await b.page.evaluate(async () => ({ me: (await (await fetch('/api/auth/me')).json()).user, pass: (await fetch('/api/auth/token', { method: 'POST' })).status }))
-  check('signing out keeps the library here and ends the session', after.me === null && after.pass === 401 && (await b.titles()).includes('Second device'))
+  check('signing out ends the session and opens a fresh, empty app (the welcome page)', after.me === null && after.pass === 401 && (await b.titles()).length === 0, `had ${had.length} documents`)
+  await addText(b, 'Added while signed out', 'This belongs to nobody yet.')
+  await b.lib(`(m.sync.devSignIn(${JSON.stringify(who)}).catch(() => {}), 0)`) // the page starts again on the account's shelf
+  const again = await b.until('the library to be back', async () => { const t = await b.titles().catch(() => []); return had.every(x => t.includes(x)) && t })
+  await sleep(800)
+  check('signing in again brings the library back, without what was added while signed out', had.every(t => again.includes(t)) && !again.includes('Added while signed out'), again.join(', '))
+  const audioKept = await b.page.evaluate(async () => (await indexedDB.databases()).map(d => d.name).filter(n => n.startsWith('noesis-audio')).length)
+  check('each library has its own storage on the device', audioKept === 2, `${audioKept} audio stores`)
   check('no errors were thrown on either device', a.errors.length + b.errors.length === 0, [...a.errors, ...b.errors].join(' | '))
 } catch (e) {
   check(String(e.message).split('\n')[0], false)

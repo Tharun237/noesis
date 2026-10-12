@@ -1,9 +1,10 @@
+import { onShelf } from './shelf.js'
 import { createStore } from './store.js'
 
 // Per-device preferences. The AI keys live only here (localStorage on this device). The
 // Gemini key is sent only to generativelanguage.googleapis.com; the NVIDIA key and the text
 // travel through Noesis's relay (/api/nvidia) to reach NVIDIA — never anywhere else.
-const KEY = 'noesis.settings.v1'
+const KEY = onShelf('noesis.settings.v1') // a person's settings (their AI key among them) go away with their library
 
 export const DEFAULTS = {
   aiProvider: 'gemini', // gemini | nvidia | custom (any OpenAI-compatible address): which provider AI text features use

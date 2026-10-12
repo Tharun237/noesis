@@ -121,6 +121,15 @@ addEventListener('popstate', e => {
 
 let toastTimer = null
 // action: optional { label, run } — e.g. "Jump there" when another device is further along.
+// Work that takes time and has no place of its own on screen (a menu command: the menu has closed) says so
+// here for as long as it runs, however long that is. Quick work says nothing.
+export function during(msg, work) {
+  const sign = setTimeout(() => { clearTimeout(toastTimer); ui.set({ toast: msg, toastAction: null }) }, 350)
+  const over = () => { clearTimeout(sign); if (ui.get().toast === msg) ui.set({ toast: null, toastAction: null }) }
+  work.then(over, over)
+  return work
+}
+
 export function toast(msg, action = null) {
   clearTimeout(toastTimer)
   ui.set({ toast: msg, toastAction: action })

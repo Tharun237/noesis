@@ -1,5 +1,6 @@
 import { createStore, uid } from './store.js'
 import { db, persistStorage } from './db.js'
+import { onShelf } from './shelf.js'
 import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf } from './ai.js'
 import { synthesize, engine } from './tts.js'
@@ -20,7 +21,7 @@ import { touch, configureSync, startSync, downloadContent, deviceName } from './
 // Two independent loops: PREP (parse + optional Gemini) and VOICE (on-device TTS, one sentence at a time),
 // so a long book can be prepared while you already listen to something else.
 
-const COLLECTIONS_KEY = 'noesis.collections.v1'
+const COLLECTIONS_KEY = onShelf('noesis.collections.v1')
 const loadCollections = () => { try { return JSON.parse(localStorage.getItem(COLLECTIONS_KEY) || '[]') } catch { return [] } }
 
 export const library = createStore({ docs: [], loaded: false, collections: loadCollections(), voicingNow: null })
@@ -233,7 +234,7 @@ async function resetAudio(id) {
   voicedSet(id).clear()
   const c = cache.get(id)
   if (c) { c.durs.fill(0); c.tails.fill(0); db.putDurs(id, { durs: c.durs, tails: c.tails }) }
-  patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Generating audio' } : {}) })
+  patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Making the audio' } : {}) })
 }
 
 async function nextVoiceJob() {
@@ -276,7 +277,7 @@ async function voiceOne(id, i) {
   const onRetry = !cloud ? undefined : v => {
     if (!getDoc(id)) return
     if (v === 'offline') patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
-    else if (v == null) patch(id, { stage: 'Generating audio' })
+    else if (v == null) patch(id, { stage: 'Making the audio' })
     else if (typeof v === 'string') patch(id, { stage: v }) // pre-worded provider message (browser block)
     else if (ownHost) patch(id, { stage: `${ownHost}'s quota is limiting requests. Retrying in about ${v} s.` })
     else patch(id, { stage: `NVIDIA's free quota is limiting requests. Retrying in about ${v} s.` })
@@ -336,7 +337,7 @@ async function prepare(id) {
   const s = settings.get()
   let parsed = null
   try {
-    patch(id, { status: 'reading', stage: 'Reading document', error: null, prep: 0 })
+    patch(id, { status: 'reading', stage: 'Reading the document', error: null, prep: 0 })
     let src = await db.getSource(id)
     if (!src) throw new Error('The original file is on the device you added it from. Re-process it there.')
     // A translated version points at the original instead of copying its file.
@@ -590,7 +591,7 @@ async function fetchSynced(id) {
     await db.putDurs(id, { durs: new Array(total).fill(0), tails: new Array(total).fill(0) })
     cache.delete(id)
     voiced.set(id, new Set())
-    patch(id, { status: 'voicing', stage: 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
+    patch(id, { status: 'voicing', stage: 'Making the audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
     kickVoice()
   } catch (e) {
     patch(id, { status: 'syncing', stage: 'Waiting to download from your other device', error: e.message }, true)

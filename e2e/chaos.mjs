@@ -18,6 +18,11 @@ import { mkdirSync } from 'node:fs'
 
 const arg = name => { const i = process.argv.indexOf('--' + name); return i < 0 ? null : process.argv[i + 1] ?? true }
 const WIDE = process.argv.includes('--wide')
+// --waits: one tap at a time on a slow phone and a slow line, timing how long each tap goes unanswered. A tap
+// is answered when anything on the page changes because of it (a pressed look alone is not an answer: it says
+// "I felt that", not "I am doing it"). Tharun pressed a voice's preview and saw nothing for twenty seconds.
+const WAITS = process.argv.includes('--waits')
+const ANSWER_BY_MS = 300 // at four times slower than this laptop
 const SEED = +(arg('seed') || Math.floor(Math.random() * 100000))
 const STEPS = +(arg('steps') || 240)
 const OUT = fileURLToPath(new URL('../.qa-out', import.meta.url))
@@ -41,17 +46,23 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
 })
 const page = ctx.pages()[0] || await ctx.newPage()
 const cdp = await ctx.newCDPSession(page)
+if (WAITS) {
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 })
+  await cdp.send('Network.enable')
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 4e6 / 8, uploadThroughput: 1e6 / 8 })
+}
 const errors = []
 page.on('pageerror', e => errors.push('threw: ' + String(e).slice(0, 220)))
 page.on('console', m => { if (m.type() === 'error' && !/favicon|net::ERR|Failed to load resource|\/api\//.test(m.text())) errors.push('console error: ' + m.text().slice(0, 220)) })
 page.on('dialog', d => (rnd() < 0.5 ? d.accept(d.type() === 'prompt' ? 'Chaos ' + Math.floor(rnd() * 99) : undefined) : d.dismiss()).catch(() => {}))
 // the longest the screen went without drawing a frame, and how much the page changed (for taps that do nothing)
 await page.addInitScript(() => {
-  window.__gap = 0; window.__mut = 0
+  window.__gap = 0; window.__mut = 0; window.__tapAt = 0; window.__answer = 0
+  addEventListener('pointerdown', () => { window.__tapAt = performance.now(); window.__answer = 0 }, true)
   let last = performance.now()
   const frame = t => { if (!document.hidden) window.__gap = Math.max(window.__gap, t - last); last = t; requestAnimationFrame(frame) }
   requestAnimationFrame(frame)
-  addEventListener('DOMContentLoaded', () => new MutationObserver(list => { window.__mut += list.length }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true }))
+  addEventListener('DOMContentLoaded', () => new MutationObserver(list => { window.__mut += list.length; if (window.__tapAt && !window.__answer) window.__answer = Math.max(1, performance.now() - window.__tapAt) }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true }))
 })
 
 // ---- the library the customer starts with: a long text, a document with a table, an equation and citations,
@@ -158,7 +169,7 @@ async function act() {
     }
     await tap(t.x, t.y)
     if (t.kind === 'type') { await page.keyboard.type(pick(WORDS), { delay: 8 }); if (rnd() < 0.4) await page.keyboard.press('Enter'); return `type in "${t.label}"` }
-    if (rnd() < 0.12) {
+    if (!WAITS && rnd() < 0.12) {
       // Hammering one spot may close one thing. It must never go back two steps (out of the document, or out
       // of the app): a second tap on a sheet that is already closing once did exactly that.
       const before = await page.evaluate(() => history.state?.depth || 0).catch(() => 0)
@@ -303,17 +314,26 @@ const findings = []
 const quiet = new Map() // taps after which nothing on the page changed
 const slow = []
 const trail = []
+const waits = new Map() // tap → the longest it went unanswered
 let done = 0
 let burstNo = 0
 while (done < STEPS) {
   burstNo++
   const burst = []
   await page.evaluate(() => { window.__mut = 0 }).catch(() => {})
-  const n = 1 + Math.floor(rnd() * 4) // a customer does not wait for one thing to finish before the next
+  const n = WAITS ? 1 : 1 + Math.floor(rnd() * 4) // a customer does not wait for one thing to finish before the next
   for (let k = 0; k < n && done < STEPS; k++) {
     let what
+    if (WAITS) await page.evaluate(() => { window.__tapAt = 0; window.__answer = 0 }).catch(() => {})
+    const where = WAITS ? await page.evaluate(() => { const s = history.state || {}; return [s.view, s.sheet, s.panel].filter(Boolean).join('+') }).catch(() => '?') : ''
     try { what = await act() } catch (e) { what = 'could not: ' + String(e.message).split('\n')[0].slice(0, 80) }
     burst.push(what); done++
+    if (WAITS && /^tap /.test(what)) {
+      let ms = 0
+      for (let w = 0; w < 40 && !ms; w++) { await sleep(100); ms = await page.evaluate(() => window.__answer).catch(() => 1) }
+      const key = `${what} (${where})`
+      waits.set(key, Math.max(waits.get(key) || 0, ms || Infinity))
+    }
     await sleep(pick([0, 0, 30, 60, 120, 260]))
   }
   trail.push(...burst)
@@ -355,6 +375,12 @@ for (const [, list] of grouped) {
   if (f.shot) console.log(`   ${f.shot}`)
 }
 if (slow.length) { console.log('\nSlow or passing (look, but not counted as broken):'); for (const s of [...new Set(slow)].slice(0, 12)) console.log('  - ' + s) }
+if (WAITS) {
+  const late = [...waits.entries()].filter(([, ms]) => ms > ANSWER_BY_MS).sort((a, b) => b[1] - a[1])
+  console.log(`
+Taps left unanswered for more than ${ANSWER_BY_MS} ms (${late.length} of ${waits.size} different taps):`)
+  for (const [k, ms] of late) console.log(`  - ${ms === Infinity ? 'never' : String(Math.round(ms)).padStart(5) + ' ms'}  ${k}`)
+}
 const dead = [...quiet.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
 if (dead.length) { console.log('\nTaps after which nothing on the page changed (a dead control, or a legitimate no-op):'); for (const [k, c] of dead) console.log(`  - ${k}${c > 1 ? ` ×${c}` : ''}`) }
 console.log(`\nTo walk this again: node e2e/chaos.mjs --seed ${SEED} --steps ${STEPS}${WIDE ? ' --wide' : ''}`)

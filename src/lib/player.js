@@ -1,7 +1,8 @@
+import { waitWords } from './readiness-math.js'
 import { createStore } from './store.js'
 import { settings } from './settings.js'
 import { db } from './db.js'
-import { recordToBlob } from './tts.js'
+import { recordToBlob, voiceWait } from './tts.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { LANGS } from './lang.js'
@@ -292,7 +293,6 @@ async function gateCheck() {
   return r.ready
 }
 
-const fmtWait = s => (s < 90 ? 'under 2 minutes' : s < 3600 ? `about ${Math.round(s / 60)} minutes` : `about ${(s / 3600).toFixed(1)} hours`)
 
 onSegment(async (id, i) => {
   const p = player.get()
@@ -300,7 +300,6 @@ onSegment(async (id, i) => {
   if (p.waiting && p.i === i) return load(i, { autoplay: p.playing })
   if (pendingStart && await gateCheck()) {
     pendingStart = false
-    toast('The natural voice is ready')
     play()
   }
 })
@@ -346,7 +345,8 @@ export async function play() {
     player.set({ playing: false })
     kickVoice()
     const wait = player.get().gate
-    toast(`Audio is still being prepared on this device: ready in ${fmtWait(wait)}. It starts by itself.`,
+    const voice = voiceWait() // a voice still on its way is the wait: no "ready in 10 seconds" before a download
+    toast(voice ? `${voice.text}. Play starts by itself.` : `Making the audio: ready in ${waitWords(wait)}. Play starts by itself.`,
       typeof speechSynthesis !== 'undefined' ? { label: 'Use built-in voice now', run: () => settings.set({ voiceEngine: 'system' }) } : null)
     return
   }

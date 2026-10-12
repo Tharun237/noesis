@@ -1,12 +1,14 @@
 import { createStore as idbStore, get, set, del, delMany, keys, values, getMany } from 'idb-keyval'
+import { onShelf } from './shelf.js'
 
 // Three IndexedDB stores, split by access pattern:
 //   meta    — small per-document records, all loaded at boot for the library
 //   content — source file + listening text per document, loaded on open
 //   audio   — one compact Opus record per sentence, loaded on play
-const meta = idbStore('noesis-meta', 'meta')
-const content = idbStore('noesis-content', 'content')
-const audio = idbStore('noesis-audio', 'audio')
+// Each is on the shelf of whoever is using the device (shelf.js): signing out opens an empty library.
+const meta = idbStore(onShelf('noesis-meta'), 'meta')
+const content = idbStore(onShelf('noesis-content'), 'content')
+const audio = idbStore(onShelf('noesis-audio'), 'audio')
 
 export const db = {
   allMeta: () => values(meta),

@@ -55,7 +55,7 @@ export function AccountCard({ Card }) {
         <Button icon="refresh" disabled={st.status === 'syncing'} onClick={() => flush()}>Sync now</Button>
         <span style={{ flex: 1 }} />
         <span style={{ ...label, textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>This device: {deviceName()}</span>
-        <Button kind="danger" onClick={() => { if (confirm('Sign out on this device? Your library stays here; it just stops syncing.')) signOut().then(() => toast('Signed out')) }}>Sign out</Button>
+        <Button kind="danger" onClick={() => (confirm('Sign out? Noesis opens fresh and empty on this device. Your library stays in your Google Drive, and is back the moment you sign in again.') ? signOut().catch(e => toast(e.message)) : undefined)}>Sign out</Button>
       </div>
     </Card>
   )
