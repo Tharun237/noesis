@@ -119,7 +119,7 @@ export function LibraryGlance({ docs, wide }) {
   const heard = shelf.reduce((a, s) => a + s.seconds * s.share, 0)
   const all = shelf.reduce((a, s) => a + s.seconds, 0)
   const weekSeconds = week.reduce((a, d) => a + d.seconds, 0)
-  if (!(weekSeconds >= 60) && !(heard > 0)) return null // nothing listened to yet: nothing is claimed
+  if (!(weekSeconds >= 60) && !(heard >= 60)) return null // under a minute listened to: nothing worth saying yet ("0m")
   const tallest = Math.max(QUIET_DAY_S, ...week.map(d => d.seconds))
   const today = week[6].seconds
   return (
