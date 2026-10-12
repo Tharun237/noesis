@@ -410,15 +410,28 @@ async function prepare(id) {
     const before = blocks.map(b => b.text || '').join('\n')
     const already = detectLang(before) === d.target && (d.target !== 'en' || isEnglish(before))
     if (d.target && LANGS[d.target] && !already) {
-      if (!hasAiKey()) throw new Error('Translation needs a free AI key. Add one in Settings.')
+      // With the customer's own AI key, the AI translates (more natural). Without one the device does it,
+      // free: nobody is shut out of their own language for want of a key (Tharun, 2026-10-13).
+      const source = detectLang(before)
+      const onDevice = !hasAiKey()
+      if (onDevice) {
+        const { canTranslateHere } = await import('./localtranslate.js')
+        // Latin letters that are not English could be Dutch or Polish: a translator from English would make nonsense of them.
+        if ((source === 'en' && !isEnglish(before)) || !canTranslateHere(source, d.target)) throw new Error("Noesis can't translate this document on your device. With your own AI key it can: add one in Settings.")
+      }
       const languageName = LANGS[d.target].name
       const stage = `Translating into ${languageName}`
       patch(id, { status: 'narrating', stage, prep: 0 })
       const { translateBlocks } = await import('./translate.js')
       const stored = await db.getTranslation(id)
       const saved = stored instanceof Map ? stored : new Map()
+      const progress = stepped(id), loading = stepped(id) // each moves the bar a whole per cent at a time, not on every message
+      const fetching = `Downloading the ${languageName} translator`
       blocks = await translateBlocks(blocks, d.target, {
-        onProgress: stepped(id),
+        onDevice, source,
+        // the first time a language is used its translator comes down once: say that, in the app's words for a download
+        onLoad: (got, all) => { if (getDoc(id)?.stage !== fetching) patch(id, { stage: fetching }); loading(all ? got / all : 0) },
+        onProgress: f => { if (getDoc(id)?.stage !== stage) patch(id, { stage }); progress(f) },
         onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }),
         saved,
         onChunk: (index, strings) => { saved.set(index, strings); return db.putTranslation(id, saved) },

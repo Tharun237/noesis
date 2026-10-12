@@ -50,7 +50,20 @@
          way to tell one visitor from another, and nothing of what is in the library: a document is never part
          of an address here. "spa": false: moving about inside the app is not counted as opening a page, so a
          page view means someone really opened the site. What it does is written on /privacy; if this changes,
-         that page changes first. -->
-    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "42ae1636ca594588a3e90d9a07a7209d", "spa": false}'></script>
+         that page changes first.
+         It is asked for only on the real site (anywhere else Cloudflare refuses the count, with an error), and
+         only once the page has finished loading and the browser has a quiet moment: a count must never cost a
+         phone any of the time it needs to show the app. -->
+    <script>
+      if (location.hostname === 'www.noesisaudio.com') addEventListener('load', function () {
+        (window.requestIdleCallback || setTimeout)(function () {
+          var s = document.createElement('script')
+          s.type = 'module'
+          s.src = 'https://static.cloudflareinsights.com/beacon.min.js'
+          s.setAttribute('data-cf-beacon', '{"token": "42ae1636ca594588a3e90d9a07a7209d", "spa": false}')
+          document.head.appendChild(s)
+        }, { timeout: 4000 })
+      })
+    </script>
   </body>
 </html>

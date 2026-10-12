@@ -67,6 +67,13 @@ export function CreditsCard({ Card }) {
           Its source is at those links; the <Out href="/espeak/COPYING.txt">licence text</Out> comes with the app.
         </p>
 
+        <div style={heading}>Translation</div>
+        <p style={{ ...para, margin: '6px 0 0' }}>
+          Documents are translated on your device by the models of <Out href="https://github.com/mozilla/translations">Mozilla&apos;s Firefox Translations</Out>,
+          run by <Out href="https://github.com/browsermt/bergamot-translator">bergamot-translator</Out> (built on Marian). Both are free software under
+          the <Out href="https://www.mozilla.org/MPL/2.0/">Mozilla Public License 2.0</Out>; Noesis uses them unchanged, and their source is at those links.
+        </p>
+
         <div style={heading}>Software</div>
         <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>
           {SOFTWARE.map(([name, licence, url]) => (

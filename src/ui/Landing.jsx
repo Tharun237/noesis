@@ -190,7 +190,7 @@ export function Landing({ wide, hasLibrary }) {
           <div style={{ order: wide ? 2 : 0 }}>
             <div style={label}>04 · Your language</div>
             <h2 style={{ ...h2, marginTop: 16 }}>Hear it in<br />your language.</h2>
-            <p style={say}>A paper written in English, heard in Telugu. Noesis translates the whole document with the AI key you choose (Gemini, NVIDIA, or another service) and reads the translation to you.</p>
+            <p style={say}>A paper written in English, heard in Telugu. Noesis translates the whole document on your own device, free, and reads the translation to you. With your own AI key the translation is more natural still.</p>
             <p style={{ margin: '18px 0 0', maxWidth: 520, fontFamily: T.mono, fontSize: 11.5, lineHeight: 1.8, letterSpacing: '0.04em', color: T.faint }}>{Object.values(LANGS).map(l => l.name).join(' · ')}</p>
           </div>
           <Tongues wide={wide} />

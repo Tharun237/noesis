@@ -90,8 +90,10 @@ export function Listening({ wide }) {
         {summary.since ? `Counted on this device since ${fmtSince(summary.since)}.` : 'Nothing counted yet. Listening time is counted from now on, on this device.'}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <Button kind="primary" full onClick={() => submit('month')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15 }}>Hear your month</Button>
-        <Button full onClick={() => submit('year')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15 }}>Hear your year</Button>
+        {/* two buttons share the row: each takes half. (Each was "full" width, so the second sat wholly off the
+            side of the sheet on every phone: found by e2e/chaos.mjs, 2026-10-13.) */}
+        <Button kind="primary" onClick={() => submit('month')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15, flex: '1 1 0', minWidth: 0, padding: '0 10px' }}>Hear your month</Button>
+        <Button onClick={() => submit('year')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15, flex: '1 1 0', minWidth: 0, padding: '0 10px' }}>Hear your year</Button>
         {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
       </div>
       {!keyed && <Appear style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>A retrospective needs an AI key. Add one in Settings.</Appear>}

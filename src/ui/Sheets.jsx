@@ -5,6 +5,7 @@ import { useStore } from '../lib/store.js'
 import { ui, closeSheet, go, toast } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
+import { canTranslateHere } from '../lib/localtranslate.js'
 import { LANGS } from '../lib/lang.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn } from '../lib/library.js'
 import { synthesize, recordToBlob, loadEngine, engine, voiceWait } from '../lib/tts.js'
@@ -221,12 +222,12 @@ function AddForm({ wide }) {
           options={[{ value: 'full', label: 'Full text' }, { value: 'long', label: 'Long summary' }, { value: 'short', label: 'Short summary' }]} />
       </Field>
 
-      <Field title="Language" hint={keyed ? null : 'A summary or another language needs your own AI key. Add one in Settings.'}>
+      <Field title="Language" hint={keyed ? null : 'Another language is translated on your device, free. A summary needs your own AI key: add one in Settings.'}>
         <select value={target || 'orig'} onChange={e => setTarget(e.target.value === 'orig' ? undefined : e.target.value)}
           style={{ ...inputStyle, appearance: 'auto' }} aria-label="Language">
           <option value="orig" style={{ background: T.bg }}>Original</option>
           {Object.entries(LANGS).filter(([code]) => voicesFor(code).length > 0 || code === 'hi').map(([code, l]) => (
-            <option key={code} value={code} style={{ background: T.bg }} disabled={!keyed && code !== 'orig'}>{l.name}</option>
+            <option key={code} value={code} style={{ background: T.bg }}>{l.name}</option>
           ))}
         </select>
       </Field>
@@ -307,8 +308,12 @@ function LanguagePicker() {
   const keyed = hasAiKey()
   const [busy, setBusy] = useState(null)
   if (!d) return null
+  // With the customer's own AI key the AI translates. Without one the device does, free, for every pair of
+  // languages it has a translator for (lib/localtranslate.js). A language is offered when one of the two can.
+  const from = d.foreign ? null : d.lang || 'en'
+  const can = code => code === d.lang || keyed || (!!from && canTranslateHere(from, code))
   const choose = async lang => {
-    if (busy || !keyed) return
+    if (busy || !can(lang)) return
     setBusy(lang)
     try {
       const nid = await listenIn(d.id, lang)
@@ -317,24 +322,33 @@ function LanguagePicker() {
       setBusy(null)
     }
   }
+  const langs = Object.entries(LANGS).filter(([code]) => voicesFor(code).length > 0 || code === 'hi')
   return (
     <div style={{ padding: '20px 12px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px 6px' }}>
         <div style={{ fontSize: 20, fontWeight: 700, flex: 1, color: T.text }}>Listen in another language</div>
         <IconButton icon="close" label="Close" onClick={closeSheet} />
       </div>
-      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Uses your AI key. A long book takes several minutes the first time.</div>
+      <div style={{ padding: '0 12px 14px', fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
+        {keyed
+          ? 'Translated with your AI key. A long book takes several minutes the first time.'
+          : 'Translated on your device, free. The first time you choose a language its translator downloads once (20 to 55 MB); after that it works offline.'}
+      </div>
       <div style={{ display: 'grid', gap: 2 }}>
-        {Object.entries(LANGS).filter(([code]) => voicesFor(code).length > 0 || code === 'hi').map(([code, l]) => (
-          <button key={code} type="button" disabled={!keyed || !!busy} onClick={() => choose(code)}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', border: 'none', borderRadius: T.r.sm, background: code === d.lang ? T.surfaceHi : 'transparent', color: T.text, opacity: !keyed ? 0.4 : 1, cursor: !keyed ? 'not-allowed' : 'pointer', fontFamily: T.font, fontSize: 15, textAlign: 'left' }}>
+        {langs.map(([code, l]) => (
+          <button key={code} type="button" disabled={!can(code) || !!busy} onClick={() => choose(code)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', border: 'none', borderRadius: T.r.sm, background: code === d.lang ? T.surfaceHi : 'transparent', color: T.text, opacity: !can(code) ? 0.4 : 1, cursor: !can(code) ? 'not-allowed' : 'pointer', textAlign: 'left', fontFamily: T.font, fontSize: 15 }}>
             <span style={{ width: 18, color: T.accent }}>{code === d.lang && <Icon name="check" size={17} />}</span>
             <span style={{ flex: 1, fontWeight: 600 }}>{l.name}</span>
             {busy === code && <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>Opening…</span>}
           </button>
         ))}
       </div>
-      {!keyed && <div style={{ padding: '12px 12px 0', fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>Translation needs a free AI key. Add one in Settings.</div>}
+      <div style={{ padding: '12px 12px 0', fontSize: 12.5, color: T.sub, lineHeight: 1.5 }}>
+        {keyed ? null : langs.some(([code]) => !can(code))
+          ? "Noesis can't tell what language this document is in, so it can't translate it on your device. With your own AI key it can: add one in Settings."
+          : 'With your own AI key the translation is more natural. Add one in Settings.'}
+      </div>
     </div>
   )
 }

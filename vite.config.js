@@ -79,7 +79,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,mjs}'],
-        globIgnores: ['pdfjs/**', 'dict/**', 'ort/**', 'espeak/**'],
+        globIgnores: ['pdfjs/**', 'dict/**', 'ort/**', 'espeak/**', 'translate/**'],
         importScripts: ['notify-sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//, /^\/privacy/, /^\/listen-to-pdf/, /^\/alternatives/, /^\/robots\.txt$/, /^\/sitemap\.xml$/], // the privacy page is a file of its own, not a screen of the app

@@ -688,7 +688,10 @@ function Preparing({ d, doc, pos }) {
   if (ready?.ready) return null
   // Not playable yet, and the voice itself is not up: that is the wait, before any audio can be made. (It
   // said "ready in about 10 seconds" for seven seconds before a 60 MB download had even begun.)
-  const voice = voicing && !failed ? voiceWait(eng) : null
+  // Only this document's own voice is its wait. While the engine fetches or starts ANOTHER document's voice
+  // this one is behind it in the line: saying "Downloading the Alba voice" on a Telugu document was wrong.
+  const voice = voicing && !failed && eng.voice === d.voice ? voiceWait(eng) : null
+  const behind = voicing && !failed && eng.voice !== d.voice && eng.status === 'loading'
   if (ready?.wait != null) longest.current = Math.max(longest.current, ready.wait)
   const slow = speed > 0 && speed < 1 && hasSystemVoice()
   const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : T.lime} />{text}</span>
@@ -696,6 +699,7 @@ function Preparing({ d, doc, pos }) {
   const [head, bar, next] = d.status === 'error' ? [<StatusLine d={d} />, null, null]
     : failed ? [said(voiceOff ? "You're offline" : `The ${voiceName(engVoice)} voice couldn't start`), null, voiceOff ? `The ${voiceName(engVoice)} voice downloads when you are back online.` : null]
     : voice ? [said(voice.progress != null ? `${voice.text} · ${Math.floor(voice.progress * 100)}%` : voice.text), voice.progress, [voice.detail, gated && 'Play starts by itself.'].filter(Boolean).join(' ') || null]
+    : behind ? [said('Waiting for another document'), undefined, gated ? 'Its audio is being made first. This one is next, and starts by itself.' : 'Its audio is being made first. Press Play and this one goes first.']
     : !voice && ready ? [
         said(ready.wait == null ? 'Making the audio' : `Making the audio · ready in ${waitWords(ready.wait)}`),
         ready.wait == null || !longest.current ? undefined : 1 - ready.wait / longest.current,

@@ -1,6 +1,7 @@
-// Translation into another listening language (M8). Pure helpers run in Node tests;
-// translateBlocks sends each chunk through the AI door (src/lib/ai.js), so it works
-// with either provider (Gemini or NVIDIA).
+// Translation into another listening language (M8). Pure helpers run in Node tests.
+// translateBlocks has two doors. With the customer's own AI key, each chunk goes through the AI door
+// (src/lib/ai.js; Gemini or NVIDIA): the more natural translation, written for the ear. Without a key it
+// is done on the device, free (src/lib/localtranslate.js): plainer, and nobody is left out.
 import { LANGS } from './lang.js'
 import { aiText } from './ai.js'
 
@@ -93,7 +94,36 @@ export function dropForeign(text, lang) {
 // reply fails parseReply is retried once as two halves; a second failure throws.
 // onProgress(done / total) counts characters translated. saved (Map chunkIndex →
 // strings) skips finished chunks; onChunk(index, strings) reports each chunk.
+const DEVICE_CHUNK = 1500 // characters: small, so progress moves and a stopped run has little to redo
+
+// The same contract as below, done by the device's own translator. One text in, one text out, so there is
+// no reply to parse and nothing to retry; letters of an alphabet the voice cannot say are dropped as there.
+async function translateOnDevice(blocks, target, { source, onProgress, onLoad, saved, onChunk }) {
+  const { translateTexts, doneTranslating } = await import('./localtranslate.js')
+  const chunks = chunkBlocks(blocks, DEVICE_CHUNK)
+  if (!chunks.length) return blocks.map(b => ({ ...b }))
+  const total = chunks.flat().reduce((a, i) => a + (blocks[i].text || '').length, 0)
+  const byBlock = new Map()
+  let done = 0
+  try {
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const idx = chunks[ci]
+      const prev = saved?.get?.(ci)
+      const kept = Array.isArray(prev) && prev.length === idx.length && prev.every(x => typeof x === 'string')
+      const strings = kept ? prev : (await translateTexts(idx.map(i => blocks[i].text), source, target, { onLoad })).map(t => dropForeign(t, target))
+      if (!kept) await onChunk?.(ci, strings)
+      idx.forEach((bi, k) => byBlock.set(bi, strings[k]))
+      done += idx.reduce((a, i) => a + (blocks[i].text || '').length, 0)
+      onProgress?.(total ? done / total : 1)
+    }
+  } finally {
+    doneTranslating()
+  }
+  return blocks.map((b, i) => (byBlock.has(i) ? { ...b, text: byBlock.get(i) } : { ...b }))
+}
+
 export async function translateBlocks(blocks, target, opts = {}) {
+  if (opts.onDevice) return translateOnDevice(blocks, target, opts)
   const { onProgress, signal, onRetry, saved, onChunk } = opts
   const languageName = LANGS[target]?.name || target
   const chunks = chunkBlocks(blocks)

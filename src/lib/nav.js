@@ -102,7 +102,11 @@ function backOnce() {
   setTimeout(() => { leaving = false }, BACK_GIVE_UP_MS)
   history.back()
 }
-addEventListener('popstate', () => { leaving = false })
+// One tap goes back one step. After the page has changed, taps that land within a double-tap's time are
+// still part of the same press: with a Back button in the same corner of the page underneath (a document
+// opened from another document), hammering went back two steps (e2e/chaos.mjs, 2026-10-13).
+const SAME_PRESS_MS = 350
+addEventListener('popstate', () => { setTimeout(() => { leaving = false }, SAME_PRESS_MS) })
 
 // How many in-app pages sit behind this one. Back must never depend on browser history the app didn't
 // create (opened straight into a book, restored after an update, arrived from a share or a link).

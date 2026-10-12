@@ -19,6 +19,10 @@ public/ort
 tools/listen/out/
 tools/listen/.cache/
 public/espeak
+# the translation engine's three files are copied at install; Noesis's own worker file beside them is kept
+public/translate/translator-worker.js
+public/translate/bergamot-translator-worker.js
+public/translate/bergamot-translator-worker.wasm
 .chaos-profile
 .feel-profile
 
@@ -27,3 +31,8 @@ film/*.mp4
 film/*.wav
 film/stills.png
 film/sound-picture.png
+
+# Noesis's own copy of the translation models: built by tools/translators.mjs, deployed as its own site
+translate-site/
+.translators-cache/
+.translate-profile/
