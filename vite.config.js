@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { handleFetch } from './functions/api/fetch.js'
-import { handleSync, handleBlob } from './server/sync.js'
+import { handleDevDrive } from './server/devdrive.js'
 import { handleAuth } from './server/auth.js'
 import pkg from './package.json' with { type: 'json' }
 
@@ -14,8 +14,8 @@ const isolation = {
   'Cross-Origin-Embedder-Policy': 'credentialless',
 }
 
-// Dev only: serve the exact handlers Cloudflare Pages runs in production. D1 comes from
-// wrangler's local emulation (getPlatformProxy reads wrangler.toml), so sync works offline in dev.
+// Dev only: serve the exact handlers Cloudflare Pages runs in production (their settings come from
+// .dev.vars through wrangler), plus a stand-in for Google Drive so sync can be run and tested without Google.
 const apiInDev = {
   name: 'noesis-api',
   async configureServer(server) {
@@ -32,8 +32,7 @@ const apiInDev = {
     })
     route('/api/fetch', req => handleFetch(req))
     route('/api/auth', handleAuth)
-    route('/api/sync/blob', handleBlob) // before /api/sync: connect matches paths by prefix
-    route('/api/sync', handleSync)
+    route('/api/devdrive', handleDevDrive)
   },
 }
 

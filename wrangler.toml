@@ -1,11 +1,5 @@
-# Cloudflare Pages project: static PWA (dist/) + Functions (functions/) + D1 for encrypted sync.
+# Cloudflare Pages project: static PWA (dist/) + Functions (functions/). No database: a signed-in customer's
+# library is kept in their own Google Drive (server/auth.js, src/lib/drive.js).
 name = "noesis"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-09-01"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "noesis-sync"
-database_id = "4d6dad1c-e77b-4169-9880-ebd4196aa2a0"
-preview_database_id = "DB"
-migrations_dir = "migrations"

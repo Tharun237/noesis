@@ -1,10 +1,21 @@
 // Cross-device sync for signed-in users (Sign in with Google), last-writer-wins per record.
 //
-// Records: meta:<doc> · pos:<doc> · marks:<doc> · cols · doc:<doc>:<ver>:<part> (book text, uploaded once)
-// Audio is never synced: each device voices the text itself, so sync stays small and free.
+// The library is kept in the customer's OWN Google Drive, in the hidden folder Drive gives each app
+// (./drive.js). Noesis stores nothing and pays for nothing as customers grow: their storage, their account.
+//
+// Records, one small file each, named by its key:
+//   meta:<doc> · pos:<doc> · marks:<doc> · cols · doc:<doc>:<ver>:<part> (book text, gzipped, uploaded once)
+// Audio is never synced: each device voices the text itself, so sync stays small.
 // Without an account Noesis works fully offline/local; signing in only adds sync.
+//
+// How two devices agree: every record carries the time it was last changed ON THE DEVICE THAT CHANGED IT,
+// and the newer one wins. A round is "see what changed in the folder, take what is newer than ours, then
+// send what of ours is newer". If two devices write the same record in the same moment, whichever write
+// landed second is what the folder holds; the device whose copy is newer notices on its next round that the
+// folder is behind and sends its copy again. So they end on the newest, whatever the order.
 import { createStore as idbStore, get, set, del } from 'idb-keyval'
 import { createStore } from './store.js'
+import * as drive from './drive.js'
 
 const store = idbStore('noesis-sync', 'sync')
 export const account = createStore({ user: null, checked: false, google: false, dev: false, reachable: true })
@@ -15,20 +26,22 @@ const td = new TextDecoder()
 const PART = 1_500_000
 const POLL_MS = 90_000
 const POS_THROTTLE_MS = 60_000 // while playing; pausing / leaving the app pushes immediately
+const QUICK_MAX = 60_000 // bytes the browser will finish sending by itself after the page is left
+const TEXT = 'doc:' // the prefix of a book-text part: fetched when a document is opened, never on a round
 
 let hooks = null // { snapshot(k), apply(k, value), content(id), allKeys() } — provided by library.js
 let uid = null
-let cursor = 0
+let cursor = null // where "what changed in the folder since" starts from; null = this device has not listed it yet
 let clock = {} // k → newest timestamp this device has seen or written
 let dirty = {} // k → timestamp of a local change not yet pushed
-let uploaded = {} // `${doc}:${ver}` → number of text parts already on the server
+let ids = {} // k → { id, at }: the Drive file that holds each record, and how new it is
 let flushTimer = null
 let flushing = null
 let lastPosPush = 0
 let urgent = false // a pause arrived while a flush was in flight: push again right after
 let early = {} // edits made before the account check finished (e.g. at boot); merged in when sync starts
 
-const persist = () => uid && set('state', { uid, cursor, clock, dirty, uploaded }, store)
+const persist = () => uid && set('state', { uid, cursor, clock, dirty, ids }, store)
 const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer())
 
 export const configureSync = h => { hooks = h }
@@ -55,14 +68,64 @@ function schedule(ms) {
   flushTimer = setTimeout(flush, ms)
 }
 
-async function api(path, init) {
-  const res = await fetch(path, init)
-  if (res.status === 401) { signedOutHere(); throw new Error('Signed out') }
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Sync failed (${res.status})`)
-  return res
+// See what changed in the folder and take what is newer than ours.
+async function pull() {
+  let changed
+  if (cursor) ({ changes: changed, cursor } = await drive.changesSince(cursor))
+  else {
+    const from = await drive.startToken() // before the list, so nothing written during it is missed
+    changed = (await drive.listAll()).map(file => ({ fileId: file.id, file }))
+    cursor = from
+  }
+  for (const c of changed) {
+    if (c.removed || !c.file) {
+      for (const [k, f] of Object.entries(ids)) if (f.id === c.fileId) delete ids[k]
+      continue
+    }
+    const k = c.file.name
+    const seen = { id: c.file.id, at: +c.file.appProperties?.at || 0 }
+    const had = ids[k]
+    if (had && had.id !== seen.id) {
+      // Two devices made the same record in the same moment, so the folder has it twice. The newer stays.
+      const newer = seen.at > had.at || (seen.at === had.at && seen.id < had.id)
+      drive.remove((newer ? had : seen).id).catch(() => {})
+      if (!newer) continue
+    }
+    ids[k] = seen
+    if (k.startsWith(TEXT)) continue
+    if (seen.at > (clock[k] || 0)) await receive(k, seen.at, await (await drive.read(seen.id)).json())
+    else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
+  }
 }
 
-// Push local changes and pull remote ones in one round trip.
+async function receive(k, at, v) {
+  if (v == null || at <= (clock[k] || 0)) return
+  clock[k] = at
+  if (dirty[k] && dirty[k] < at) delete dirty[k] // a newer edit from another device beats our queued one
+  await hooks.apply(k, v)
+}
+
+// Send what of ours is newer than what the folder holds.
+async function push(quick) {
+  for (const [k, at] of Object.entries(dirty)) {
+    if (!uid) return
+    if (!(ids[k]?.at >= at)) {
+      const v = await hooks.snapshot(k)
+      if (v !== undefined) {
+        if (k.startsWith('meta:') && v.contentVer && !v.deleted) v.parts = await uploadContent(k.slice(5), v.contentVer)
+        const body = JSON.stringify(v)
+        ids[k] = { id: await drive.write(k, at, body, ids[k]?.id, quick && body.length < QUICK_MAX), at }
+        if (k.startsWith('meta:') && v.deleted) await dropText(k.slice(5)) // a deleted document leaves nothing behind in their Drive
+        if (k.startsWith('pos:')) lastPosPush = Date.now()
+      }
+    }
+    if (dirty[k] === at) delete dirty[k]
+    await persist()
+  }
+}
+
+// One round. Leaving the app (the page is hidden) sends first and does not wait to look: it may be frozen
+// at any moment, and what matters then is that where the customer stopped gets out.
 export async function flush() {
   if (!uid) return
   if (flushing) return flushing
@@ -70,70 +133,60 @@ export async function flush() {
     urgent = false
     syncState.set({ status: 'syncing' })
     try {
-      for (let more = true; more;) {
-        const batch = Object.entries(dirty).slice(0, 150)
-        const push = []
-        for (const [k, at] of batch) {
-          const v = await hooks.snapshot(k)
-          if (v === undefined) continue
-          if (k.startsWith('meta:') && v.contentVer && !v.deleted) v.parts = await uploadContent(k.slice(5), v.contentVer)
-          push.push({ k, at, v })
-        }
-        const body = JSON.stringify({ cursor, push })
-        const out = await (await api('/api/sync', {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body,
-          keepalive: document.visibilityState === 'hidden' && body.length < 60_000, // survives app switch / tab close
-        })).json()
-        for (const [k, at] of batch) if (dirty[k] === at) delete dirty[k]
-        if (push.some(r => r.k.startsWith('pos:'))) lastPosPush = Date.now()
-        for (const c of out.changes) await receive(c)
-        cursor = out.cursor
-        await persist()
-        more = out.more || (batch.length === 150 && Object.keys(dirty).length > 0)
-      }
+      const leaving = document.visibilityState === 'hidden'
+      if (!leaving) await pull()
+      await push(leaving)
+      await persist()
       syncState.set({ status: 'idle', last: Date.now(), error: null })
     } catch (e) {
+      if (e.signedOut) return signedOutHere()
       if (!uid) return
       syncState.set({ status: navigator.onLine ? 'error' : 'offline', error: e.message })
       schedule(30_000) // queued changes are persisted; they land when the network does
     } finally {
       flushing = null
-      // Changes made while this round trip was in flight would otherwise wait for the next poll.
+      // Changes made while this round was in flight would otherwise wait for the next poll.
       if (uid && (urgent || Object.keys(dirty).some(k => !k.startsWith('pos:')))) schedule(urgent ? 50 : 1500)
     }
   })()
   return flushing
 }
 
-async function receive({ k, at, v }) {
-  if (v == null || at <= (clock[k] || 0)) return // text parts are fetched on demand; older than ours → ignore
-  clock[k] = at
-  if (dirty[k] && dirty[k] < at) delete dirty[k] // a newer edit from another device beats our queued one
-  await hooks.apply(k, v)
-}
-
-// Book text: gzipped once, split into ≤1.5 MB parts, uploaded before the meta record that points to it.
+// Book text: gzipped once, split into ≤1.5 MB parts, written before the meta record that points to it.
+const partName = (id, ver, n) => `${TEXT}${id}:${ver}:${n}`
 async function uploadContent(id, ver) {
-  const tag = `${id}:${ver}`
-  if (uploaded[tag]) return uploaded[tag]
   const doc = await hooks.content(id)
   if (!doc) return 0
   const z = await pipe(te.encode(JSON.stringify(doc)), new CompressionStream('gzip'))
   const parts = Math.max(1, Math.ceil(z.length / PART))
   for (let n = 0; n < parts; n++) {
-    await api(`/api/sync/blob?k=${encodeURIComponent(`doc:${id}:${ver}:${n}`)}&at=${ver}`, { method: 'PUT', body: z.subarray(n * PART, (n + 1) * PART) })
+    const k = partName(id, ver, n)
+    if (ids[k]) continue // already in the folder (from this device or another)
+    ids[k] = { id: await drive.write(k, ver, z.subarray(n * PART, (n + 1) * PART)), at: ver }
+    await persist()
   }
-  uploaded[tag] = parts
-  await persist()
+  await dropText(id, ver) // an earlier version of this document's text is no longer pointed to by anything
   return parts
 }
 
-export async function downloadContent(id, ver, parts) {
-  const chunks = []
-  for (let n = 0; n < parts; n++) {
-    chunks.push(await (await api(`/api/sync/blob?k=${encodeURIComponent(`doc:${id}:${ver}:${n}`)}`)).arrayBuffer())
+// Take a document's text out of the folder: all of it, or all but one version.
+async function dropText(id, keep) {
+  const mine = `${TEXT}${id}:`
+  for (const k of Object.keys(ids)) {
+    if (!k.startsWith(mine) || (keep != null && k.startsWith(`${mine}${keep}:`))) continue
+    await drive.remove(ids[k].id).catch(() => {}) // gone already is as good as removed
+    delete ids[k]
   }
-  uploaded[`${id}:${ver}`] = parts // already on the server; never re-upload it from this device
+  await persist()
+}
+
+export async function downloadContent(id, ver, parts) {
+  const names = Array.from({ length: parts }, (_, n) => partName(id, ver, n))
+  if (names.some(k => !ids[k])) await pull() // written by another device since this one last looked
+  const missing = names.find(k => !ids[k])
+  if (missing) throw new Error('The text of this document has not reached your Google Drive yet. Open it on the device it was added on.')
+  const chunks = []
+  for (const k of names) chunks.push(await (await drive.read(ids[k].id)).arrayBuffer())
   return JSON.parse(td.decode(await pipe(new Uint8Array(await new Blob(chunks).arrayBuffer()), new DecompressionStream('gzip'))))
 }
 
@@ -154,10 +207,10 @@ function wire() {
 
 async function resetFor(user) {
   uid = user
-  cursor = 0
+  cursor = null
   clock = {}
   dirty = {}
-  uploaded = {}
+  ids = {}
   const now = Date.now()
   for (const k of await hooks.allKeys()) { clock[k] = now; dirty[k] = now } // first sync here = union of libraries
   await persist()
@@ -169,10 +222,11 @@ export async function startSync() {
     fetch('/api/auth/me').then(r => (r.ok ? r.json() : { user: null })).catch(() => null),
   ])
   account.set({ google: !!config.google, dev: !!config.dev })
+  const saved = await get('state', store)
+  const mine = id => saved?.uid === id && saved.ids // state from before the library moved to Drive has no ids: start again
   if (me === null) { // offline: keep syncing with the account we last knew about
-    const saved = await get('state', store)
-    if (saved?.uid) {
-      ({ uid, cursor, clock, dirty, uploaded } = saved)
+    if (saved?.uid && saved.ids) {
+      ({ uid, cursor, clock, dirty, ids } = saved)
       for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
       early = {}
     }
@@ -182,8 +236,7 @@ export async function startSync() {
   }
   account.set({ user: me.user, checked: true, reachable: true })
   if (!me.user) return
-  const saved = await get('state', store)
-  if (saved?.uid === me.user.id) ({ uid, cursor, clock, dirty, uploaded } = { uploaded: {}, ...saved })
+  if (mine(me.user.id)) ({ uid, cursor, clock, dirty, ids } = saved)
   else await resetFor(me.user.id)
   for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
   early = {}
@@ -202,6 +255,7 @@ export async function devSignIn(name) {
 function signedOutHere() {
   uid = null
   clearTimeout(flushTimer)
+  drive.forgetPass()
   account.set({ user: null })
   syncState.set({ status: 'idle', last: 0, error: null })
 }

@@ -54,6 +54,18 @@ set on the Pages project; `GOOGLE_CLIENT_SECRET` is Tharun's to paste (`npx wran
 GOOGLE_CLIENT_SECRET --project-name noesis`), then one deploy makes it live. Still to build: deleting an
 account from inside the app (the privacy page promises deletion on request, by email for now).
 
+Sync moved to the customer's own Google Drive (2026-10-12). Tharun's rule: nothing that costs more as
+customers grow; use their device, their account, their service, the way the voices do. As first built, sync
+kept every signed-in library's text in a Cloudflare database of ours (300 MB an account, 5 GB in all on the
+free plan). Now each record is a small file in the hidden folder Drive gives the app (`drive.appdata`,
+Google's non-sensitive class), read and written straight from the browser (`src/lib/drive.js`,
+`src/lib/sync.js`); the server keeps no accounts, sessions or libraries and only finishes sign-in and
+renews the hourly Drive pass (`server/auth.js`: who is signed in, and Google's renewal token, live in a
+cookie in the customer's browser, sealed with a key only the server has). The database tables, the sync
+endpoints and their migrations are gone. `e2e/sync.mjs` runs two devices against a local stand-in for Drive
+(`server/devdrive.js`). Not yet proven against Google itself with a real account: that needs Tharun to sign
+in once. Known limit: a device whose clock is far in the future wins every disagreement until it is put right.
+
 ## How the work is done
 
 | Role | Who | Does |

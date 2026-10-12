@@ -221,7 +221,7 @@ export function Landing({ wide, hasLibrary }) {
             </Button>
           </div>
           <div style={{ marginTop: 56, fontFamily: T.mono, fontSize: 11.5, lineHeight: 1.7, color: T.faint }}>
-            Your documents stay on this device, unless you sign in to have them on your other devices too.<br />The audio never leaves it. <a href="/privacy" style={{ color: T.sub, textUnderlineOffset: 3 }}>Privacy</a> · Noesis {__APP_VERSION__}
+            Your documents stay on this device. Sign in, and a copy is kept in your own Google Drive for your other devices.<br />The audio never leaves it. <a href="/privacy" style={{ color: T.sub, textUnderlineOffset: 3 }}>Privacy</a> · Noesis {__APP_VERSION__}
           </div>
         </section>
       </main>

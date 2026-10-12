@@ -32,7 +32,7 @@ export function AccountCard({ Card }) {
           </div>
         )}
         <div style={{ fontSize: 12, color: T.faint, lineHeight: 1.5 }}>
-          Noesis only receives your name, email and profile picture from Google. Audio is never uploaded; each device voices the text itself.
+          Your library is kept in your own Google Drive, in a folder only Noesis can open; Noesis keeps no copy. From Google it receives your name, email and picture. Audio is never uploaded: each device voices the text itself.
         </div>
       </Card>
     )
@@ -48,7 +48,7 @@ export function AccountCard({ Card }) {
         </div>
       </div>
       <div style={{ fontSize: 13.5, color: T.sub, lineHeight: 1.55 }}>
-        Sign in with the same Google account on your other devices: your library and listening position follow you automatically.
+        Sign in with the same Google account on your other devices: your library and listening position follow you automatically. They are kept in your own Google Drive.
       </div>
       {st.status === 'error' && <div style={{ fontSize: 12.5, color: T.danger }}>{st.error}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

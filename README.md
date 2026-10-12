@@ -67,7 +67,6 @@ src/lib/player.js         <audio> + Ogg muxer (src/lib/audio-format.js) · Media
 
 ```bash
 npm install
-npx wrangler d1 migrations apply noesis-sync --local   # local database for accounts & sync
 echo DEV_LOGIN=1 > .dev.vars                            # optional: test sign-in on localhost without Google
 npm run dev        # http://localhost:5180
 npm test           # unit tests (text cleanup, segmentation, Ogg muxer, OCR repair)
@@ -81,13 +80,11 @@ The first time a voice is used, the browser downloads it once (about 63 MB per v
 Cloudflare Pages serves `dist/` plus the `functions/` directory:
 
 ```bash
-npx wrangler d1 create noesis-sync                     # put the id in wrangler.toml
-npx wrangler d1 migrations apply noesis-sync --remote
 npm run build
 npx wrangler pages deploy dist --project-name noesis
 ```
 
-**Sign in with Google:** create an OAuth client (type *Web application*) in Google Cloud Console, add the redirect URI `https://<your-domain>/api/auth/callback`, then set the two values on the Pages project:
+**Sign in with Google:** in a Google Cloud project, enable the Google Drive API, create an OAuth client (type *Web application*), add the redirect URI `https://<your-domain>/api/auth/callback`, then set the two values on the Pages project. There is no database to create: a signed-in customer's library is kept in their own Google Drive (the app's hidden folder, scope `drive.appdata`), and the server only renews their hourly Drive pass.
 
 ```bash
 npx wrangler pages secret put GOOGLE_CLIENT_ID --project-name noesis
@@ -96,14 +93,14 @@ npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name noesis
 
 `public/_headers` sets cross-origin isolation (`COOP: same-origin`, `COEP: credentialless`), which lets voice generation use multiple CPU threads.
 
-**Free-tier note:** Pages Functions share the Cloudflare account's 100k requests/day. Sync is frugal (it pushes on pause and when you leave the app, pulls when you return, and polls every 90 s while open), but a popular deployment should live on its own Cloudflare account.
+**What it costs to run:** nothing that grows with customers' libraries. Sync talks to each customer's own Google Drive straight from their browser; the only request to this server is a renewal of their Drive pass, about once an hour while the app is open (Pages Functions allow 100k requests a day on the free plan). Adding a web link and the NVIDIA relay also pass through Functions.
 
 ## Honest limits
 
 - **Speed depends on your device.** Piper runs on one CPU core at about 3.6× real time on a desktop (measured); phones are slower but expected to stay above real time. Noesis always voices *ahead of where you are listening*, and audio is kept, so it is only ever generated once. (Kokoro-82M was tried first: more expressive, but 0.15× real time on a real Android phone, and its GPU build crashed the phone.)
 - **Scanned PDFs:** on-device repair fixes common OCR confusions conservatively (tuned on real books to avoid false fixes), but it can't recover badly garbled words. AI narration (your Gemini key) reads the page images and is the high-accuracy path. Image-only scans with no text layer need AI mode.
 - **Rule-based cleanup is heuristic.** Unusual layouts can leave a stray line. AI narration is the high-accuracy path.
-- **Sync isn't end-to-end encrypted.** Your library's text and positions are stored under your Google account ID, protected by sign-in, like most reading apps. Audio never leaves your device.
+- **Sync lives in your own Google Drive.** A signed-in library's text, positions, bookmarks and collections are kept in a hidden folder of your Drive that only Noesis can open; Noesis keeps no copy. Audio never leaves your device.
 - **English voices only** for now. Piper has 177 voices in 58 languages; more languages (and translation) are the planned next step.
 
 ## License

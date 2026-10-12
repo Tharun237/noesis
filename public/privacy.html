@@ -43,16 +43,16 @@
 
       <h2>If you sign in with Google</h2>
       <p>Signing in is optional. It exists for one purpose: to keep the same library on your phone and your computer.</p>
-      <p>From Google, Noesis receives your <strong>name, email address, profile picture and Google account number</strong>, and nothing else. It uses them to recognise you and to show which account is signed in.</p>
-      <p>To keep your devices the same, Noesis then stores on its server (a Cloudflare database):</p>
+      <p>Your library is then kept in <strong>your own Google Drive</strong>, in a hidden folder that Google gives to each app. You do not see it among your files, no other app can open it, and Noesis can open nothing else in your Drive. It uses your own Drive storage. What is kept there:</p>
       <ul>
         <li>the text of your documents and their details (title, author, kind, length);</li>
         <li>your place in each document;</li>
         <li>your bookmarks and notes;</li>
         <li>your collections.</li>
       </ul>
-      <p><strong>Audio is never uploaded</strong>, and neither are your original files: each device makes its own audio from the text. This stored copy is protected by your sign-in. It is not end-to-end encrypted, which means it is kept in a form the service could read; it is not looked at, used for anything else, or given to anyone.</p>
-      <p>You can sign out at any time in Settings. To have your account and everything stored under it deleted, write to the address below from the email you signed in with; it will be deleted within 30 days.</p>
+      <p><strong>Noesis keeps no copy of any of it.</strong> It has no database of accounts or libraries. Audio is never uploaded, and neither are your original files: each device makes its own audio from the text.</p>
+      <p>From Google, Noesis receives your <strong>name, email address, profile picture and Google account number</strong>, used only to show which account is signed in, and a renewal token, which lets the app reach that one folder without asking you to sign in every hour. These are not stored on Noesis's server either: they are kept in a cookie in your own browser, locked with a key only the server has. To renew its hourly pass for your Drive, your browser sends that cookie to Noesis's server, which asks Google and hands the pass back; nothing is written down.</p>
+      <p>You can sign out at any time in Settings. To remove what is kept, and Noesis's access with it, open Google Drive's settings on the web, choose Manage apps, and under Noesis choose "Delete hidden app data" and then "Disconnect from Drive". Nothing then remains anywhere but on your own devices.</p>
 
       <h2>If you turn on AI features</h2>
       <p>They are off until you add a key of your own, and the key is kept on your device.</p>
@@ -64,10 +64,10 @@
       <p>What those services do with what they receive is set by your agreement with them, not by Noesis.</p>
 
       <h2>Cookies</h2>
-      <p>One, and only if you sign in: it keeps you signed in. There are no tracking cookies.</p>
+      <p>One, and only if you sign in: the locked cookie described above, which keeps you signed in. There are no tracking cookies.</p>
 
       <h2>Changes and questions</h2>
-      <p>If what Noesis does changes, this page changes first, and its date with it. Questions, or a request to delete your account: <a href="mailto:tharun2372002@gmail.com">tharun2372002@gmail.com</a>.</p>
+      <p>If what Noesis does changes, this page changes first, and its date with it. Questions: <a href="mailto:tharun2372002@gmail.com">tharun2372002@gmail.com</a>.</p>
     </main>
   </body>
 </html>
