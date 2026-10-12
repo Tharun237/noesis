@@ -38,6 +38,13 @@ being read; a part fetched ahead of time is drawn at once (`src/ui/later.jsx`); 
 its landing place moves. The page beside the text is off unless asked for and offered only when it can be
 exact. Rules in `.claude/skills/motion` ("A transition is judged by its film").
 
+The landing page (2026-10-12, asked for with a pointer to github.com/pulkitxm/claude-directory): that
+repository is a gallery of example pages (MIT, about 13 GB), not a tool, so nothing was installed; its closest
+examples were read and two of their ideas rebuilt in this app's own stack (a paragraph lit word by word by
+scrolling, serif-italic accent words). `src/ui/Landing.jsx` is what an empty library shows, without the
+app's bars. The domain noesisaudio.com is bought and not connected: it goes live when Tharun says the
+pages.dev site is right.
+
 ## How the work is done
 
 | Role | Who | Does |

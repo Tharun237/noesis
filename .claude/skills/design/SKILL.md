@@ -85,3 +85,10 @@ phone, is not finished.
   whose pages are linked to its sentences. Beside an unlinked document it could only guess the page: Tharun
   asked what "that raw PDF beside the text" was for, and for his book it was for nothing.
 - Transitions are part of the design: see "A transition is judged by its film" in `.claude/skills/motion`.
+- An empty library is the landing page (`src/ui/Landing.jsx`), with none of the app's bars around it: no
+  sidebar, no tab bar, only the wordmark, Settings and Add. It is one idea to a screen: what it is and the
+  thing itself (a document being read, the lime word moving), what it does (a paragraph lit word by word as
+  the page is scrolled), three chapters (made on your device; three ways to follow, with the real switch
+  working; ask the document), and the way in once more. Every claim on it must be true of the app as it is.
+  Its motion is the browser's own (one keyframe rule for the spoken word, scroll-driven animations for the
+  rest): no script runs while it scrolls. `e2e/tour.mjs` photographs it first, from a thrown-away profile.

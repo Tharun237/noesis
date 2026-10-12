@@ -6,10 +6,12 @@
 //   node e2e/tour.mjs phone      one size only (or: wide)
 //
 // Fresh dev server on port 5180. It uses the QA profile's library (read-only: it changes no document) and
-// puts back the two settings it touches.
+// puts back the two settings it touches. The landing page (an empty library) is photographed first, in a
+// browser profile of its own that is thrown away.
 import { chromium } from 'playwright-core'
 import { fileURLToPath } from 'node:url'
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 
 const OUT = fileURLToPath(new URL('../.qa-out', import.meta.url))
 const PROFILE = fileURLToPath(new URL('../.qa-profile', import.meta.url))
@@ -96,5 +98,34 @@ async function tour(size) {
   for (const m of missed) console.log('  - ' + m)
 }
 
-for (const size of ['phone', 'wide']) if (!only || only === size) await tour(size)
+// The landing page is what an EMPTY library shows, so it has a library of its own: a browser that has never
+// been here. A screen at a time from top to bottom (its words light and its sections rise as it is scrolled),
+// and it reports anything that runs off the side of the screen or out of the box that holds it.
+async function landing(size) {
+  const wide = size === 'wide'
+  const fresh = `${tmpdir()}/noesis-tour-empty-${size}`
+  rmSync(fresh, { recursive: true, force: true })
+  const view = wide ? { width: 1360, height: 860 } : { width: 390, height: 844 }
+  const ctx = await chromium.launchPersistentContext(fresh, { channel: 'chrome', headless: true, viewport: view, deviceScaleFactor: 1, isMobile: !wide, hasTouch: !wide })
+  const page = ctx.pages()[0] || await ctx.newPage()
+  await page.addInitScript(() => { try { localStorage.setItem('noesis.install.dismissed', String(Date.now())) } catch { /* no storage */ } })
+  await page.goto('http://localhost:5180/'); await page.waitForLoadState('networkidle'); await sleep(1500)
+  const height = await page.evaluate(() => document.documentElement.scrollHeight)
+  let n = 0
+  for (let y = 0; y < height && n < 10; y += Math.round(view.height * 0.8)) {
+    await page.evaluate(y => scrollTo(0, y), y); await sleep(450)
+    await page.screenshot({ path: `${OUT}/tour-${size}-00-landing-${String(++n).padStart(2, '0')}.png` })
+  }
+  const off = await page.evaluate(() => [...document.querySelectorAll('[data-screen] *')].filter(e => {
+    const b = e.getBoundingClientRect()
+    if (!b.width || e.closest('svg')) return false
+    if (b.right > innerWidth + 1) return true
+    const p = e.parentElement?.getBoundingClientRect()
+    return !!p && b.right > p.right + 2 && getComputedStyle(e).position === 'static'
+  }).slice(0, 6).map(e => `${e.tagName.toLowerCase()} "${(e.innerText || '').slice(0, 30)}"`))
+  await ctx.close()
+  console.log(`${size}: ${n} pictures of the landing page${off.length ? `; RUNS OFF ITS BOX: ${off.join(', ')}` : ''}`)
+}
+
+for (const size of ['phone', 'wide']) if (!only || only === size) { await landing(size); await tour(size) }
 console.log(`\nOpen them: ${OUT}/tour-*.png`)

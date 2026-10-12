@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, toast, goBack, openSheet, pushPanel, popPanel } from '../lib/nav.js'
+import { ui, toast, goBack, openSheet, pushPanel, popPanel, showWelcome } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { account } from '../lib/sync.js'
 import { hasAiKey, providerName } from '../lib/ai.js'
@@ -184,6 +184,7 @@ function SectionBody({ id, s }) {
       <InstallBody />
       <CreditsCard Card={Group} />
       <DiagnosticsCard Card={Group} />
+      <div><Button onClick={showWelcome}>See the welcome page</Button></div>
       <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint, padding: '0 4px' }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')}</div>
     </>
   )

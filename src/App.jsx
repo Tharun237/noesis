@@ -11,7 +11,7 @@ import { boot } from './lib/library.js'
 import { startHistory } from './lib/history.js'
 import { startExtras } from './lib/extras.js'
 import { player, toggle, nextSentence, prevSentence } from './lib/player.js'
-import { Library } from './ui/Library.jsx'
+import { Library, useEmptyLibrary } from './ui/Library.jsx'
 import { Reader } from './ui/Reader.jsx'
 import { PlayerBar, playerHeight } from './ui/PlayerBar.jsx'
 import { InstallPrompt } from './ui/InstallPrompt.jsx'
@@ -91,7 +91,8 @@ export default function App() {
   useEffect(() => { document.documentElement.dataset.motion = motionPref }, [motionPref])
 
   const full = view === 'reader'
-  const dock = playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
+  const landing = useEmptyLibrary() && view === 'library' // nothing to list yet: the landing page, with no bars of the app around it
+  const dock = landing ? 0 : playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
   const lift = activity ? ACTIVITY_H : 0
   return (
     <MotionConfig reducedMotion={motionPref === 'full' ? 'never' : motionPref === 'less' ? 'always' : 'user'} transition={{ duration: T.dur.fast, ease: T.ease }}>
@@ -115,7 +116,7 @@ export default function App() {
         </AnimatePresence>
       </div>
       <PlayerBar wide={wide} full={full} />
-      {!wide && !full && <TabBar />}
+      {!wide && !full && !landing && <TabBar />}
       <Suspense fallback={null}><Sheets wide={wide} /></Suspense>
       <ActivityStrip activity={activity} bottom={dock} />
       <InstallPrompt wide={wide} full={full} lift={lift} />

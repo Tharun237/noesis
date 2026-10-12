@@ -3,6 +3,11 @@ import { createStore } from './store.js'
 // A reload (live update, manual refresh, Android restoring the app) keeps you where you were.
 const restored = ['library', 'reader', 'settings'].includes(history.state?.view) ? history.state : { view: 'library' }
 
+// The landing page's own address. An empty library shows the landing page anyway; this is how someone who
+// HAS a library sees it (and the address to give to someone who has never been here).
+const WELCOME = '/welcome'
+const atWelcome = () => location.pathname === WELCOME
+
 // View state lives in history entries, so Android's back gesture closes sheets and leaves the reader.
 export const ui = createStore({
   view: restored.view, // library | reader | settings
@@ -17,11 +22,13 @@ export const ui = createStore({
   installEvt: null,
   installed: matchMedia('(display-mode: standalone)').matches,
   toast: null,
+  welcome: atWelcome(), // the landing page was asked for by its address
 })
 
 history.replaceState({ view: restored.view, docId: restored.docId || null, depth: restored.depth || 0 }, '')
 
 export function go(view, docId = null) {
+  closeWelcome()
   const s = ui.get()
   if (s.view === view && s.docId === docId && !s.sheet) return
   // Leaving from inside a sheet (Add to library, a passage in Ask your library, another language): the new
@@ -37,10 +44,23 @@ export function tab(view) {
   // A section open inside a tab (Settings, then Voice) is an entry on top of the tab's own. It is closed
   // first, so a tab never leaves one behind it, and tapping the tab you are on returns to its first page.
   if (history.state?.panel) { addEventListener('popstate', () => tab(view), { once: true }); return backOnce() }
+  closeWelcome()
   const s = ui.get()
   if (s.view === view && !s.sheet && !s.searching) return
   history.replaceState({ view, docId: null, depth: depth() }, '')
   ui.set({ view, docId: null, sheet: null, searching: false, query: '' })
+}
+
+// Leaving the landing page for the app: the address goes back to the app's, so a reload does not return there.
+export function closeWelcome() {
+  if (!ui.get().welcome) return
+  history.replaceState(history.state, '', '/')
+  ui.set({ welcome: false })
+}
+// And the way to it from inside the app (Settings, About): a page like any other, so Back leaves it.
+export function showWelcome() {
+  history.pushState({ view: 'library', docId: null, depth: depth() + 1 }, '', WELCOME)
+  ui.set({ view: 'library', docId: null, sheet: null, welcome: true })
 }
 
 export function openSheet(sheet, extra = {}) {
@@ -96,7 +116,7 @@ export function goBack() {
 addEventListener('popstate', e => {
   const s = e.state || {}
   const searching = !!s.searching
-  ui.set({ view: s.view || 'library', docId: s.docId || null, sheet: s.sheet || null, searching, ...(searching ? {} : { query: '' }) })
+  ui.set({ view: s.view || 'library', docId: s.docId || null, sheet: s.sheet || null, searching, welcome: atWelcome(), ...(searching ? {} : { query: '' }) })
 })
 
 let toastTimer = null

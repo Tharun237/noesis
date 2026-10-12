@@ -1,19 +1,19 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { later } from './later.jsx'
 import { motion, AnimatePresence } from 'motion/react'
 import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet, closeSearch, tab } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection } from '../lib/library.js'
+import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addCollection, removeCollection } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
 import { historyStore, hasEntries } from '../lib/history.js'
 import { engine } from '../lib/tts.js'
-import { voiceName, VOICES } from '../lib/voices.js'
+import { voiceName } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur, Swap } from './kit.jsx'
-import { SAMPLE } from './sample.js'
 import { AccountChip } from './SyncStatus.jsx'
 import { waitSeconds } from '../lib/readiness-math.js'
 
@@ -56,9 +56,23 @@ function useVisibleDocs() {
   }, [docs, filter, query, sort, kind, progress])
 }
 
+// An empty library is not a list with nothing in it: it is the landing page, with none of the library's own
+// bars around it. Whether there is a library is known only once it has been read from the device, so the
+// answer from last time is kept: a new visitor's landing page is fetched straight away, and nobody is shown
+// the wrong one of the two first.
+const Landing = later(() => import('./Landing.jsx').then(m => m.Landing))
+const HAD_DOCS = 'noesis.had-docs'
+const hadDocs = (() => { try { return localStorage.getItem(HAD_DOCS) === '1' } catch { return false } })()
+if (!hadDocs || ui.get().welcome) Landing.fetch()
+// Is there nothing to list? Before the library has been read: what it was last time. (The app's bottom bars
+// belong to a library: they go when there is none.)
+export const useEmptyLibrary = () => useStore(library, s => (s.loaded ? s.docs.length === 0 : !hadDocs))
+
 export function Library({ wide }) {
   const loaded = useStore(library, s => s.loaded)
   const total = useStore(library, s => s.docs.length)
+  const welcome = useStore(ui, s => s.welcome)
+  useEffect(() => { if (loaded) try { localStorage.setItem(HAD_DOCS, total ? '1' : '0') } catch { /* no storage: asked again next time */ } }, [loaded, total])
   const docs = useVisibleDocs()
   const view = useStore(settings, s => s.view)
   const playingId = useStore(player, s => s.id)
@@ -66,13 +80,14 @@ export function Library({ wide }) {
   const summary = total > 0 && `Your library · ${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
 
   const order = useMemo(() => docs.map(d => d.id).join(), [docs])
+  // the landing page: for an empty library, or asked for by its own address
+  if (welcome || (loaded ? total === 0 : !hadDocs)) return loaded || welcome ? <Suspense fallback={null}><Landing wide={wide} hasLibrary={total > 0} /></Suspense> : null
   return (
     <div style={{ display: 'flex', minHeight: '100%' }}>
       {wide && <Sidebar />}
       <main style={{ flex: 1, minWidth: 0, padding: wide ? '28px 36px 40px' : '0 0 24px' }}>
         {wide ? <DesktopHeader summary={summary} /> : <MobileHeader summary={summary} />}
-        {loaded && total === 0 ? <EmptyState wide={wide} /> : (
-          <>
+        <>
             <div style={{
               display: 'grid', gap: wide ? 8 : 2, padding: wide ? 0 : '0 8px', position: 'relative',
               gridTemplateColumns: wide && view === 'grid' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
@@ -87,8 +102,7 @@ export function Library({ wide }) {
                 <Button onClick={() => ui.set({ query: '', kind: null, progress: null })}>Clear filters</Button>
               </div>
             )}
-          </>
-        )}
+        </>
       </main>
     </div>
   )
@@ -428,56 +442,4 @@ export function docMenu(d) {
     '-',
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) tab('library') } } },
   ]
-}
-
-const STATS = [['₹0', 'Free forever'], ['Offline', 'audio'], [String(VOICES.length), 'Natural voices']]
-const FEATURES = [
-  ['waves', 'Natural voices, on your device', 'Audio is generated locally. No account, no limits, works offline.'],
-  ['sparkle', 'Skips the page junk', 'Headers, page numbers, citations and reference lists are removed before listening.'],
-  ['file', 'Papers, books, articles', 'PDF, EPUB, Word, web links, Markdown and plain text.'],
-]
-const rise = i => ({ initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 }, transition: { duration: T.dur.slow, ease: T.ease, delay: i * 0.06 } })
-
-// First run, in the ACS landing language: eyebrow, tight headline, italic subline, mono stats, pill CTAs.
-function EmptyState({ wide }) {
-  const sample = async () => { const id = await addDocument({ kind: 'text', name: SAMPLE.title, title: SAMPLE.title, text: SAMPLE.text }); go('reader', id) }
-  return (
-    <div style={{ maxWidth: 880, margin: wide ? '8vh auto 0' : '6vh 0 0', padding: wide ? '0 8px' : '0 24px' }}>
-      <motion.div {...rise(0)} style={{ ...eyebrow, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 6, background: T.lime }} />
-        Listen deeper
-        <span style={{ width: 56, height: 1, background: T.borderHi }} />
-      </motion.div>
-      <motion.h2 {...rise(1)} style={{ margin: '22px 0 0', fontSize: wide ? 76 : 46, lineHeight: 0.98, letterSpacing: '-0.055em', fontWeight: 800, color: T.text }}>
-        Listen to<br />anything.
-      </motion.h2>
-      <motion.div {...rise(2)} style={{ marginTop: 12, fontSize: wide ? 34 : 26, fontStyle: 'italic', fontWeight: 300, letterSpacing: '-0.02em', color: T.sub }}>
-        Understand it.
-      </motion.div>
-      <motion.p {...rise(3)} style={{ color: T.sub, fontSize: wide ? 18 : 16, lineHeight: 1.6, margin: '22px 0 0', maxWidth: 540 }}>
-        Papers, books and articles turned into natural audio. Audio is made on your device. AI features are opt-in.
-      </motion.p>
-      <motion.div {...rise(4)} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, auto)', justifyContent: 'start', columnGap: wide ? 56 : 28, rowGap: 6, marginTop: 34 }}>
-        {STATS.map(([v]) => <div key={v} style={{ fontFamily: T.mono, fontSize: wide ? 26 : 21, fontWeight: 600, color: T.text }}>{v}</div>)}
-        {STATS.map(([v, l]) => <div key={l} style={{ ...eyebrow, fontSize: 10, letterSpacing: '0.18em' }}>{l}</div>)}
-      </motion.div>
-      <motion.div {...rise(5)} style={{ display: 'flex', flexDirection: wide ? 'row' : 'column', gap: 12, marginTop: 40 }}>
-        <Button kind="primary" onClick={() => openSheet('add')} full={!wide} style={{ height: 56, padding: '0 30px', fontSize: 16, fontWeight: 700, borderRadius: wide ? T.r.pill : T.r.lg }}>
-          Add a document <Icon name="next" size={16} />
-        </Button>
-        <Button icon="play" onClick={sample} full={!wide} style={{ height: 56, padding: '0 26px', fontSize: 16, background: 'transparent', borderColor: T.borderHi, borderRadius: wide ? T.r.pill : T.r.lg }}>
-          Try a sample
-        </Button>
-      </motion.div>
-      <div style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(3, 1fr)' : '1fr', gap: 12, margin: '64px 0 24px' }}>
-        {FEATURES.map(([icon, title, body], i) => (
-          <motion.div key={title} {...rise(6 + i)} style={{ padding: 20, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface }}>
-            <Icon name={icon} size={20} style={{ color: T.accent }} />
-            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 16, color: T.text }}>{title}</div>
-            <div style={{ fontSize: 13.5, color: T.sub, marginTop: 6, lineHeight: 1.55 }}>{body}</div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  )
 }
