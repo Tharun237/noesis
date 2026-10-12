@@ -24,6 +24,10 @@ export const T = {
   danger: '#FF6B6B',
   ok: '#22C55E',
   scrim: 'rgba(0,0,0,0.72)',
+  // Colour that carries DATA, never chrome (Tharun, 2026-10-12: the mood line was "just a curving bar...
+  // it could be adding colour"). The page, its type and its controls stay black, white and lime.
+  //   mood: the feeling of the writing along a book's timeline: warm where it is brighter, blue where darker.
+  mood: { bright: '#FFB23E', calm: '#F2F2F7', dark: '#6C7BFF' },
 
   font: "'DM Sans Variable', 'DM Sans', system-ui, -apple-system, sans-serif",
   mono: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",

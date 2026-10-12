@@ -30,6 +30,7 @@ import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Swap, fmtDur, rowIn } from './kit.jsx'
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
+import { DocInsight } from './Heard.jsx'
 import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts.jsx'
 import { FocusView } from './FocusView.jsx'
 import { playerHeight } from './PlayerBar.jsx'
@@ -427,6 +428,7 @@ export function Reader({ wide }) {
             </div>
             )}
 
+            {view === 'text' && <DocInsight d={d} />}
             {d.status !== 'ready' && <Preparing d={d} doc={doc} pos={active >= 0 ? active : d.pos || 0} />}
             {view === 'text' && <WelcomeBack key={d.id} d={d} onRecap={() => quick('recap')} />}
             {view === 'text' && (d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}

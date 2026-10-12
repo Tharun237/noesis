@@ -91,3 +91,10 @@ test('arcLine gives one point for each stretch of the document, up where the wor
   assert.deepEqual(arcLine(['Too short for a shape.'], 8), [])
   assert.deepEqual(arcLine([], 8), [])
 })
+
+test('arcLine is measured from the document\'s own usual tone: a cheerful book still has its ups and downs', () => {
+  const glad = Array.from({ length: 40 }, () => 'This is a wonderful, happy and beautiful day of joy.')
+  const mixed = Array.from({ length: 40 }, () => 'This is a wonderful and happy day, with one sad hour of pain.')
+  const line = arcLine([...glad, ...mixed], 8)
+  assert.ok(line[0].y > 0.5 && line[7].y < -0.5, JSON.stringify(line)) // the second half is still positive, but lower than usual
+})

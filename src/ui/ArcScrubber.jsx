@@ -1,9 +1,12 @@
-// The player's progress line IS the book's emotional arc: it rises where the writing is brighter and falls
-// where it is darker, the part already heard is white, and the dot rides the line. The mood of a book is a
+// The player's progress line IS the book's emotional arc: it rises and warms (amber) where the writing is
+// brighter, falls and cools (blue) where it is darker, with the space between the line and the middle
+// filled in, so the book's weather can be seen ahead. The part already heard is lit, what is to come is dim,
+// and the dot rides the line in the colour of the feeling it is passing through. (It was a thin grey and
+// white line: "just a curving bar", Tharun, 2026-10-12. A feeling needs colour and body, not only height.) The mood of a book is a
 // fact about its timeline, so it lives in the timeline, not on a screen of its own (design skill, question 5).
 // A document too short for a shape, or not in English (the arc is counted from English words of feeling),
 // gets a plain straight line: the same control, with nothing claimed.
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { T } from '../theme.js'
 import { loadDoc } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
@@ -13,12 +16,35 @@ const MID = H / 2
 const SWING = 11 // px above or below the middle at the brightest or darkest point
 const VIEW_W = 1000 // the drawing's own width; it stretches to the bar
 const SETTLE_MS = 700 // the arc reads the whole book once: after the player has arrived, not during
-const TOLD_KEY = 'noesis.arc.told'
-const HINT = 'The line follows the mood of the writing: up where it is brighter, down where it is darker.'
-const TOLD = "The wavy line is the book's mood." // the one-time note: short enough never to be cut off
+const TOLD_KEY = 'noesis.arc.told.colour'
+const HINT = 'The line follows the mood of the writing: warm and high where it is brighter, blue and low where it is darker.'
+const TOLD = "The line is the book's mood: warm is brighter, blue is darker." // the one-time note: short enough never to be cut off
+const FEELS_AT = 0.3 // nearer the middle than this, the writing is neither: "even"
+
+const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
+const BRIGHT = rgb(T.mood.bright), CALM = rgb(T.mood.calm), DARK = rgb(T.mood.dark)
+// the colour of a feeling, from -1 (dark) to 1 (bright): it leaves white quickly, so a mild mood still shows
+const moodColour = v => { const to = v >= 0 ? BRIGHT : DARK, f = Math.min(1, Math.abs(v)) ** 0.6; return `rgb(${CALM.map((c, i) => Math.round(c + (to[i] - c) * f)).join(' ')})` }
+const moodWord = v => (v > FEELS_AT ? 'Brighter' : v < -FEELS_AT ? 'Darker' : 'Even')
 const ARC_MIN_SENTENCES = 120
 const ARC_POINTS_MIN = 16
 const ARC_POINTS_MAX = 64
+const PX_A_POINT = 20 // a rise or a fall needs this much room to read as a feeling; closer, it is a scribble
+
+// The line with as many points as its width can carry: neighbours are averaged together. (On a phone the
+// player's line is 220 px wide: 64 points there was a zigzag, not a mood.)
+function fit(line, width) {
+  const n = Math.max(6, Math.floor(width / PX_A_POINT))
+  if (!line?.length || !width || line.length <= n) return line
+  const few = Array.from({ length: n }, (_, k) => {
+    const part = line.slice(Math.floor((k * line.length) / n), Math.floor(((k + 1) * line.length) / n))
+    return { x: (k + 0.5) / n, y: part.reduce((a, q) => a + q.y, 0) / part.length }
+  })
+  // averaging flattens: give the line back the swing it had, so the narrow one feels as much as the wide one
+  const swing = v => Math.max(...v.map(q => Math.abs(q.y)))
+  const had = swing(line), has = swing(few)
+  return has > 0 ? few.map(q => ({ x: q.x, y: (q.y / has) * had })) : few
+}
 
 const lines = new Map() // document -> its line, worked out once
 
@@ -60,36 +86,82 @@ function pathOf(line) {
   const last = p[p.length - 1]
   return `${d} L${last[0].toFixed(1)} ${last[1].toFixed(1)} L${VIEW_W} ${last[1].toFixed(1)}`
 }
-// the line's height at a share of the way through, for the dot
-function heightAt(line, share) {
-  if (!line?.length) return MID
+// the feeling (-1..1) at a share of the way through: where the dot sits and what colour it is
+function moodAt(line, share) {
+  if (!line?.length) return 0
   const at = share * line.length - 0.5
   const i = Math.max(0, Math.min(line.length - 1, Math.floor(at)))
   const j = Math.min(line.length - 1, i + 1)
   const f = Math.max(0, Math.min(1, at - i))
-  return yOf(line[i].y + (line[j].y - line[i].y) * f)
+  return line[i].y + (line[j].y - line[i].y) * f
 }
 
 // value and max are seconds. onChange while dragging, onCommit when the finger lifts or a key is released.
 export function ArcScrubber({ d, value, max, disabled, onChange, onCommit }) {
-  const line = useArc(d)
-  const clip = useId().replace(/[^A-Za-z0-9_-]/g, '')
+  const whole = useArc(d)
+  const box = useRef(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const seen = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width)))
+    seen.observe(box.current)
+    return () => seen.disconnect()
+  }, [])
+  const line = useMemo(() => fit(whole, width), [whole, width])
+  const id = useId().replace(/[^A-Za-z0-9_-]/g, '')
+  const [held, setHeld] = useState(false) // a finger is on it: the dot grows and says what the writing feels like there
   const share = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0
   const path = useMemo(() => pathOf(line), [line])
+  const felt = !!line?.length // a document with no shape gets a plain line: nothing is claimed
+  const mood = moodAt(line, share)
+  const colour = felt ? moodColour(mood) : T.text
+  const paint = felt ? `url(#${id}-mood)` : null
   const stroke = { fill: 'none', strokeWidth: 2, vectorEffect: 'non-scaling-stroke', strokeLinecap: 'round', strokeLinejoin: 'round' }
+  const body = `${path} L${VIEW_W} ${MID} L0 ${MID} Z` // between the line and the middle: hills of brightness, valleys of dark
+  const commit = e => { setHeld(false); onCommit(+e.currentTarget.value) }
   return (
-    <div title={line?.length ? HINT : undefined} style={{ position: 'relative', flex: 1, minWidth: 0, height: H }}>
+    <div ref={box} title={felt ? HINT : undefined} style={{ position: 'relative', flex: 1, minWidth: 0, height: H }}>
       <svg viewBox={`0 0 ${VIEW_W} ${H}`} preserveAspectRatio="none" width="100%" height={H} aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
-        <clipPath id={clip}><rect x="0" y={-H} width={share * VIEW_W} height={H * 3} /></clipPath>
-        <path d={path} stroke={T.faint} {...stroke} />
-        <path d={path} stroke={T.text} clipPath={`url(#${clip})`} {...stroke} />
+        <defs>
+          {felt && (
+            <linearGradient id={`${id}-mood`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2={VIEW_W} y2="0">
+              {line.map(p => <stop key={p.x} offset={p.x} stopColor={moodColour(p.y)} />)}
+            </linearGradient>
+          )}
+          <clipPath id={`${id}-heard`}><rect x="0" y={-H} width={share * VIEW_W} height={H * 3} /></clipPath>
+        </defs>
+        {/* what is to come: the whole book's weather, dim */}
+        {felt && <path d={body} fill={paint} opacity="0.1" />}
+        <path d={path} stroke={paint || T.faint} opacity={felt ? 0.4 : 1} {...stroke} />
+        {/* what has been heard: lit, with a soft halo (a wider, fainter stroke: no blur for a phone to pay for) */}
+        <g clipPath={`url(#${id}-heard)`}>
+          {felt && <path d={body} fill={paint} opacity="0.3" />}
+          {felt && <path d={path} stroke={paint} opacity="0.22" {...stroke} strokeWidth={8} />}
+          <path d={path} stroke={paint || T.text} {...stroke} strokeWidth={felt ? 2.5 : 2} />
+        </g>
       </svg>
-      <div aria-hidden="true" style={{ position: 'absolute', left: `${share * 100}%`, top: heightAt(line, share), width: 12, height: 12, margin: '-6px 0 0 -6px', borderRadius: 12, background: T.text, boxShadow: `0 0 0 3px ${T.bg}`, pointerEvents: 'none' }} />
+      <div aria-hidden="true" style={{
+        position: 'absolute', left: `${share * 100}%`, top: yOf(mood), width: 12, height: 12, margin: '-6px 0 0 -6px', borderRadius: 12, background: colour,
+        boxShadow: `0 0 0 3px ${T.bg}${felt ? `, 0 0 14px 3px ${colour}` : ''}`, transform: held ? 'scale(1.35)' : 'none', transition: 'transform 160ms cubic-bezier(0.22,1,0.36,1)', pointerEvents: 'none',
+      }} />
+      {felt && held && (
+        // beside the dot, on the side with room, and inside the line's own height: above it is the page
+        <div aria-hidden="true" style={{
+          position: 'absolute', top: MID - 9, height: 18, padding: '0 7px', borderRadius: 9, background: T.bg, display: 'flex', alignItems: 'center',
+          ...(share > 0.5 ? { right: `calc(${(1 - share) * 100}% + 16px)` } : { left: `calc(${share * 100}% + 16px)` }),
+          fontFamily: T.mono, fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: colour, whiteSpace: 'nowrap', pointerEvents: 'none',
+        }}>
+          {moodWord(mood)}
+        </div>
+      )}
       {/* the real control: a slider nobody sees, so the keyboard, a finger and a screen reader all still work */}
       <input type="range" min={0} max={Math.max(1, Math.floor(max))} step={1} value={Math.floor(value)} aria-label="Position" disabled={disabled}
-        onChange={e => onChange(+e.target.value)}
-        onPointerUp={e => onCommit(+e.currentTarget.value)}
-        onKeyUp={e => onCommit(+e.currentTarget.value)}
+        aria-valuetext={felt ? `${moodWord(mood)} writing here` : undefined}
+        onChange={e => { setHeld(true); onChange(+e.target.value) }}
+        onPointerDown={() => setHeld(true)}
+        onPointerUp={commit}
+        onPointerCancel={() => setHeld(false)}
+        onBlur={() => setHeld(false)}
+        onKeyUp={commit}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', margin: 0, opacity: 0, cursor: 'pointer' }} />
     </div>
   )

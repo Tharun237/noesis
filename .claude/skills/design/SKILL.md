@@ -78,6 +78,49 @@ phone, is not finished.
   the sidebar keeps it because it also says whether the library is synced.
 - On a phone the reader's bar holds what is used most; Find is in the document's menu there.
 - Two rows of one menu never share a symbol, and a symbol means one thing on a screen.
+
+## A wait is designed too (2026-10-12)
+
+Tharun pressed a voice's preview and "nothing happened for 20 to 30 seconds"; then he was shown "Ready to
+play" over a bar a quarter full and said "as a customer I still don't understand it". He will not list every
+case: the rule has to do it.
+
+- A tap is answered at once. Work that takes time says so from the first moment, on the thing that was
+  pressed: `Button`, `IconButton`, the player's Play and menu commands do this by themselves when their
+  handler hands back a promise (`kit.jsx useBusy`, `nav.js during`). Write handlers so that they do.
+- One set of words for a wait, everywhere (`tts.js voiceWait`, `readiness-math.js waitWords`):
+  Downloading the <name> voice · Starting the <name> voice · Making the audio · Reading the document.
+  Never "Preparing", never two names for one wait. A new kind of wait gets its words there, once.
+- A bar measures exactly what the sentence above it names, or it sweeps (`Progress unknown`). A bar that
+  measures something else is worse than none.
+- The normal state has no status. A Play button that works is how "ready" is said: the reader's card
+  appears only while something stands between the customer and playing, and says what happens next.
+- Anything that starts by itself says what it is for (a voice downloading says which document needs it).
+- A time is never promised that is not known ("a few seconds" was said about half a minute).
+- Find the silent ones by being the customer on a slow line: a fresh profile with the network throttled
+  (CDP `Network.emulateNetworkConditions`), and `node e2e/chaos.mjs --waits` (every tap timed on a
+  slowed phone). Reading the code does not find them.
+
+## Signing out looks like signing out (2026-10-12)
+
+- Each account has its own shelf on the device (`src/lib/shelf.js`): library, audio, collections, settings.
+  Signing out opens an empty Noesis (the welcome page); signing in brings the account's shelf back at once.
+  Nothing is deleted; Settings → Storage can remove the libraries of signed-out accounts.
+- The welcome page offers Sign in: that is where someone coming back looks.
+
+## Colour carries data, never chrome (2026-10-12)
+
+"It is just a curving bar... it could be adding colour. You can use colours." The page, its type and its
+controls stay black, white and lime. Colour is allowed where it IS the information:
+
+- Mood (`T.mood`): amber where the writing is brighter than the book's usual, blue where darker. The
+  player's line has body (the space to the middle is filled), the heard part is lit, the dot takes the
+  colour of the feeling it is in. The line is measured from the document's own usual tone (a cheerful book
+  still has ups and downs) and is refitted to its width (a phone's line carries fewer turns).
+- Each document has one colour, from its own cover (`bookcolour.js`), used wherever its listening is drawn.
+- Insight is drawn where the customer already is, as bars: on the document's card and at the top of its
+  reader (heard, today's stretch brightest, what is left cut into days at their pace), and above the
+  library's list (today, the week by day and by document, the whole shelf). Not a screen to go and visit.
 - The title block (cover, title, notes about the document) opens the Text view only. Pages are the document
   itself (page 1 is its own cover) and Focus is one word: neither repeats it.
 - The original page beside the text (wide screens) is off until asked for, and offered only for a document

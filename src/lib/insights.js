@@ -116,7 +116,9 @@ export function splitSections(blocks, starts) {
 
 // The document's emotional arc as a line for the player's progress bar: `buckets` points from start to end.
 // x is how far through the document a point is, by length of text (which is how its time runs); y is the
-// tone there, from -1 (dark) to 1 (bright), evened out with its neighbours and stretched to use the height.
+// tone there, from -1 (dark) to 1 (bright), evened out with its neighbours, measured from THIS document's
+// usual tone and stretched to use the height. (Measured from zero, a cheerful book was one warm band from
+// its first page to its last: the line said "positive" and nothing about where. A feeling is a change.)
 // A document with too few sentences for a shape gives no line. `sentences` is every sentence, in order.
 const ARC_MIN_PEAK = 0.25 // an even-toned document stays nearly flat instead of having its noise blown up
 export function arcLine(sentences, buckets = 72) {
@@ -130,8 +132,9 @@ export function arcLine(sentences, buckets = 72) {
   }
   const raw = text.map(tone)
   const even = raw.map((v, i) => (raw[Math.max(0, i - 1)] + v * 2 + raw[Math.min(buckets - 1, i + 1)]) / 4)
-  const peak = Math.max(ARC_MIN_PEAK, ...even.map(Math.abs))
-  return even.map((v, i) => ({ x: (i + 0.5) / buckets, y: v / peak }))
+  const usual = even.reduce((a, v) => a + v, 0) / buckets
+  const peak = Math.max(ARC_MIN_PEAK, ...even.map(v => Math.abs(v - usual)))
+  return even.map((v, i) => ({ x: (i + 0.5) / buckets, y: (v - usual) / peak }))
 }
 
 // Where the hard words are: for each section, how many of the document's hard words it holds in every

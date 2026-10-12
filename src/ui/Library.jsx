@@ -1,3 +1,5 @@
+import { hueOf } from './bookcolour.js'
+import { DocBar, LibraryGlance } from './Heard.jsx'
 import { onShelf } from '../lib/shelf.js'
 import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { later } from './later.jsx'
@@ -14,7 +16,7 @@ import { engine } from '../lib/tts.js'
 import { voiceName } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
-import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur, Swap } from './kit.jsx'
+import { Button, IconButton, Menu, Pulse, inputStyle, fmtDur, Swap } from './kit.jsx'
 import { AccountChip } from './SyncStatus.jsx'
 import { waitSeconds, waitWords } from '../lib/readiness-math.js'
 
@@ -77,6 +79,7 @@ export function Library({ wide }) {
   const docs = useVisibleDocs()
   const view = useStore(settings, s => s.view)
   const playingId = useStore(player, s => s.id)
+  const query = useStore(ui, s => s.query)
   const hours = docs.reduce((a, d) => a + docDuration(d), 0)
   const summary = total > 0 && `Your library · ${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
 
@@ -88,6 +91,8 @@ export function Library({ wide }) {
       {wide && <Sidebar />}
       <main style={{ flex: 1, minWidth: 0, padding: wide ? '28px 36px 40px' : '0 0 24px' }}>
         {wide ? <DesktopHeader summary={summary} /> : <MobileHeader summary={summary} />}
+        {/* the customer's listening, where they already are: not a screen to go and visit */}
+        {!query && docs.length > 0 && <LibraryGlance docs={docs} wide={wide} />}
         <>
             <div style={{
               display: 'grid', gap: wide ? 8 : 2, padding: wide ? 0 : '0 8px', position: 'relative',
@@ -316,8 +321,6 @@ function MobileHeader({ summary }) {
 
 // Documents without a real cover get generated artwork (like album art): a glow in one of the ACS
 // hues, picked deterministically from the title so a document looks the same on every device.
-const HUES = ['#AAFF00', '#00E5FF', '#00D4A8', '#2288FF', '#6EE7B7']
-const hueOf = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return HUES[h % HUES.length] }
 
 const COVER_W = 56 // a card's cover; its progress line is the same width
 // A plain picture. (The two players used to share theirs as one moving object: it travelled two pixels, and
@@ -381,7 +384,6 @@ function queuedText(id, qkey) {
 }
 
 const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
-  const listened = d.total ? (d.finished ? 1 : d.pos / d.total) : 0
   const dur = d.chars ? fmtDur(docDuration(d)) : null
   const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
@@ -416,13 +418,14 @@ const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
           </div>
           {/* The status changes in place (queued, reading, preparing, ready): one line fades into the next. */}
           <div key={d.status} data-fade="" style={{ fontSize: 12, minHeight: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><StatusLine d={d} /></div>
+          {/* how far, how much of it today, how much is left: drawn, in the document's own colour (Heard.jsx) */}
+          <DocBar d={d} />
         </div>
         {d.finished && <Icon name="check" size={18} style={{ color: T.ok }} />}
         <div onClick={e => e.stopPropagation()}>
           <Menu trigger={toggle => <IconButton icon="more" label={`More options for ${d.title}`} onClick={toggle} />} items={docMenu(d)} />
         </div>
       </div>
-      {listened > 0 && !d.finished && <div style={{ position: 'absolute', left: 12, width: COVER_W, bottom: 4 }}><Progress value={listened} height={2} color={T.text} track={T.surfaceTop} /></div>}
     </motion.div>
   )
 })
