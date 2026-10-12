@@ -90,3 +90,20 @@ export function walk(node, out = []) {
 }
 
 export const htmlToBlocks = root => walk(root)
+
+// A web page's citations, taken before the article is cut out of the page (that step drops the marks and
+// loses the classes that tell a reference list from the text). Returns the page's own numbered reference
+// list (the longest one; shorter ones are footnotes) and takes it out of the page, so it is never read
+// aloud; and turns each mark such as [12] into plain text, so its paragraph knows what it cites (the
+// listening text drops the marks again).
+const CITE_MARK = /^\[\d{1,3}\]$/
+export function keepCitations(doc) {
+  for (const sup of doc.querySelectorAll('sup')) {
+    const mark = sup.textContent.trim()
+    if (CITE_MARK.test(mark)) sup.replaceWith(doc.createTextNode(` ${mark}`))
+  }
+  const lists = [...doc.querySelectorAll('ol.references')].sort((a, b) => b.children.length - a.children.length)
+  if (!lists.length) return []
+  lists[0].remove()
+  return [...lists[0].children].map((li, i) => ({ n: i + 1, text: clean((li.querySelector('.reference-text') || li).textContent).replace(/^[\^↑]\s*/, '') })).filter(r => r.text.length > 20)
+}

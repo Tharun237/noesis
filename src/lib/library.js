@@ -4,7 +4,7 @@ import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf } from './ai.js'
 import { synthesize, engine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
-import { takeRefs } from './citations.js'
+import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
 import { isCloudVoice, cloudVoiceInfo, loadCloudVoices } from './cloudvoice.js'
 import { LANGS, detectLang, isEnglish } from './lang.js'
@@ -366,7 +366,9 @@ async function prepare(id) {
     let blocks = parsed.blocks
     // The reference list is never read aloud. It is kept beside the text, so a citation can be looked at.
     let refs = parsed.refs || []
-    if (!refs.length) ({ blocks, refs } = takeRefs(blocks))
+    const taken = takeRefs(blocks)
+    if (taken.refs.length) { blocks = taken.blocks; if (!refs.length) refs = taken.refs }
+    if (refs.length) blocks = withoutEmptyRefHeading(blocks)
     let note = null
 
     if (d.ai && hasAiKey() && parsed.pdf) {

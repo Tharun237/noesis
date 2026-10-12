@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey, providerName } from '../lib/ai.js'
 import { askLibrary, openPassage } from '../lib/libraryask.js'
-import { go, closeSheet } from '../lib/nav.js'
+import { go, closeSheet, toast } from '../lib/nav.js'
+import { speak, stopSpeaking, voiceForText } from '../lib/aside.js'
 import { motion } from 'motion/react'
 import { Button, IconButton, Pulse, inputStyle, Appear, rowIn } from './kit.jsx'
 
@@ -13,6 +14,8 @@ export function LibraryAsk({ wide }) {
   const keyed = hasAiKey()
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
+  useEffect(() => stopSpeaking, []) // closing the sheet stops the answer being read
   const [stage, setStage] = useState(null)
   const [done, setDone] = useState(0)
   const [total, setTotal] = useState(0)
@@ -74,6 +77,13 @@ export function LibraryAsk({ wide }) {
       )}
       {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
       {answer && <Appear style={{ fontSize: 14.5, color: T.text, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{answer}</Appear>}
+      {answer && !busy && (
+        <Appear><Button icon={speaking ? 'stop' : 'speaker'} onClick={() => {
+          if (speaking) { stopSpeaking(); setSpeaking(false); return }
+          setSpeaking(true)
+          speak(answer.replace(/\[\d+\]/g, ''), voiceForText(answer, {}), on => { if (!on) setSpeaking(false) }).catch(() => { setSpeaking(false); toast("The voice couldn't start.") })
+        }}>{speaking ? 'Stop' : 'Hear the answer'}</Button></Appear>
+      )}
       {searched && !busy && passages.length === 0 && (
         <Appear style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>Nothing in your library matches that.</Appear>
       )}
@@ -83,7 +93,7 @@ export function LibraryAsk({ wide }) {
           {passages.map((p, i) => (
             <motion.button key={`${p.doc}:${p.block}`} {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => openPassage(p)}
               style={{ textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font, display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}><span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.lime, marginRight: 8 }}>[{p.n}]</span>{p.title}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}><span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.lime, marginRight: 8 }}>[{p.n}]</span>{p.title}{p.page != null && <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 500, color: T.faint, marginLeft: 8 }}>p. {p.page}</span>}</span>
               <span style={{ fontSize: 13, color: T.sub, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.text}</span>
             </motion.button>
           ))}

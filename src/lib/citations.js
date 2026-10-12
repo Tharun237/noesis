@@ -70,6 +70,10 @@ export function takeRefs(blocks) {
   return { blocks: [...blocks.slice(0, at), ...blocks.slice(end)], refs }
 }
 
+// A "References" heading with nothing under it (its list was taken from the page before the text was cut
+// out) would be read aloud as a lone word: it goes too.
+export const withoutEmptyRefHeading = blocks => blocks.filter((b, i) => !(b.k === 'h' && HEADING.test((b.text || '').trim()) && (i === blocks.length - 1 || blocks[i + 1].k === 'h')))
+
 // The entry a citation points to, or null. A number finds the entry with that number, or, in an unnumbered
 // list, the entry in that place. An author and year finds the entry that starts with the surname and has the year.
 export function findRef(refs, key) {

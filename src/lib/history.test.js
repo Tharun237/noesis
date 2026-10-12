@@ -123,7 +123,23 @@ test('top five this month are in order; finished counts this month; since is the
 
 test('an empty log gives zeros and since null', () => {
   const s = summarise(emptyLog(), at(2026, 10, 11))
-  assert.deepEqual(s, { today: 0, week: 0, month: 0, total: 0, finishedThisMonth: 0, streak: 0, top: [], since: null })
+  assert.deepEqual(s, { today: 0, week: 0, month: 0, year: 0, total: 0, finishedThisMonth: 0, finishedThisYear: 0, streak: 0, top: [], topYear: [], since: null })
+})
+
+test('the year counts every month of this year and none of last year, and has its own prompt', () => {
+  let log = emptyLog()
+  log = addSeconds(log, dayKey(at(2025, 12, 30)), 'old', 900, 'Old book')
+  log = addSeconds(log, dayKey(at(2026, 2, 3)), 'a', 600, 'Book A')
+  log = addSeconds(log, dayKey(at(2026, 10, 11)), 'b', 300, 'Book B')
+  const s = summarise(log, at(2026, 10, 11))
+  assert.equal(s.year, 900)
+  assert.equal(s.month, 300)
+  assert.deepEqual(s.topYear.map(t => t.title), ['Book A', 'Book B'])
+  const p = retrospectivePrompt(s, '2026', 'year')
+  assert.match(p, /listening in 2026/)
+  assert.match(p, /900 seconds this year/)
+  assert.match(p, /Book A/)
+  assert.doesNotMatch(p, /Old book/)
 })
 
 test('retrospectivePrompt carries the numbers and every title, and asks for plain prose', () => {

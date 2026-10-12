@@ -19,7 +19,7 @@ function useVoiceLabel(d) {
   return sys ? systemVoiceLabel(pickSystemVoice()) : voiceName(d.voice)
 }
 import { Icon } from './icons.jsx'
-import { IconButton, Menu, Progress, fmtTime, fmtDur } from './kit.jsx'
+import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap } from './kit.jsx'
 import { Cover } from './Library.jsx'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
@@ -134,7 +134,7 @@ function SpeedMenu() {
     <Menu up align="left" trigger={t => (
       <button type="button" onClick={t} aria-label="Playback speed"
         style={{ height: 36, minWidth: 54, padding: '0 10px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: 'transparent', color: T.text, fontFamily: T.mono, fontSize: 13, cursor: 'pointer' }}>
-        {rate}x
+        <Swap>{`${rate}x`}</Swap>
       </button>
     )} items={[
       ...SPEEDS.map(s => ({ label: `${s}x`, icon: s === rate ? 'check' : undefined, right: s === def ? 'default' : undefined, onClick: () => setRate(s) })),

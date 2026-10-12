@@ -60,3 +60,17 @@ Android's back gesture is the customer's main control. Whatever opened last is w
 2. Look at one mid-transition screenshot (`.qa-out/sw-NN-mid.png`): no leftover page, no half-drawn frame.
 3. `node e2e/qa.mjs` (it asserts that Back from a new document shows the library, not the Add sheet).
 4. With reduced motion emulated, a sheet's vertical offset must stay 0 while it opens.
+
+## The shared pieces (use these; do not write one-off motion)
+- `Icon` (`src/ui/icons.jsx`): add a new icon's movement to `MOVE`. Icons move only inside a button that
+  passes `tap` / `hover` down: `Button`, `IconButton`, menu rows, or any motion element with
+  `variants={{ tap: ... }} whileTap="tap" whileHover="hover"`.
+- `T.tap` (`src/theme.js`): how far a pressed thing gives way, by size. `T.press` for the press itself,
+  `T.spring` for things that land, `T.settle` for things that move to a new place.
+- `Swap` (kit): text that changes in place. `Appear` (kit): anything that arrives late. `Count` (kit): a total.
+  `rowIn(i)` (kit): rows of a list that has just appeared. `Reveal` (kit): a drawing on plain black.
+- `coverflight.js`: a shared element across two pages that are never on screen together. `Sheet` (kit) already
+  settles its contents and ties its dark to the pull.
+- Fixed things at the bottom of the screen stand on `var(--dock)` (player plus status strip), set by App.
+- Never put an entrance delay in `transition` on something that can be pressed: it delays the press too. Put it
+  inside `animate.transition`.

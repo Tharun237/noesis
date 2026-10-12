@@ -66,10 +66,13 @@ export function summarise(log, now) {
     d.setDate(now.getDate() - i)
     week += dayTotal(base, dayKey(d))
   }
+  const yearPrefix = todayKey.slice(0, 4)
   let month = 0
+  let year = 0
   let total = 0
   let since = null
   const perDoc = new Map()
+  const perDocYear = new Map()
   for (const k of Object.keys(base)) {
     if (!isDay(k)) continue
     const m = base[k]
@@ -81,10 +84,15 @@ export function summarise(log, now) {
         month += sec || 0
         perDoc.set(id, (perDoc.get(id) || 0) + (sec || 0))
       }
+      if (k.slice(0, 4) === yearPrefix) {
+        year += sec || 0
+        perDocYear.set(id, (perDocYear.get(id) || 0) + (sec || 0))
+      }
     }
     if (ks > 0 && (since === null || k < since)) since = k
   }
   const finishedThisMonth = (base.finished || []).filter(f => f.day && f.day.slice(0, 7) === monthPrefix).length
+  const finishedThisYear = (base.finished || []).filter(f => f.day && f.day.slice(0, 4) === yearPrefix).length
   let streak = 0
   const cursor = new Date(now)
   if (dayTotal(base, dayKey(cursor)) < 60) cursor.setDate(cursor.getDate() - 1)
@@ -93,11 +101,11 @@ export function summarise(log, now) {
     else break
   }
   const titles = base.titles || {}
-  const top = [...perDoc.entries()]
+  const most = per => [...per.entries()]
     .map(([id, seconds]) => ({ id, title: titles[id] || id, seconds }))
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 5)
-  return { today, week, month, total, finishedThisMonth, streak, top, since }
+  return { today, week, month, year, total, finishedThisMonth, finishedThisYear, streak, top: most(perDoc), topYear: most(perDocYear), since }
 }
 
 // True once anything has been counted (any day with time, or any finish).
@@ -120,7 +128,8 @@ export function useHistory() {
 
 // A short spoken retrospective of the month, from the numbers and titles only.
 // Never document text.
-export function retrospectivePrompt(summary, monthName) {
+export function retrospectivePrompt(summary, monthName, period = 'month') {
+  if (period === 'year') return yearPrompt(summary, monthName)
   const lines = summary.top.map(t => `"${t.title}": ${t.seconds} seconds (about ${Math.max(1, Math.round(t.seconds / 60))} minutes)`).join('\n')
   return `You are making a short spoken retrospective of someone's listening in ${monthName}, for them to hear, not read.\n` +
     `Their listening: ${summary.today} seconds today, ${summary.week} seconds in the last 7 days, ${summary.month} seconds this month, ${summary.total} seconds in total. ` +
@@ -131,11 +140,22 @@ export function retrospectivePrompt(summary, monthName) {
 }
 
 // Build the retrospective as a new ordinary document. → the new document's id.
-export async function makeRetrospective({ signal } = {}) {
+// The same for a whole year: `yearName` is the year, e.g. "2026".
+function yearPrompt(summary, yearName) {
+  const lines = summary.topYear.map(t => `"${t.title}": ${t.seconds} seconds (about ${Math.max(1, Math.round(t.seconds / 60))} minutes)`).join('\n')
+  return `You are making a short spoken retrospective of someone's listening in ${yearName}, for them to hear, not read.\n` +
+    `Their listening: ${summary.year} seconds this year, of which ${summary.month} seconds this month and ${summary.week} seconds in the last 7 days. ` +
+    `They finished ${summary.finishedThisYear} documents this year. Their current streak is ${summary.streak} days in a row with at least a minute.\n` +
+    `Most listened this year:\n${lines || 'Nothing yet.'}\n` +
+    `\nWrite about 200 words of plain flowing prose, warm and specific, naming the documents by their titles and what the numbers say about the year. ` +
+    `No lists, no headings, no bold. In English. Write for listening: clear sentences that sound good read aloud.`
+}
+
+export async function makeRetrospective({ signal, period = 'month' } = {}) {
   const now = new Date()
   const summary = summarise(historyStore.get().log, now)
-  const monthName = now.toLocaleString('en', { month: 'long', year: 'numeric' })
-  const text = await aiText({ prompt: retrospectivePrompt(summary, monthName), signal })
+  const monthName = period === 'year' ? String(now.getFullYear()) : now.toLocaleString('en', { month: 'long', year: 'numeric' })
+  const text = await aiText({ prompt: retrospectivePrompt(summary, monthName, period), signal })
   const name = `Your listening in ${monthName}`
   const kind = /^\s{0,3}#{1,6}\s/m.test(text) ? 'md' : 'text'
   return addDocument({ kind, name, title: name, text }, { title: name, renamed: true, mode: 'full' })

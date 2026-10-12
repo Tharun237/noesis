@@ -35,14 +35,14 @@ export function Listening({ wide }) {
   const [error, setError] = useState(null)
   const abort = useRef(null)
 
-  async function submit() {
+  async function submit(period = 'month') {
     if (busy || !keyed || !enough) return
     abort.current?.abort()
     abort.current = new AbortController()
     setBusy(true)
     setError(null)
     try {
-      const id = await makeRetrospective({ signal: abort.current.signal })
+      const id = await makeRetrospective({ signal: abort.current.signal, period })
       go('reader', id)
     } catch (err) {
       if (err?.name !== 'AbortError') setError(err?.message || "Couldn't make the retrospective. Try again.")
@@ -55,6 +55,7 @@ export function Listening({ wide }) {
     ['Today', summary.today, fmtListened],
     ['Last 7 days', summary.week, fmtListened],
     ['This month', summary.month, fmtListened],
+    ['This year', summary.year, fmtListened],
     ['Total', summary.total, fmtListened],
     ['Finished this month', summary.finishedThisMonth, fmtWhole],
     ['Day streak', summary.streak, fmtDays],
@@ -89,7 +90,8 @@ export function Listening({ wide }) {
         {summary.since ? `Counted on this device since ${fmtSince(summary.since)}.` : 'Nothing counted yet. Listening time is counted from now on, on this device.'}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <Button kind="primary" full onClick={submit} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15 }}>Hear your month</Button>
+        <Button kind="primary" full onClick={() => submit('month')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15 }}>Hear your month</Button>
+        <Button full onClick={() => submit('year')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15 }}>Hear your year</Button>
         {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
       </div>
       {!keyed && <Appear style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>A retrospective needs an AI key. Add one in Settings.</Appear>}

@@ -395,7 +395,11 @@ const DocCard = memo(function DocCard({ d, playing, ref }) {
           <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {d.author ? `${d.author} · ` : ''}{meta}
           </div>
-          <div style={{ fontSize: 12, minHeight: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><StatusLine d={d} /></div>
+          {/* The status changes in place (queued, reading, preparing, ready): one line fades into the next. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={d.status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.18, ease: T.ease }}
+              style={{ fontSize: 12, minHeight: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><StatusLine d={d} /></motion.div>
+          </AnimatePresence>
         </div>
         {d.finished && <Icon name="check" size={18} style={{ color: T.ok }} />}
         <div onClick={e => e.stopPropagation()}>

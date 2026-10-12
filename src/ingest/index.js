@@ -1,4 +1,4 @@
-import { htmlToBlocks } from './html.js'
+import { htmlToBlocks, keepCitations } from './html.js'
 import { readMarkdown, readPlain, titleFrom } from './text.js'
 
 // Source record (stored, so documents can be re-processed): { kind, name, blob?, text?, url? }
@@ -21,16 +21,17 @@ async function readHtml(html, url, fallback) {
   const { Readability } = await import('@mozilla/readability') // only web pages need it
   const doc = new DOMParser().parseFromString(html, 'text/html')
   if (url) { const b = doc.createElement('base'); b.href = url; doc.head.prepend(b) }
+  const refs = keepCitations(doc) // before the article is cut out of the page
   const art = new Readability(doc, { charThreshold: 300 }).parse()
   if (!art?.content) {
     const blocks = htmlToBlocks(doc.body)
-    return { title: doc.title || titleFrom(blocks, fallback), author: '', blocks }
+    return { title: doc.title || titleFrom(blocks, fallback), author: '', blocks, refs }
   }
   const body = new DOMParser().parseFromString(art.content, 'text/html').body
   const blocks = htmlToBlocks(body)
   const title = art.title?.trim() || fallback
   if (blocks[0]?.k === 'h' && blocks[0].text.trim() === title) blocks.shift()
-  return { title, author: art.byline?.trim() || art.siteName || '', blocks }
+  return { title, author: art.byline?.trim() || art.siteName || '', blocks, refs }
 }
 
 const ARXIV = /^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|html)\/([\w.\-/]+?)(?:v\d+)?\/?$/

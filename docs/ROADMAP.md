@@ -69,7 +69,10 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
    longer slides on every page change; reduced motion honoured. Regression tool: `node e2e/sweep.mjs`.
    Earlier the same day: the status strip became a live island (a pill that widens into
    the full card and slides its text; transforms only). Press feedback, springs, sheet and page transitions
-   already existed. Still open: a frame-by-frame study against the ACS categories page, desktop refinement.
+   already existed. DONE 2026-10-12: motion on everything (plan and record: `docs/specs/M21-full-app-motion.md`),
+   the study against the ACS categories and shop pages (`docs/research/acs-motion-study.md`: one real gap,
+   press depth by size, taken), and desktop refinement (Back closes reader sheets, the sidebar scrolls and
+   ends above the player, its marker slides). Not seen on a real phone.
    Original item: Frame-by-frame transitions modelled on the ACS categories page; premium phone feel
    (Dynamic-Island-style live status), desktop and phone, browser compatibility.
 
@@ -121,9 +124,21 @@ Semantic Scholar refused without a key; a wrong paper read aloud as the cited on
 Limits, said plainly: works from a PDF's or a pasted document's own reference list; a web page's list is
 still dropped at import; documents read by AI narration have no citation data; the PDF path is tested by
 unit tests of the list splitter, not yet on a real paper PDF; documents added before this need adding again.
+Shipped 2026-10-12, the last leftovers: the year beside the month in Your listening, with "Hear your year"
+(item 17; run with a real NVIDIA model for the first time: 28 s, a plain spoken retrospective naming the
+documents); "Hear the answer" and page numbers in Ask your library (item 16; time references are not
+shown: a passage has a time only once its audio exists); every place a concept comes up, listed under each
+document on the concept map (item 18); a web page's citations (its marks and its own reference list are
+kept before the article is cut out of the page, and the list is no longer read aloud).
+Shipped 2026-10-12 (M25): aware listening, the phone-microphone version approved on 2026-10-11. Two
+switches in Settings: the voice slows to nine tenths in steady noise and returns when it is quiet; the book
+pauses when the listener speaks. The microphone is open only while a document is sounding. Verified with a
+stand-in microphone (Chrome playing a sound file): slowed after 4.6 s of noise, paused on a burst. NOT
+verified: a real phone, a real room, whether opening the microphone changes how the book sounds on Android.
+Clarity boost in noise is not built: the tone of the voice is set when the audio is made, not at playback.
 Item 18, the map that moves the audio, first version: on the concept map a document under a concept opens
 at the place the concept first comes up (verified: opened at the sentence of the first mention; Back returns
-to the library). Not built: dragging across the map to scrub, positions for every mention. Binaural study
+to the library). Not built: dragging across the map itself to scrub. Binaural study
 mode in 21 is covered by Focus sounds (Focus and Calm are binaural beats).
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
@@ -131,14 +146,14 @@ Verified on a real document: the pivot stays at one x for every word, the place 
 rhythm. Muse hit its rate limit mid-task; Opus wired the view into the reader and fixed the pivot.
 Shipped 2026-10-12: item 17 in part (M14): a listening log on the device (time while sound really plays,
 per day and document; streak; most listened) under the library's AI menu, and "Hear your month". Verified:
-17 s of playback counted as 15 s and counting stops when paused. NOT run with a real model: the
-retrospective text itself (it uses the same path as the briefing, which was). No yearly view, no sync.
+17 s of playback counted as 15 s and counting stops when paused. The yearly view and a real-model run came
+later (see above). No sync.
 Shipped 2026-10-12: item 15, Make a briefing (M13): 2 to 5 documents become one new document with headed
 parts (what each says, where they agree and disagree, shared methods, what to read first). Tested with a real
 NVIDIA key: about 2 s with a fast model; a reasoning model sat on "Writing the briefing" for over 2 minutes.
 Shipped 2026-10-11: item 16, Ask your library (M12): keyword ranking on the device, the top passages go to
 the customer's AI, the answer cites numbered passages and each opens its book at that place. Without an AI
-key it still lists matching passages. Not yet: page and time references in the citation, spoken answers.
+key it still lists matching passages. Page numbers and a spoken answer came later (see above); time references not.
 
 15. Multi-paper audio briefing (3 to 5 PDFs: overlaps, conflicts, shared methods).
 16. Ask my entire library (cross-book answers with page and time references).

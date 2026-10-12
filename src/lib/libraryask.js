@@ -9,6 +9,7 @@ import { buildIndex, search } from './search.js'
 // Rebuilt only when the set of document ids or their contentVer values changed.
 let cachedKey = null
 let cachedIndex = null
+let cachedPages = new Map() // document id -> the page of each block (PDFs only), for "p. 14" beside a passage
 
 export async function loadLibraryIndex({ onProgress } = {}) {
   const eligible = library.get().docs.filter(d => d.status === 'voicing' || d.status === 'ready')
@@ -19,15 +20,18 @@ export async function loadLibraryIndex({ onProgress } = {}) {
     return cachedIndex
   }
   const docs = []
+  const pages = new Map()
   let done = 0
   for (const d of eligible) {
     const stored = await db.getDoc(d.id)
+    pages.set(d.id, (stored?.blocks || []).map(b => b.p))
     docs.push({ id: d.id, title: d.title, blocks: stored?.blocks || [] })
     done++
     onProgress?.(done, total)
     await pause()
   }
   cachedIndex = buildIndex(docs)
+  cachedPages = pages
   cachedKey = key
   return cachedIndex
 }
@@ -65,7 +69,7 @@ export async function askLibrary(question, { onStage, onPassages, onText, signal
       used += p.text.length
     }
   }
-  const display = selected.map((p, i) => ({ doc: p.doc, title: p.title, block: p.block, text: p.text.slice(0, 300), n: i + 1 }))
+  const display = selected.map((p, i) => ({ doc: p.doc, title: p.title, block: p.block, page: cachedPages.get(p.doc)?.[p.block] ?? null, text: p.text.slice(0, 300), n: i + 1 }))
   onPassages?.(display)
   if (!hasAiKey()) return { passages: display }
   onStage?.('asking')

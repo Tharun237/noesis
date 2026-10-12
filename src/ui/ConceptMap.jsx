@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { T } from '../theme.js'
 import { useWidth } from '../lib/store.js'
-import { library, loadDoc } from '../lib/library.js'
+import { library, loadDoc, patch } from '../lib/library.js'
 import { openPassage } from '../lib/libraryask.js'
 import { db } from '../lib/db.js'
 import { pause } from '../lib/text.js'
-import { closeSheet } from '../lib/nav.js'
+import { go, closeSheet } from '../lib/nav.js'
 import { conceptMap, layout } from '../lib/concepts.js'
 import { motion } from 'motion/react'
 import { IconButton, Pulse, Appear, Reveal, rowIn } from './kit.jsx'
@@ -26,6 +26,33 @@ async function hearConcept(docId, key) {
   const c = await loadDoc(docId)
   const block = c ? c.blocks.findIndex(b => b.s.join(' ').toLowerCase().includes(key)) : -1
   openPassage({ doc: docId, block: Math.max(0, block) })
+}
+
+// Where a concept comes up in a document: the first few sentences that hold it, each a place to jump to.
+const MENTIONS = 4
+const SNIPPET = 96
+async function mentionsOf(docId, key) {
+  const c = await loadDoc(docId)
+  const out = []
+  if (c) for (let i = 0; i < c.segs.length && out.length < MENTIONS; i++) if (c.segs[i].t.toLowerCase().includes(key)) out.push({ i, t: c.segs[i].t })
+  return out
+}
+const openAt = (docId, i) => { patch(docId, { pos: i }); go('reader', docId) }
+
+function Mentions({ docId, concept }) {
+  const [list, setList] = useState(null)
+  useEffect(() => { let live = true; mentionsOf(docId, concept).then(m => { if (live) setList(m) }); return () => { live = false } }, [docId, concept])
+  if (!list || list.length < 2) return null // one place only: the row above already opens it
+  return (
+    <Appear style={{ display: 'grid', gap: 2, padding: '0 0 6px 14px' }}>
+      {list.map((m, k) => (
+        <motion.button key={m.i} {...rowIn(k)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => openAt(docId, m.i)}
+          style={{ textAlign: 'left', padding: '7px 12px', border: 'none', borderLeft: `1px solid ${T.borderHi}`, background: 'transparent', color: T.sub, cursor: 'pointer', fontFamily: T.font, fontSize: 13, lineHeight: 1.45 }}>
+          {m.t.length > SNIPPET ? m.t.slice(0, SNIPPET - 1) + '…' : m.t}
+        </motion.button>
+      ))}
+    </Appear>
+  )
 }
 
 export function ConceptMap({ wide }) {
@@ -122,13 +149,16 @@ export function ConceptMap({ wide }) {
       {sel && (
         <Appear key={sel.key} style={{ display: 'grid', gap: 8 }}>
           <div style={{ ...caption, color: T.lime }}>{sel.label}</div>
-          <div style={{ fontSize: 13, color: T.sub }}>Each document opens where this first comes up.</div>
+          <div style={{ fontSize: 13, color: T.sub }}>Each document opens where this first comes up. The lines under it are the next places.</div>
           {sel.docs.map((d, i) => (
-            <motion.button key={d.id} {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => hearConcept(d.id, sel.key)}
+            <div key={d.id} style={{ display: 'grid', gap: 2 }}>
+            <motion.button {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => hearConcept(d.id, sel.key)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text }}>{titles.get(d.id)}</span>
               <span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.sub }}>{d.count}</span>
             </motion.button>
+            <Mentions docId={d.id} concept={sel.key} />
+            </div>
           ))}
         </Appear>
       )}

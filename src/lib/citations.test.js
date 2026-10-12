@@ -1,7 +1,7 @@
 // Citations: finding the marks, cutting a reference list into entries, matching one to the other.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { citesIn, splitRefs, takeRefs, findRef, paperId, paperUrl, summaryOf } from './citations.js'
+import { citesIn, splitRefs, takeRefs, findRef, paperId, paperUrl, summaryOf, withoutEmptyRefHeading } from './citations.js'
 
 test('citesIn reads numbered marks, lists and short ranges, each once', () => {
   assert.deepEqual(citesIn('As shown [12], and again [3, 5] and [7-9]; see [12].'), ['12', '3', '5', '7', '8', '9'])
@@ -59,4 +59,10 @@ test('summaryOf rebuilds the text from word positions and keeps the first senten
   const inverted = { The: [0], model: [1], 'works.': [2], It: [3], 'is': [4], 'fast.': [5], More: [6], 'follows.': [7] }
   assert.equal(summaryOf(inverted), 'The model works. It is fast.')
   assert.equal(summaryOf(null), '')
+})
+
+test('a References heading with nothing under it is dropped, one with text under it is kept', () => {
+  assert.deepEqual(withoutEmptyRefHeading([{ k: 'p', text: 'Body.' }, { k: 'h', text: 'References' }]).map(b => b.text), ['Body.'])
+  assert.deepEqual(withoutEmptyRefHeading([{ k: 'h', text: 'References' }, { k: 'h', text: 'Notes' }, { k: 'p', text: 'A note.' }]).map(b => b.text), ['Notes', 'A note.'])
+  assert.equal(withoutEmptyRefHeading([{ k: 'h', text: 'References' }, { k: 'p', text: 'Kept.' }]).length, 2)
 })

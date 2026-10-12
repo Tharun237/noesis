@@ -49,6 +49,27 @@ Decided against, with the reason:
 Left: the library-to-reader shared cover (needs two pages on screen at once), and the frame-by-frame study
 against the ACS categories page.
 
+## Slices 4 and 5, live 2026-10-12: motion on everything (Tharun: "every icon, every button, every text")
+Built at the source, so it reaches every screen:
+- **Icons** (`src/ui/icons.jsx`): every icon answers the press of its button, or the pointer on a computer,
+  with a movement that says what the button does (arrows lean, refresh turns, the bell rings, the bin
+  rattles); when the icon in one place changes it draws itself in. The button passes `tap` / `hover` down.
+- **Buttons** (`kit.jsx`): press depth by size (`T.tap`: card 0.985, row 0.98, control 0.96, icon 0.9); a
+  label that changes slides to its new text (`Swap`), as do shelf titles, the speed and the citation count.
+- **Rows**: menu rows, sheet rows (voices, passages, citations, mentions, listening totals) and the reader's
+  title block follow one another (`rowIn`, first ten only; the delay is on the entrance, never on the press).
+- **Sheets**: contents settle a moment after the sheet. **Charts and maps** are uncovered (`Reveal`); sound
+  bars grow in turn. **Status lines** on cards fade from one state to the next.
+- **Cover**: one object. It flies from the library card to the reader and home again (`coverflight.js`: a
+  copy fixed to the screen, because the two pages are never on screen together). Measured: lands exactly.
+- **Sentence light**: fades from sentence to sentence (boxes measured from the sentence's own lines, drawn
+  behind the text). **Sidebar marker** slides. **Wordmark** is revealed once on first run.
+All three items listed above as decided against were built after all, each in a form that keeps to
+transform and opacity. Sweep clean on phone and desktop, QA 41/41.
+Deliberately still: the words of the document itself as you scroll (reading comfort, and thousands of
+paragraphs), the contents list rows (hundreds, re-rendered every sentence), numbers that tick every second.
+Not seen with my own eyes: any of this on a real phone; the desktop contents panel sliding in.
+
 ## To do, in this order (most seen first)
 1. **One motion system** (`src/lib/motion.js`): named transitions (`press`, `quick` 0.16 s, `page` 0.24 s,
    `sheet` spring by duration with bounce 0, `settle` layout spring) and variants (`rise`, `fade`,
