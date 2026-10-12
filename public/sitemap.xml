@@ -3,5 +3,7 @@
      person's own and lives on their device: it has no public pages to list. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://www.noesisaudio.com/</loc></url>
+  <url><loc>https://www.noesisaudio.com/listen-to-pdf</loc></url>
+  <url><loc>https://www.noesisaudio.com/alternatives</loc></url>
   <url><loc>https://www.noesisaudio.com/privacy</loc></url>
 </urlset>

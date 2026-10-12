@@ -82,7 +82,7 @@ export default defineConfig({
         globIgnores: ['pdfjs/**', 'dict/**', 'ort/**', 'espeak/**'],
         importScripts: ['notify-sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        navigateFallbackDenylist: [/^\/api\//, /^\/privacy/, /^\/robots\.txt$/, /^\/sitemap\.xml$/], // the privacy page is a file of its own, not a screen of the app
+        navigateFallbackDenylist: [/^\/api\//, /^\/privacy/, /^\/listen-to-pdf/, /^\/alternatives/, /^\/robots\.txt$/, /^\/sitemap\.xml$/], // the privacy page is a file of its own, not a screen of the app
         // Voices are cached by the voice worker itself (Cache Storage 'noesis-voices').
         runtimeCaching: [{
           // The 11 MB ONNX runtime WASM is too big to precache; cache it the first time the engine loads.
