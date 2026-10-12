@@ -5,6 +5,11 @@ import { WORDMARK, MARK, TAGLINE } from "./brand-paths.js"
 // Inline SVG icons, 24px grid, currentColor stroke. No icon library needed.
 const P = {
   plus: 'M12 5v14M5 12h14',
+  person: 'M12 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8ZM4.5 20c1.1-3.4 3.9-5.2 7.5-5.2s6.4 1.8 7.5 5.2',
+  info: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18ZM12 11v5.5M12 7.5v.3',
+  next1: 'M9 6l6 6-6 6',
+  pip: 'M3 5h18v14H3ZM12 12h6v4h-6Z',
+  globe: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18ZM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9Z',
   play: 'M8 5.5v13a1 1 0 0 0 1.5.86l11-6.5a1 1 0 0 0 0-1.72l-11-6.5A1 1 0 0 0 8 5.5Z',
   pause: 'M8 5v14M16 5v14',
   prev: 'M11 7 6 12l5 5M18 7l-5 5 5 5',

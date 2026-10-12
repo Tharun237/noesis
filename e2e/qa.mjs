@@ -167,7 +167,7 @@ await step('change voice mid-listening: same sentence restarts in the new voice'
   await until(async () => (await playerState()).clock > 0.3, 10_000, 'playback')
   const before = await playerState()
   const changedAt = Date.now()
-  await page.getByRole('button', { name: 'Player menu' }).click()
+  await page.getByRole('button', { name: 'Document menu' }).click() // the voice is the document's: its menu, not the player's
   await page.getByRole('menuitem', { name: /Change voice/ }).click()
   await page.getByRole('button', { name: /^John/ }).click()
   await until(async () => (await docBy('On Listening')).voice === 'en_US-john-medium', 3000, 'voice saved')
@@ -191,18 +191,19 @@ await step('scrubber seeks', async () => {
 })
 
 await step('sleep timer sets', async () => {
-  await page.getByRole('button', { name: 'Player menu' }).click()
+  await page.getByRole('button', { name: /^Sleep timer/ }).first().click()
   await page.getByRole('menuitem', { name: 'Sleep in 10 minutes' }).click()
   const s = await playerState()
   expect(s.sleep?.until > Date.now(), 'sleep not set')
-  await page.getByRole('button', { name: 'Player menu' }).click()
+  await page.getByRole('button', { name: /^Sleep timer/ }).first().click()
   await page.getByRole('menuitem', { name: 'Turn sleep timer off' }).click()
 })
 
 await step('bookmark current sentence', async () => {
   await page.getByRole('button', { name: 'Bookmark this sentence' }).click()
   await until(async () => (await docBy('On Listening')).marks.length === 1, 3000, 'bookmark saved')
-  await page.getByRole('button', { name: 'Bookmarks & notes' }).click()
+  await page.getByRole('button', { name: 'Document menu' }).click()
+  await page.getByRole('menuitem', { name: 'Bookmarks and notes' }).click()
   await page.getByPlaceholder('Add a note').fill('QA note')
   await page.getByPlaceholder('Add a note').blur()
   await until(async () => (await docBy('On Listening')).marks[0].note === 'QA note', 3000, 'note saved')
@@ -414,7 +415,7 @@ await step('delete a document', async () => {
 
 await step('settings: dev sign-in turns on sync', async () => {
   await page.getByRole('button', { name: 'Settings' }).first().click()
-  await page.getByText('Account & sync', { exact: false }).first().waitFor({ timeout: 8000 })
+  await page.getByRole('button', { name: /^Account/ }).first().waitFor({ timeout: 8000 }) // the first section, open by default on a wide screen
   const dev = page.getByPlaceholder('test account name')
   await dev.waitFor({ timeout: 5000 }).catch(() => {})
   if (!(await dev.count())) return 'skipped (dev sign-in not enabled)'
@@ -435,6 +436,7 @@ const openDoc = async prefix => {
 
 await step('settings: switch to the built-in voice', async () => {
   await page.getByRole('button', { name: 'Settings' }).first().click().catch(() => {})
+  await page.getByRole('button', { name: /^Voice/ }).first().click()
   await page.getByRole('tab', { name: 'Built-in' }).click()
   expect(await app("m.settings.settings.get().voiceEngine") === 'system', 'engine not system')
   await page.getByRole('button', { name: 'Back', exact: true }).click()
@@ -534,7 +536,7 @@ await step('sleep at end of document stops instead of playing the next', async (
   await until(async () => ['voicing', 'ready'].includes((await docBy('QA Short 2'))?.status), 15000, 'text prepared')
   const id = (await docBy('QA Short 2')).id
   await app(`m.pl.open(${JSON.stringify(id)}, { at: 2, autoplay: false })`)
-  await page.getByRole('button', { name: 'Player menu' }).click()
+  await page.getByRole('button', { name: /^Sleep timer/ }).first().click()
   await page.getByRole('menuitem', { name: 'Sleep at end of document' }).click()
   expect((await playerState()).sleep?.doc, 'sleep-at-end not set')
   await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()

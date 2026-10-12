@@ -124,7 +124,7 @@ export function SearchBar({ doc, onHit, onClose }) {
 
 // ── "back to what's playing" ───────────────────────────────────────────────────────
 const LOOK_AGAIN_MS = 500
-export function JumpToNow({ active, bottom, onJump, find }) {
+export function JumpToNow({ active, top, bottom, onJump, find }) {
   const [away, setAway] = useState(false)
   const finder = useRef(find)
   finder.current = find
@@ -133,7 +133,9 @@ export function JumpToNow({ active, bottom, onJump, find }) {
     // Several reports can arrive together (the place was on screen, then a fling took it away): the LAST one is
     // how things are now. Reading the first left the button missing while the voice read on off screen (found
     // by the random customer).
-    const io = new IntersectionObserver(seen => setAway(!seen[seen.length - 1].isIntersecting), { rootMargin: '-60px 0px -140px 0px' })
+    // "On screen" is the part of the screen the customer can read: under the header, over the player. (The
+    // top used to be a fixed 60px, less than the header: a sentence hidden behind it counted as seen.)
+    const io = new IntersectionObserver(seen => setAway(!seen[seen.length - 1].isIntersecting), { rootMargin: `-${top}px 0px -${bottom}px 0px` })
     let el = null
     const look = () => {
       const now = (finder.current ? finder.current() : document.querySelector(`[data-i="${active}"]`)) || null
@@ -145,7 +147,7 @@ export function JumpToNow({ active, bottom, onJump, find }) {
     look()
     const again = setInterval(look, LOOK_AGAIN_MS)
     return () => { clearInterval(again); io.disconnect() }
-  }, [active])
+  }, [active, top, bottom])
   return (
     <AnimatePresence>
       {away && (

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useDragControls, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { T, label } from '../theme.js'
 import { Icon } from './icons.jsx'
@@ -189,7 +190,7 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
             onDragEnd={(e, info) => { if (info.offset.y > 110 || info.velocity.y > 600) onClose() }}
             style={{
               y, position: 'relative',
-              width: wide ? width : '100%', maxWidth: '100%', maxHeight: wide ? 'calc(100dvh - 48px)' : '92dvh', overflowY: 'auto',
+              width: wide ? width : '100%', maxWidth: '100%', maxHeight: wide ? 'calc(100dvh - 48px)' : '92dvh', overflowY: 'auto', overflowX: 'hidden',
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: wide ? T.r.xl : `${T.r.xl}px ${T.r.xl}px 0 0`,
               borderBottom: wide ? undefined : 'none', paddingBottom: wide ? 0 : 'env(safe-area-inset-bottom)',
               boxShadow: '0 30px 80px rgba(0,0,0,0.8)',
@@ -200,7 +201,7 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
               </div>
             )}
             {/* What is inside settles a moment after the sheet itself: the sheet arrives, then its content. */}
-            <div data-rise="sheet">{children}</div>
+            <div data-rise="sheet" style={{ minWidth: 0, maxWidth: '100%' }}>{children}</div>
           </motion.div>
         </motion.div>
       )}
@@ -211,13 +212,15 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
 // Popover menu anchored to its trigger.
 const MENU_W = 260
 const EDGE = 8
+const MENU_Z = 55 // over a sheet (50), whose buttons can open one; under the toast (60)
 
 // Popover menu anchored to its trigger. On open it measures the room around the trigger and
 // opens toward whichever side fits, so it never spills off-screen (e.g. the speed menu at the right edge).
 export function Menu({ trigger, items, align = 'right', up = false }) {
   const [open, setOpen] = useState(false)
-  const [place, setPlace] = useState({ side: align, up, maxH: 480 })
+  const [place, setPlace] = useState({ side: align, up, maxH: 480, x: 0, y: 0 })
   const ref = useRef(null)
+  const menu = useRef(null)
   const toggle = () => {
     if (!open && ref.current) {
       const r = ref.current.getBoundingClientRect()
@@ -227,28 +230,35 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
       const below = innerHeight - r.bottom - EDGE - 8
       const above = r.top - EDGE - 8
       const goUp = up ? above >= 200 || above > below : below < 200 && above > below
-      setPlace({ side, up: goUp, maxH: Math.max(160, goUp ? above : below) })
+      // where it hangs, from the edges of the window: x from the side it is tied to, y from the top or the bottom
+      setPlace({ side, up: goUp, maxH: Math.max(160, goUp ? above : below), x: side === 'left' ? r.left : innerWidth - r.right, y: (goUp ? innerHeight - r.top : r.bottom) + 8 })
     }
     setOpen(o => !o)
   }
   useEffect(() => {
     if (!open) return
-    const close = e => { if (!ref.current?.contains(e.target)) setOpen(false) }
+    const close = e => { if (!ref.current?.contains(e.target) && !menu.current?.contains(e.target)) setOpen(false) }
     const key = e => e.key === 'Escape' && setOpen(false)
+    // It is tied to where its button was: if the button moves (its page is scrolled, the window changes) the
+    // menu goes. A button that stays put keeps its menu: the reader scrolls by itself under the player's.
+    const was = ref.current.getBoundingClientRect()
+    const moved = () => { const r = ref.current?.getBoundingClientRect(); if (!r || Math.abs(r.top - was.top) > 1 || Math.abs(r.left - was.left) > 1) setOpen(false) }
     document.addEventListener('pointerdown', close)
     window.addEventListener('keydown', key)
-    return () => { document.removeEventListener('pointerdown', close); window.removeEventListener('keydown', key) }
+    window.addEventListener('scroll', moved, true)
+    window.addEventListener('resize', moved)
+    return () => { document.removeEventListener('pointerdown', close); window.removeEventListener('keydown', key); window.removeEventListener('scroll', moved, true); window.removeEventListener('resize', moved) }
   }, [open])
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       {trigger(toggle, open)}
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {open && (
-          <motion.div role="menu" initial={{ opacity: 0, y: place.up ? 12 : -12, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1, transition: T.spring }}
+          <motion.div ref={menu} role="menu" initial={{ opacity: 0, y: place.up ? 12 : -12, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1, transition: T.spring }}
             exit={{ opacity: 0, y: place.up ? 8 : -8, scale: 0.94, transition: { duration: 0.12, ease: 'easeIn' } }}
             style={{
-              position: 'absolute', [place.side]: 0, [place.up ? 'bottom' : 'top']: 'calc(100% + 8px)', minWidth: 230, maxWidth: `min(${MENU_W + 60}px, calc(100vw - ${EDGE * 2}px))`,
-              maxHeight: place.maxH, overflowY: 'auto', zIndex: 40,
+              position: 'fixed', [place.side]: place.x, [place.up ? 'bottom' : 'top']: place.y, minWidth: 230, maxWidth: `min(${MENU_W + 60}px, calc(100vw - ${EDGE * 2}px))`,
+              maxHeight: place.maxH, overflowY: 'auto', zIndex: MENU_Z,
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: T.r.lg, padding: 6,
               boxShadow: '0 24px 60px rgba(0,0,0,0.85)', transformOrigin: `${place.side} ${place.up ? 'bottom' : 'top'}`,
             }}>
@@ -267,12 +277,12 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
                 onPointerLeave={e => { e.currentTarget.style.background = 'transparent' }}>
                 {it.icon && <Icon name={it.icon} size={17} />}
                 <span style={{ flex: 1 }}>{it.label}</span>
-                {it.right && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub }}>{it.right}</span>}
+                {it.right && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', flexShrink: 0 }}>{it.right}</span>}
               </button>
             ))}
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
     </div>
   )
 }

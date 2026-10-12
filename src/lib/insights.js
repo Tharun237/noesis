@@ -114,6 +114,26 @@ export function splitSections(blocks, starts) {
   return out
 }
 
+// The document's emotional arc as a line for the player's progress bar: `buckets` points from start to end.
+// x is how far through the document a point is, by length of text (which is how its time runs); y is the
+// tone there, from -1 (dark) to 1 (bright), evened out with its neighbours and stretched to use the height.
+// A document with too few sentences for a shape gives no line. `sentences` is every sentence, in order.
+const ARC_MIN_PEAK = 0.25 // an even-toned document stays nearly flat instead of having its noise blown up
+export function arcLine(sentences, buckets = 72) {
+  const total = sentences.reduce((a, t) => a + t.length, 0)
+  if (!total || sentences.length < buckets / 2) return []
+  const text = Array.from({ length: buckets }, () => '')
+  let at = 0
+  for (const t of sentences) {
+    text[Math.min(buckets - 1, Math.floor(((at + t.length / 2) / total) * buckets))] += t + ' '
+    at += t.length
+  }
+  const raw = text.map(tone)
+  const even = raw.map((v, i) => (raw[Math.max(0, i - 1)] + v * 2 + raw[Math.min(buckets - 1, i + 1)]) / 4)
+  const peak = Math.max(ARC_MIN_PEAK, ...even.map(Math.abs))
+  return even.map((v, i) => ({ x: (i + 0.5) / buckets, y: v / peak }))
+}
+
 // Where the hard words are: for each section, how many of the document's hard words it holds in every
 // hundred words. `sections` as from splitSections, `words` as from hardWords.
 export function wordHeat(sections, words) {

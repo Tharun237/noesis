@@ -21,6 +21,7 @@ function useVoiceLabel(d) {
 import { Icon } from './icons.jsx'
 import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap } from './kit.jsx'
 import { Cover } from './Library.jsx'
+import { ArcScrubber } from './ArcScrubber.jsx'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
 const SLEEP = [[10, '10 minutes'], [20, '20 minutes'], [30, '30 minutes'], [45, '45 minutes'], [60, '1 hour'], [90, '1½ hours'], [120, '2 hours']]
@@ -57,12 +58,7 @@ export function PlayerBar({ wide, full }) {
       {waiting && <div style={{ fontSize: 12, color: T.sub }}>Waiting for the next sentence to generate</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
       <span style={{ minWidth: 52, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtTime(shown)}</span>
-      <input type="range" min={0} max={Math.max(1, Math.floor(total))} step={1} value={Math.floor(shown)} aria-label="Position"
-        disabled={!c}
-        onChange={e => setDrag(+e.target.value)}
-        onPointerUp={e => { seekTime(+e.currentTarget.value); setDrag(null) }}
-        onKeyUp={e => { if (drag !== null) { seekTime(drag); setDrag(null) } }}
-        style={{ flex: 1, minWidth: 0, accentColor: T.accent, height: 20, cursor: 'pointer', margin: 0 }} />
+      <ArcScrubber d={d} value={shown} max={total} disabled={!c} onChange={setDrag} onCommit={v => { if (drag !== null) { seekTime(v); setDrag(null) } }} />
       <span style={{ minWidth: 60, textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>-{fmtTime(remaining)}</span>
       </div>
     </div>
@@ -92,9 +88,9 @@ export function PlayerBar({ wide, full }) {
         <Transport />
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
           {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{gate != null ? `Ready in ${fmtWait(gate)}` : left}{sleepLine ? ` · ${sleepLine}` : ''}</span>}
-          {wide && <BookmarkButton d={d} i={i} />}
+          <BookmarkButton d={d} i={i} />
           {wide && <SpeedMenu />}
-          <MoreMenu d={d} />
+          <SleepMenu />
         </div>
       </div>
     </motion.div>
@@ -163,23 +159,22 @@ export function sleepText(sleep) {
 // toLocaleTimeString does) took 111 ms of a short session on a slowed processor: measured, e2e/feel.mjs.
 const CLOCK = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' })
 
-function MoreMenu({ d }) {
+// The player's one extra is the sleep timer, shown as what it is. There is no "more" menu here: the reader
+// already has one (the document's), and two "..." on one screen left the customer guessing which held what.
+// What used to hide in it is where it belongs: the bookmark is its own button beside this, the voice and
+// the choice about figures are in the document's menu.
+function SleepMenu() {
   const sleep = useStore(player, s => s.sleep)
-  const skip = useStore(settings, s => s.skipVisuals)
   const running = sleep?.until || sleep?.chapter || sleep?.doc
   const minsLeft = sleep?.until ? Math.max(1, Math.round((sleep.until - Date.now()) / 60000)) : null
   const runningRight = sleep?.until ? `${minsLeft} min left` : sleep?.chapter ? 'at end of chapter' : sleep?.doc ? 'at end of document' : 'off'
   const at = m => CLOCK.format(Date.now() + m * 60000)
   return (
-    <Menu up trigger={t => <IconButton icon="more" label="Player menu" onClick={t} />} items={[
+    <Menu up trigger={t => <IconButton icon="moon" label={running ? `Sleep timer: ${runningRight}` : 'Sleep timer'} active={!!running} onClick={t} />} items={[
       ...(running ? [{ label: 'Turn sleep timer off', icon: 'moon', right: runningRight, onClick: () => setSleep(null) }] : []),
       ...SLEEP.map(([m, l]) => ({ label: `Sleep in ${l}`, icon: minsLeft === m ? 'check' : undefined, right: at(m), onClick: () => setSleep({ until: Date.now() + m * 60000 }) })),
       { label: 'Sleep at end of chapter', icon: sleep?.chapter ? 'check' : undefined, onClick: () => setSleep({ chapter: true }) },
       { label: 'Sleep at end of document', icon: sleep?.doc ? 'check' : undefined, onClick: () => setSleep({ doc: true }) },
-      '-',
-      { label: 'Bookmark this sentence', icon: 'bookmark', onClick: () => toast(toggleMark(d.id, player.get().i) ? 'Bookmarked' : 'Bookmark removed') },
-      { label: skip ? 'Read figure & table summaries' : 'Skip figure & table summaries', icon: 'sparkle', onClick: () => settings.set({ skipVisuals: !skip }) },
-      { label: 'Change voice', icon: 'voice', right: voiceName(d.voice), onClick: () => openSheet('voice', { docId: d.id }) },
     ]} />
   )
 }

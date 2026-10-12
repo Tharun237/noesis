@@ -1,7 +1,7 @@
 import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, tab, openSheet, openSearch, closeSearch } from '../lib/nav.js'
+import { ui, tab, openSearch, closeSearch } from '../lib/nav.js'
 import { Icon } from './icons.jsx'
 
 // Phone tab bar in the ACS style: icon over label, white for the active tab with a short
@@ -9,15 +9,13 @@ import { Icon } from './icons.jsx'
 const TABS = [
   { id: 'library', icon: 'list', label: 'Library', run: () => { if (ui.get().searching) closeSearch(); else tab('library') } },
   { id: 'search', icon: 'search', label: 'Search', run: () => { tab('library'); openSearch() } },
-  { id: 'add', icon: 'plus', label: 'Add', run: () => openSheet('add') },
   { id: 'settings', icon: 'settings', label: 'Settings', run: () => tab('settings') },
 ]
 
 export function TabBar() {
   const view = useStore(ui, s => s.view)
   const searching = useStore(ui, s => s.searching)
-  const sheet = useStore(ui, s => s.sheet)
-  const current = sheet === 'add' ? 'add' : view === 'settings' ? 'settings' : searching ? 'search' : 'library'
+  const current = view === 'settings' ? 'settings' : searching ? 'search' : 'library'
   return (
     <nav aria-label="Main" style={{
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 32, display: 'flex', background: T.bg, borderTop: `1px solid ${T.border}`,

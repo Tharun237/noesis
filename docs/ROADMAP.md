@@ -21,6 +21,15 @@ doing by hand. `e2e/chaos.mjs` is an impatient random customer (it found nine mo
 same sixteen actions fell from 5,429 to about 3,850 ms and late frames from 50 to 28, with larger motion).
 Settings has a Motion card: a phone in battery saver was silently switching motion off.
 
+The design pass after that ("think like Apple's designers", "the settings inside is a mess, the three
+inside is a mess, no repetition"): every screen is photographed by `e2e/tour.mjs` and judged against nine
+questions in `.claude/skills/design/SKILL.md`, which also lists the decisions taken. In short: the reader has
+three views and a page pane that shows the real page with the spoken words marked; the book's emotional arc
+is the player's progress line, not a chart; there is one "..." per screen and one menu for a document
+wherever it appears; Settings is eight sections that each say what they are set to; Add is a button, not a
+tab. The library card's menu on a phone was being cut off after one row by its own card: menus are now drawn
+on the page itself, and the random customer checks for a covered menu.
+
 ## How the work is done
 
 | Role | Who | Does |

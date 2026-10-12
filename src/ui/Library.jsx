@@ -33,8 +33,8 @@ function LibraryAi({ hasBriefing }) {
     <Menu trigger={t => <IconButton icon="sparkle" label="Ask your library" onClick={t} />}
       items={[
         { label: 'Ask your library', icon: 'sparkle', onClick: () => openSheet('libraryask') },
-        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'list', onClick: () => openSheet('briefing') }, { label: 'Concept map', icon: 'grid', onClick: () => openSheet('conceptmap') }] : []),
-        { label: 'Your listening', icon: 'list', onClick: () => openSheet('listening') },
+        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'text', onClick: () => openSheet('briefing') }, { label: 'Concept map', icon: 'grid', onClick: () => openSheet('conceptmap') }] : []),
+        { label: 'Your listening', icon: 'waves', onClick: () => openSheet('listening') },
       ]} />
   )
 }
@@ -258,7 +258,8 @@ function MobileHeader({ summary }) {
           </div>
           {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
           <SortMenu />
-          <AccountChip compact />
+          {/* Adding is an action, not a place: a button here, not a tab below. */}
+          <IconButton icon="plus" label="Add" onClick={() => openSheet('add')} size={34} iconSize={18} style={{ background: T.text, color: T.bg, margin: '0 4px 0 2px' }} />
         </div>
       </div>
       {summary && (
@@ -303,7 +304,8 @@ const HUES = ['#AAFF00', '#00E5FF', '#00D4A8', '#2288FF', '#6EE7B7']
 const hueOf = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return HUES[h % HUES.length] }
 
 // `layoutId` makes the cover a shared element: the same cover moving and growing between two places.
-export function Cover({ d, w = 56, h = 74, layoutId }) {
+const COVER_W = 56 // a card's cover; its progress line is the same width
+export function Cover({ d, w = COVER_W, h = 74, layoutId }) {
   const Img = layoutId ? motion.img : 'img'
   const Box = layoutId ? motion.div : 'div'
   // layoutDependency: measured when it appears or goes (the two players swap), never on the player's own ticks.
@@ -407,20 +409,22 @@ const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
           <Menu trigger={toggle => <IconButton icon="more" label={`More options for ${d.title}`} onClick={toggle} />} items={docMenu(d)} />
         </div>
       </div>
-      {listened > 0 && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0 }}><Progress value={listened} height={2} color={T.faint} track="transparent" /></div>}
+      {listened > 0 && !d.finished && <div style={{ position: 'absolute', left: 12, width: COVER_W, bottom: 4 }}><Progress value={listened} height={2} color={T.text} track={T.surfaceTop} /></div>}
     </motion.div>
   )
 })
 
 export function docMenu(d) {
   return [
-    { label: 'Rename', icon: 'edit', onClick: () => { const t = prompt('Rename', d.title); if (t?.trim()) patch(d.id, { title: t.trim(), renamed: true }) } },
     { label: 'Change voice', icon: 'voice', right: voiceName(d.voice), onClick: () => openSheet('voice', { docId: d.id }) },
+    { label: 'Listen in another language', icon: 'globe', onClick: () => openSheet('language', { docId: d.id }) },
+    '-',
+    { label: 'Rename', icon: 'edit', onClick: () => { const t = prompt('Rename', d.title); if (t?.trim()) patch(d.id, { title: t.trim(), renamed: true }) } },
     { label: 'Add to collection', icon: 'folder', onClick: () => openSheet('collect', { docId: d.id }) },
     { label: d.archived ? 'Move to queue' : 'Archive', icon: 'archive', onClick: () => patch(d.id, { archived: !d.archived }) },
     '-',
     { label: 'Export transcript', icon: 'text', disabled: !d.total, onClick: () => exportTranscript(d.id) },
-    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'when fully voiced', onClick: () => exportAudio(d.id) },
+    { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'not yet', onClick: () => exportAudio(d.id) },
     d.status === 'error' && { label: 'Try again', icon: 'refresh', onClick: () => reprocess(d.id) },
     '-',
     { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) go('library') } } },

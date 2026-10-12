@@ -103,5 +103,7 @@ export default defineConfig({
   worker: { format: 'es' },
   server: { headers: isolation },
   preview: { headers: isolation },
-  build: { target: 'es2022' },
+  // Motion is a file of its own: the app's own code can then change without the customer fetching the
+  // animation library again (and where the bundler puts it no longer depends on what happens to import what).
+  build: { target: 'es2022', rollupOptions: { output: { manualChunks: id => (/node_modules[\/](framer-motion|motion-dom|motion-utils|motion)[\/]/.test(id) ? 'motion' : undefined) } } },
 })

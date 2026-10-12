@@ -34,6 +34,9 @@ export function go(view, docId = null) {
 
 // Phone tab bar: switching tabs replaces the entry instead of stacking pages, like a native tab bar.
 export function tab(view) {
+  // A section open inside a tab (Settings, then Voice) is an entry on top of the tab's own. It is closed
+  // first, so a tab never leaves one behind it, and tapping the tab you are on returns to its first page.
+  if (history.state?.panel) { addEventListener('popstate', () => tab(view), { once: true }); return backOnce() }
   const s = ui.get()
   if (s.view === view && !s.sheet && !s.searching) return
   history.replaceState({ view, docId: null, depth: depth() }, '')

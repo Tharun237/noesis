@@ -225,6 +225,20 @@ const inspect = () => page.evaluate(async () => {
   if (st.view === 'reader' && heads !== 1) problems.push(`the reader shows ${heads} header bars`)
   if (st.view !== 'reader' && heads) problems.push('a reader header is on screen outside the reader')
   if (scrollY > document.documentElement.scrollHeight - innerHeight + 2) problems.push('scrolled past the end of the page')
+  // a sheet or a menu whose content is wider than it is: text is being cut off at its edge
+  for (const box of document.querySelectorAll('[role=dialog], [role=menu]')) {
+    if (box.scrollWidth > box.clientWidth + 2) problems.push(`the "${box.getAttribute('aria-label') || box.getAttribute('role')}" ${box.getAttribute('role') === 'menu' ? 'menu' : 'sheet'} is wider inside than it is: its content is cut off at the side`)
+  }
+  // a menu something else is drawn over, or that its own holder cuts off (the library card's menu showed one row)
+  for (const m of document.querySelectorAll('[role=menu]')) {
+    if (+getComputedStyle(m).opacity < 0.99) continue // still arriving or leaving
+    const b = m.getBoundingClientRect()
+    const hit = (x, y) => { const e = document.elementFromPoint(x, y); return e && m.contains(e) }
+    if (b.bottom <= innerHeight && b.top >= 0 && !(hit(b.left + b.width / 2, b.top + 8) && hit(b.left + b.width / 2, b.bottom - 8))) problems.push('a menu is open but part of it is covered or cut off')
+  }
+  // one meaning for one symbol, one "more" for one screen: two "..." buttons visible at once is a design fault
+  const mores = [...document.querySelectorAll('[data-ico="more"]')].filter(e => { const b = e.getBoundingClientRect(); const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return b.width > 0 && top && (top === e || e.contains(top) || top.contains(e)) && !e.closest('[role=button]') })
+  if (st.view === 'reader' && mores.length > 1) problems.push(`${mores.length} "more" (...) buttons are on screen at once in the reader`)
 
   // blank? sample the area between the header and the bottom bars
   const header = document.querySelector('header')
@@ -236,7 +250,7 @@ const inspect = () => page.evaluate(async () => {
   // Content is what the page is FOR: text and pictures in the flow of the page. A floating button ("Back to
   // now"), a header or a bottom bar over an empty page is not content. (The first version counted them, and
   // so called an empty reader with one floating button "not blank": caught by putting a known bug back.)
-  const floating = n => { for (let e = n; e && e !== screen && e !== document.body; e = e.parentElement) { if (e.dataset.testid === 'focus-word') return false; if (e.tagName === 'BUTTON' || e.tagName === 'HEADER') return true; const pos = getComputedStyle(e).position; if (pos === 'fixed' || pos === 'sticky') return true } return false }
+  const floating = n => { for (let e = n; e && e !== screen && e !== document.body; e = e.parentElement) { if (e.dataset.testid === 'focus-word') return false; if ((e.tagName === 'BUTTON' && st.view === 'reader') || e.tagName === 'HEADER') return true; const pos = getComputedStyle(e).position; if (pos === 'fixed' || pos === 'sticky') return true } return false }
   let hits = 0, canvases = 0, drawn = 0
   for (let r = 1; r <= 7; r++) for (let c = 1; c <= 4; c++) {
     let n = document.elementFromPoint(innerWidth * c / 5, top + (bottom - top) * r / 8)
@@ -263,7 +277,7 @@ const inspect = () => page.evaluate(async () => {
   const pl = src ? (await import(src)).player.get() : null
   const tab = document.querySelector('[role=tab][aria-selected="true"]')?.innerText || ''
   if (pl?.playing && pl.id && st.view === 'reader' && st.docId === pl.id && !modal.length && tab !== 'Focus') {
-    const now = tab === 'Pages' ? document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"]') : document.querySelector(`article [data-i="${pl.i}"]`)
+    const now = tab === 'Pages' ? document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"] > div') : document.querySelector(`article [data-i="${pl.i}"]`)
     const b = now?.getBoundingClientRect()
     const seen = !!b && b.bottom > top && b.top < bottom
     const offered = !!document.querySelector('button[aria-label="Scroll to what is playing"]')

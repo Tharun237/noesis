@@ -188,12 +188,12 @@ function AddForm({ wide }) {
         </Field></Appear>
       )}
 
-      <Field title="Listen to" hint={keyed ? null : 'Summaries need a free AI key. Add one in Settings.'}>
+      <Field title="Listen to">
         <Segmented value={mode} onChange={setMode} disabled={keyed ? [] : ['long', 'short']} size="sm"
           options={[{ value: 'full', label: 'Full text' }, { value: 'long', label: 'Long summary' }, { value: 'short', label: 'Short summary' }]} />
       </Field>
 
-      <Field title="Language" hint={keyed ? null : 'Translation needs a free AI key. Add one in Settings.'}>
+      <Field title="Language" hint={keyed ? null : 'A summary or another language needs your own AI key. Add one in Settings.'}>
         <select value={target || 'orig'} onChange={e => setTarget(e.target.value === 'orig' ? undefined : e.target.value)}
           style={{ ...inputStyle, appearance: 'auto' }} aria-label="Language">
           <option value="orig" style={{ background: T.bg }}>Original</option>

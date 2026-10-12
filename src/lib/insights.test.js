@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { POSITIVE, NEGATIVE, tone, arc, splitSections, hardWords, wordHeat } from './insights.js'
+import { POSITIVE, NEGATIVE, tone, arc, splitSections, hardWords, wordHeat, arcLine } from './insights.js'
 
 test('POSITIVE and NEGATIVE are about 120 lower-case words each, with no word in both', () => {
   for (const set of [POSITIVE, NEGATIVE]) {
@@ -78,4 +78,16 @@ test('wordHeat counts the hard words of each section in every hundred words', ()
   assert.deepEqual(heat.map(h => [h.title, h.start]), [['One', 0], ['Two', 9]])
   assert.equal(heat[0].density, 0)
   assert.ok(Math.abs(heat[1].density - (2 / 6) * 100) < 1e-9)
+})
+
+test('arcLine gives one point for each stretch of the document, up where the words are bright and down where they are dark', () => {
+  const bright = Array.from({ length: 40 }, () => 'This is a wonderful, happy and beautiful day of joy.')
+  const dark = Array.from({ length: 40 }, () => 'This is a terrible, sad and awful day of pain.')
+  const line = arcLine([...bright, ...dark], 8)
+  assert.equal(line.length, 8)
+  assert.ok(line[0].y > 0.5 && line[7].y < -0.5, JSON.stringify(line))
+  assert.ok(line.every((p, i) => p.x > 0 && p.x < 1 && (i === 0 || p.x > line[i - 1].x)))
+  assert.ok(line.every(p => Math.abs(p.y) <= 1))
+  assert.deepEqual(arcLine(['Too short for a shape.'], 8), [])
+  assert.deepEqual(arcLine([], 8), [])
 })

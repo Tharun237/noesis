@@ -82,6 +82,7 @@ export function Reader({ wide }) {
   // The sheet on screen and the history entry behind it must never disagree: if navigation changed the entry
   // under an open sheet, the sheet follows it. (Back must always close what is on top.)
   useEffect(() => ui.sub(() => setPanelState(p => (!p || (wide && p === 'ask') || history.state?.panel === p ? p : history.state?.panel || null))), [wide])
+  const keyed = useStore(settings, s => hasAiKey(s))
   const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [voiceState, setVoiceState] = useState('off')
@@ -170,9 +171,12 @@ export function Reader({ wide }) {
   const pagesAvailable = d?.kind === 'pdf' && hasSource === true
   const view = readerView === 'focus' ? 'focus' : pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
   // "Both": the flowing text with the original page beside it. A wide screen only; elsewhere it is the text.
-  const sideBySide = wide && pagesAvailable && !pdfFail && readerView === 'both'
-  const pageOf = i => (doc && i >= 0 && i < doc.segs.length ? doc.blocks[doc.segs[i].b].p ?? null : null)
-  const [seenPage, setSeenPage] = useState(null) // the page of the text at the top of the screen, while nothing is being read
+  // The original page beside the text is a pane the reader opens and closes (wide screens), like Contents on
+  // the other side. It is not a view of its own: the text is the same text with or without it.
+  const pagePane = useStore(settings, s => !!s.pagePane)
+  const sideBySide = wide && pagesAvailable && !pdfFail && view === 'text' && pagePane
+  useEffect(() => { if (readerView === 'both') settings.set({ readerView: 'text', pagePane: true }) }, [readerView]) // its old name, as a mode
+  const [seenAt, setSeenAt] = useState(null) // the sentence at the top of the screen: what the reader is looking at
   // Sentence i belongs to block segs[i].b, so its page is blocks[segs[i].b].p (1-based; older
   // documents prepared before pages were linked have no p).
   const activePage = view === 'pages' && doc && active >= 0 ? (doc.blocks[doc.segs[active]?.b]?.p ?? null) : null
@@ -238,9 +242,9 @@ export function Reader({ wide }) {
   useLayoutEffect(() => { arriveCover(id, coverRef.current) }, [id])
   useLayoutEffect(() => { if (!present && history.state?.view === 'library') leaveCover(id, coverRef.current) }, [present, id])
 
-  // Side by side with nothing being read: the page follows the reader's own scrolling.
+  // The page beside the text follows the reader's own scrolling (and the voice, while it is reading: below).
   useEffect(() => {
-    if (!sideBySide || active >= 0 || !doc) return undefined
+    if (!sideBySide || !doc) return undefined
     let raf = 0
     const look = () => {
       raf = 0
@@ -248,14 +252,14 @@ export function Reader({ wide }) {
       if (!col) return
       const r = col.getBoundingClientRect()
       const el = document.elementFromPoint(r.left + r.width / 2, HEADER_H + SUBROW_H + SEEN_BELOW)?.closest('[data-i]')
-      if (el) setSeenPage(pageOf(+el.dataset.i))
+      if (el) setSeenAt(+el.dataset.i)
     }
     const kick = () => { if (!raf) raf = requestAnimationFrame(look) }
     kick()
     addEventListener('scroll', kick, { passive: true })
     return () => { removeEventListener('scroll', kick); if (raf) cancelAnimationFrame(raf) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sideBySide, active, doc])
+  }, [sideBySide, doc])
 
   // A change of view keeps the reader's place. Focus is one screen: it starts at the top. Coming back to the
   // text, the page goes to the sentence that was being read, not to the first line of the book.
@@ -279,10 +283,21 @@ export function Reader({ wide }) {
   const askDocked = wide && panel === 'ask'
   // What is being said, for the page views: they mark the sentence and, inside it, the word.
   const spoken = doc && active >= 0 && active < doc.segs.length ? { text: doc.segs[active].t, dur: doc.durs[active], tail: doc.tails?.[active] || 0, words: typo.words } : null
-  // Where "now" is on the original pages: the mark on the sentence, or its page while the mark is not found yet.
-  const nowOnPage = () => document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"]') || document.querySelector(`[data-testid="page-view"] [data-page="${activePage}"]`)
+  // Where "now" is on the original pages: the first marked line of the sentence (not the mark's holder, which
+  // is as large as the page: a page half on screen is not the sentence on screen), or its page while the mark
+  // is not found yet.
+  const nowOnPage = () => document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"] > div') || document.querySelector(`[data-testid="page-view"] [data-page="${activePage}"]`)
   const showPane = sideBySide && !askDocked && !!doc // Ask takes the same side of the screen: one at a time
-  const panePage = showPane ? (pageOf(active) ?? seenPage ?? pageOf(d.pos || 0) ?? 1) : null
+  // Which page that is. A document whose pages are linked to its text knows exactly. One that is not (it was
+  // added before pages were linked, or read by AI narration) is placed by how far through the text it is, and
+  // the label says "about": a page that sat on the cover while the text moved on was a picture, not a feature.
+  const pageFor = i => {
+    if (i == null || i < 0 || !doc || i >= doc.segs.length) return null
+    if (linked) return doc.blocks[doc.segs[i].b].p ?? null
+    return numPages > 0 ? 1 + Math.round((i / Math.max(1, doc.segs.length - 1)) * (numPages - 1)) : null
+  }
+  const reading = isPlaying && playId === id
+  const panePage = showPane ? (pageFor(reading ? active : seenAt ?? active) ?? pageFor(active) ?? pageFor(d.pos || 0) ?? 1) : null
   const dock = (showToc ? 1 : 0) + (askDocked ? 2 : 0) + (showPane ? 4 : 0)
   const bottom = playerHeight(wide, true, !!playId)
   const headH = HEADER_H + SUBROW_H // every document has the view switch: Text, Focus, and Pages for a PDF on this device
@@ -297,32 +312,30 @@ export function Reader({ wide }) {
           <IconButton icon="back" label="Back to library" onClick={goBack} />
           {wide && headings.length > 1 && <IconButton icon="toc" label={tocOpen ? 'Hide contents' : 'Show contents'} active={tocOpen} onClick={() => settings.set({ tocOpen: !tocOpen })} />}
           <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 6px' }}>{d.title}</div>
-          <IconButton icon="search" label="Find in document" active={searching} onClick={() => setSearching(!searching)} />
+          {wide && <IconButton icon="search" label="Find in document" active={searching} onClick={() => setSearching(!searching)} />}
           {!wide && headings.length > 1 && <IconButton icon="toc" label="Contents" onClick={() => setPanel('toc')} />}
           <IconButton icon="type" label="Reading settings" onClick={() => setPanel('type')} />
-          {wide && <IconButton icon="bookmark" label="Bookmarks & notes" onClick={() => setPanel('marks')} />}
+          {wide && pagesAvailable && view === 'text' && <IconButton icon="file" label={pagePane ? 'Hide the original page' : 'Show the original page'} active={pagePane} onClick={() => settings.set({ pagePane: !pagePane })} />}
           {speechSupported() && <VoiceControl onState={st => { setVoiceState(st); if (st !== 'listening') { setSaying(''); setDone(null) } }} onHeard={onHeard} onInterim={setSaying} />}
           <IconButton icon="sparkle" label="Ask about this document" active={panel === 'ask'} onClick={() => setPanel(panel === 'ask' ? null : 'ask')} />
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
-            items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
-              ...(view === 'pages' || sideBySide ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
-              ...(floatingSupported() ? [{ label: 'Float the words over other windows', icon: 'eye', onClick: float }, '-'] : []),
-              { label: 'Insights: emotional arc and hard words', icon: 'list', onClick: () => setPanel('insights') },
-              { label: 'Explain what I just heard', icon: 'sparkle', onClick: () => quick('explain') },
-              { label: 'Skim this section', icon: 'sparkle', onClick: () => quick('skim') },
+            items={[...(wide ? [] : [{ label: 'Find in document', icon: 'search', onClick: () => setSearching(true) }]),
+              { label: 'Bookmarks and notes', icon: 'bookmark', onClick: () => setPanel('marks') },
+              { label: 'Hard words', icon: 'list', onClick: () => setPanel('insights') },
+              ...(view === 'pages' || sideBySide ? [{ label: 'Invert the page colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }] : []),
+              ...(floatingSupported() ? [{ label: 'Float the words over other windows', icon: 'pip', onClick: float }] : []),
               '-',
-              { label: 'Listen in another language', icon: 'sparkle', onClick: () => openSheet('language', { docId: d.id }) },
               ...docMenu(d)]} />
         </div>
         {d && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: SUBROW_H, padding: `0 ${wide ? 20 : 14}px 10px` }}>
-            <div style={{ width: !pagesAvailable ? 164 : wide ? 320 : 240, flexShrink: 0 }}>
-              <Segmented size="sm" value={sideBySide ? 'both' : view}
-                options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), ...(pagesAvailable && wide ? [{ value: 'both', label: 'Both' }] : []), { value: 'focus', label: 'Focus' }]}
+            <div style={{ width: pagesAvailable ? 240 : 164, flexShrink: 0 }}>
+              <Segmented size="sm" value={view}
+                options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), { value: 'focus', label: 'Focus' }]}
                 onChange={v => { setPdfFail(false); settings.set({ readerView: v }) }} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : showPane && numPages > 0 ? `Page ${panePage} of ${numPages}` : ''}
+              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : showPane && numPages > 0 ? `${linked ? 'Page' : 'About page'} ${panePage} of ${numPages}` : ''}
             </div>
             {/* The works cited in the paragraph being heard. It lives here, not floating over the page: the bottom
                 of the screen already holds the player, the status pill and toasts. */}
@@ -454,20 +467,20 @@ export function Reader({ wide }) {
 
       {sheet('cites', 'Cited here', panel === 'cites' && citedOpen.length
         ? <Suspense fallback={null}><CitationSheet refs={citedOpen} d={d} onClose={() => setPanel(null)} /></Suspense> : null, 560)}
-      <JumpToNow active={active} bottom={bottom} find={view === 'pages' ? nowOnPage : undefined}
+      <JumpToNow active={active} top={headH} bottom={bottom} find={view === 'pages' ? nowOnPage : undefined}
         onJump={() => { userScroll.current = 0; view === 'pages' ? nowOnPage()?.scrollIntoView({ block: 'center', behavior: scrollBehavior() }) : scrollToSentence(active) }} />
 
       {sheet('toc', 'Contents', <div style={{ padding: '20px 10px 24px' }}><div style={{ ...label, padding: '0 12px 12px' }}>Contents</div>
         <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} onClose={() => setPanel(null)} /></div>, 480)}
       {sheet('type', 'Reading settings', <ReadingSettings wide={wide} />, 460)}
-      {sheet('marks', 'Bookmarks & notes', <Marks d={d} doc={doc} offs={offs} rate={rate} onSeek={onSeek} onClose={() => setPanel(null)} />, 520)}
+      {sheet('marks', 'Bookmarks and notes', <Marks d={d} doc={doc} offs={offs} rate={rate} onSeek={onSeek} onClose={() => setPanel(null)} />, 520)}
       <VoiceHud state={voiceState} words={saying} done={done} bottom={bottom} playing={isPlaying && playId === id} />
-      {sheet('insights', 'Insights', panel === 'insights' && doc ? <Suspense fallback={null}><Insights doc={doc} title={d.title}
+      {sheet('insights', 'Hard words', panel === 'insights' && doc ? <Suspense fallback={null}><Insights doc={doc} title={d.title}
         onSeek={i => { setPanel(null); onSeek(i) }}
         onAsk={word => { setAskAuto({ q: `Explain the word "${word}" as it is used in this document, in two plain sentences.`, n: Date.now() }); setPanel('ask') }} /></Suspense> : null, 560)}
       {sheet('tool', tool?.kind === 'sonify' ? 'Heard as sound' : 'The equation, taken apart', panel === 'tool' && tool && doc?.blocks[tool.bi]
         ? <Suspense fallback={null}><BlockTool key={tool.kind + tool.bi} tool={tool} doc={doc} d={d} onClose={() => setPanel(null)} /></Suspense> : null, 560)}
-      {sheet('ask', 'Ask about this document', <div style={{ height: '78dvh' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} /></div>)}
+      {sheet('ask', 'Ask about this document', <div style={{ height: keyed ? '78dvh' : 'auto' }}><AskPanel d={d} doc={doc} onClose={() => setPanel(null)} auto={askAuto} onSeek={onSeek} /></div>)}
     </div>
   )
 }
