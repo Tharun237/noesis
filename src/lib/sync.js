@@ -13,12 +13,13 @@
 // send what of ours is newer". If two devices write the same record in the same moment, whichever write
 // landed second is what the folder holds; the device whose copy is newer notices on its next round that the
 // folder is behind and sends its copy again. So they end on the newest, whatever the order.
-import { createStore as idbStore, get, set } from 'idb-keyval'
+import { get, set } from 'idb-keyval'
+import { openStore, canStore } from './db.js'
 import { createStore } from './store.js'
 import * as drive from './drive.js'
-import { onShelf, takeShelf, leaveShelf } from './shelf.js'
+import { takeShelf, leaveShelf } from './shelf.js'
 
-const store = idbStore(onShelf('noesis-sync'), 'sync')
+const store = openStore('noesis-sync', 'sync')
 export const account = createStore({ user: null, checked: false, google: false, dev: false, reachable: true })
 export const syncState = createStore({ status: 'idle', last: 0, error: null })
 
@@ -253,6 +254,7 @@ async function resetFor(user) {
 }
 
 export async function startSync() {
+  if (!canStore) return account.set({ checked: true }) // nothing can be kept here, so there is nothing to keep in step
   const [config, me] = await Promise.all([
     fetch('/api/auth/config').then(r => (r.ok ? r.json() : {})).catch(() => ({})),
     fetch('/api/auth/me').then(r => (r.ok ? r.json() : { user: null })).catch(() => null),

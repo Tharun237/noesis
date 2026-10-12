@@ -1,0 +1,6 @@
+# Noesis: everything public may be read; the server's own endpoints are not pages.
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://www.noesisaudio.com/sitemap.xml

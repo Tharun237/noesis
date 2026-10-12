@@ -15,10 +15,10 @@
 // stack: there it is a Motion value per word, here it is one style rule and no script.
 import { useState } from 'react'
 import { T, eyebrow, label } from '../theme.js'
-import { go, openSheet, closeWelcome, pushPanel } from '../lib/nav.js'
+import { go, openSheet, closeWelcome, pushPanel, toast } from '../lib/nav.js'
 import { useStore } from '../lib/store.js'
 import { account } from '../lib/sync.js'
-import { addDocument } from '../lib/library.js'
+import { addDocument, library } from '../lib/library.js'
 import { VOICES } from '../lib/voices.js'
 import { LANGS } from '../lib/lang.js'
 import { Icon } from './icons.jsx'
@@ -89,8 +89,10 @@ const VIEW_SAYS = {
 export function Landing({ wide, hasLibrary }) {
   // someone coming back (a new device, or after signing out) looks for this here, not three taps into Settings
   const canSignIn = useStore(account, a => a.checked && (a.google || a.dev) && !a.user)
-  const add = () => openSheet('add')
-  const sample = async () => { const id = await addDocument({ kind: 'text', name: SAMPLE.title, title: SAMPLE.title, text: SAMPLE.text }); go('reader', id) }
+  const noStorage = useStore(library, s => !!s.noStorage) // this browser will not let a page keep anything (db.js)
+  const NO_ROOM = 'This browser is not letting Noesis keep anything on this device. Open Noesis in a normal browser window to add a document.'
+  const add = () => (noStorage ? toast(NO_ROOM) : openSheet('add'))
+  const sample = async () => { if (noStorage) return toast(NO_ROOM); const id = await addDocument({ kind: 'text', name: SAMPLE.title, title: SAMPLE.title, text: SAMPLE.text }); go('reader', id) }
   const pad = wide ? 40 : 24
   const gap = wide ? 168 : 104 // between one idea and the next
   const h2 = { margin: 0, fontSize: wide ? 60 : 36, lineHeight: 1.02, letterSpacing: '-0.045em', fontWeight: 800, color: T.text }
@@ -134,6 +136,7 @@ export function Landing({ wide, hasLibrary }) {
                 Try a sample
               </Button>
             </div>
+            {noStorage && <p role="status" style={{ margin: '16px 0 0', maxWidth: 520, fontSize: 13.5, lineHeight: 1.55, color: T.sub }}>{NO_ROOM}</p>}
           </div>
           <NowReading wide={wide} />
         </section>

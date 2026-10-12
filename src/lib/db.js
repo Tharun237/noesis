@@ -6,9 +6,17 @@ import { onShelf } from './shelf.js'
 //   content — source file + listening text per document, loaded on open
 //   audio   — one compact Opus record per sentence, loaded on play
 // Each is on the shelf of whoever is using the device (shelf.js): signing out opens an empty library.
-const meta = idbStore(onShelf('noesis-meta'), 'meta')
-const content = idbStore(onShelf('noesis-content'), 'content')
-const audio = idbStore(onShelf('noesis-audio'), 'audio')
+// A few browsers give a page no storage at all (some crawlers, some locked-down in-app browsers). Opening a
+// store there throws while the app is still loading, and the customer (or the search engine) got a black
+// page. So a store is only opened where there is somewhere to open it; without one, every read and write
+// comes back as a failure (never thrown while the app is loading), and the library says so (library.js
+// boot) instead of the app not starting.
+export const canStore = typeof indexedDB !== 'undefined' && !!indexedDB
+const noStore = () => Promise.reject(new Error('This browser gives Noesis no storage'))
+export const openStore = (name, table) => (canStore ? idbStore(onShelf(name), table) : noStore)
+const meta = openStore('noesis-meta', 'meta')
+const content = openStore('noesis-content', 'content')
+const audio = openStore('noesis-audio', 'audio')
 
 export const db = {
   allMeta: () => values(meta),

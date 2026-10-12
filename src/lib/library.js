@@ -1,5 +1,5 @@
 import { createStore, uid } from './store.js'
-import { db, persistStorage } from './db.js'
+import { db, persistStorage, canStore } from './db.js'
 import { onShelf } from './shelf.js'
 import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf } from './ai.js'
@@ -477,7 +477,11 @@ async function prepare(id) {
 
 // ── actions ───────────────────────────────────────────────────────────────────────────
 export async function boot() {
-  const [metas, keys] = await Promise.all([db.allMeta(), db.audioKeys()])
+  // This browser may give the page no storage (db.js canStore), or refuse it. The app still opens: an empty
+  // library, which shows the welcome page, and that page says documents cannot be kept here.
+  const kept = canStore ? await Promise.all([db.allMeta(), db.audioKeys()]).catch(e => { console.warn('No storage in this browser:', e?.message || e); return null }) : null
+  if (!kept) return library.set({ loaded: true, noStorage: true })
+  const [metas, keys] = kept
   for (const k of keys) {
     const j = k.lastIndexOf(':')
     voicedSet(k.slice(0, j)).add(+k.slice(j + 1))

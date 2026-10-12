@@ -169,7 +169,7 @@ export function startHistory() {
   db.getHistory().then(saved => {
     if (saved) historyStore.set({ log: saved })
     loaded = true
-  })
+  }, () => { /* no storage in this browser (db.js): nothing is counted, nothing is saved */ })
   // Documents finished before this feature existed are the baseline, never
   // back-filled: only a document that was unfinished here and becomes
   // finished is recorded.
