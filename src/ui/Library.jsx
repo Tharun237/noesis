@@ -1,6 +1,6 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react'
-import { leaveCover, arriveCover } from '../lib/coverflight.js'
+import { motion, AnimatePresence } from 'motion/react'
+import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet, closeSearch } from '../lib/nav.js'
@@ -22,13 +22,10 @@ const MODE = { long: 'Long summary', short: 'Short summary' }
 
 // What the customer's AI can do across the whole library, behind one button: the header stays the same
 // width on a phone however many of these there are.
-// The large title scrolls away with the list; its name then appears in the bar, tied to the scroll itself
-// (no React renders), so the customer always knows which shelf they are on.
+// The large title scrolls away with the list; its name then appears in the bar, tied to the scroll itself by
+// the style sheet (press.js: no script runs while scrolling), so the customer always knows which shelf they are on.
 function BarTitle({ name }) {
-  const { scrollY } = useScroll()
-  const opacity = useTransform(scrollY, [84, 124], [0, 1])
-  const y = useTransform(scrollY, [84, 124], [6, 0])
-  return <motion.span aria-hidden style={{ opacity, y, fontSize: 15, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</motion.span>
+  return <span aria-hidden data-bartitle="" style={{ fontSize: 15, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
 }
 
 function LibraryAi({ hasBriefing }) {
@@ -68,6 +65,7 @@ export function Library({ wide }) {
   const hours = docs.reduce((a, d) => a + docDuration(d), 0)
   const summary = total > 0 && `Your library · ${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
 
+  const order = useMemo(() => docs.map(d => d.id).join(), [docs])
   return (
     <div style={{ display: 'flex', minHeight: '100%' }}>
       {wide && <Sidebar />}
@@ -79,8 +77,8 @@ export function Library({ wide }) {
               display: 'grid', gap: wide ? 8 : 2, padding: wide ? 0 : '0 8px', position: 'relative',
               gridTemplateColumns: wide && view === 'grid' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
             }}>
-              <AnimatePresence initial={false} mode="popLayout">
-                {docs.map(d => <DocCard key={d.id} d={d} playing={d.id === playingId} />)}
+              <AnimatePresence mode="popLayout">
+                {docs.map((d, i) => <DocCard key={d.id} d={d} i={i} order={order} glide={wide} playing={d.id === playingId} />)}
               </AnimatePresence>
             </div>
             {loaded && docs.length === 0 && (
@@ -106,7 +104,7 @@ function SidebarItem({ id, icon, name, onRemove, filter, count }) {
         fontWeight: filter === id ? 600 : 500, cursor: 'pointer', textAlign: 'left',
       }}>
       {/* The marker is one object: it slides to the shelf that was chosen. */}
-      {filter === id && <motion.span layoutId="side-pill" transition={T.spring} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: T.r.sm, background: T.surfaceHi }} />}
+      {filter === id && <motion.span layoutId="side-pill" layoutDependency={filter} transition={T.spring} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: T.r.sm, background: T.surfaceHi }} />}
       <Icon name={icon} size={17} />
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
       <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{count}</span>
@@ -280,15 +278,15 @@ function MobileHeader({ summary }) {
       </AnimatePresence>
       {summary && <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 16px 12px', scrollbarWidth: 'none' }}>
         {chips.map(([id, name]) => (
-          <motion.button key={id} type="button" onClick={() => ui.set({ filter: id })} whileTap={{ scale: 0.96 }} transition={T.press}
+          <button key={id} type="button" onClick={() => ui.set({ filter: id })} data-press=""
             style={{
               position: 'relative', height: 32, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, flexShrink: 0,
               background: 'transparent', color: filter === id ? T.bg : T.sub, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}>
             {/* The white pill is one object: it slides to the shelf that was chosen, so the eye follows the choice. */}
-            {filter === id && <motion.span layoutId="shelf-pill" transition={T.spring} style={{ position: 'absolute', inset: -1, borderRadius: T.r.pill, background: T.text }} />}
+            {filter === id && <motion.span layoutId="shelf-pill" layoutDependency={filter} transition={T.spring} style={{ position: 'absolute', inset: -1, borderRadius: T.r.pill, background: T.text }} />}
             <span style={{ position: 'relative' }}>{name}</span>
-          </motion.button>
+          </button>
         ))}
         <button type="button" aria-label="New collection" onClick={() => { const n = prompt('New collection name'); if (n?.trim()) ui.set({ filter: addCollection(n) }) }}
           style={{ height: 32, width: 32, borderRadius: T.r.pill, border: `1px dashed ${T.borderHi}`, background: 'transparent', color: T.sub, display: 'grid', placeItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
@@ -308,7 +306,8 @@ const hueOf = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt
 export function Cover({ d, w = 56, h = 74, layoutId }) {
   const Img = layoutId ? motion.img : 'img'
   const Box = layoutId ? motion.div : 'div'
-  const shared = layoutId ? { layoutId, transition: T.settle } : {}
+  // layoutDependency: measured when it appears or goes (the two players swap), never on the player's own ticks.
+  const shared = layoutId ? { layoutId, layoutDependency: layoutId, transition: T.settle } : {}
   const box = { width: w, height: h, borderRadius: Math.max(T.r.xs, w * 0.06), flexShrink: 0, border: `1px solid ${T.border}` }
   if (d.cover) return <Img {...shared} src={d.cover} alt="" width={w} height={h} style={{ ...box, objectFit: 'cover', display: 'block' }} />
   const hue = hueOf(d.title)
@@ -366,7 +365,7 @@ function queuedText(id, qkey) {
   return at < 0 ? 'Queued' : `Queued, ${ord(at + 1)} in line`
 }
 
-const DocCard = memo(function DocCard({ d, playing, ref }) {
+const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
   const listened = d.total ? (d.finished ? 1 : d.pos / d.total) : 0
   const dur = d.chars ? fmtDur(docDuration(d)) : null
   const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
@@ -374,13 +373,18 @@ const DocCard = memo(function DocCard({ d, playing, ref }) {
   // The cover is one object: it leaves with the tap and flies home when the reader is left (coverflight.js).
   const cover = useRef(null)
   useLayoutEffect(() => { arriveCover(d.id, cover.current) }, [d.id])
+  // The card whose cover is flying home stands still: its cover must land where the card already is.
+  const [landing] = useState(() => coverInFlight(d.id))
   return (
-    <motion.div ref={ref} layout="position" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.14, ease: 'easeIn' } }}
-      transition={{ duration: 0.22, ease: T.ease, layout: T.settle }}
+    // On a computer a card glides to its new place when the list is sorted or filtered. On a phone it does not:
+    // every card would be measured each time the library is come to, and that was felt (e2e/feel.mjs).
+    <motion.div ref={ref} layout={glide ? 'position' : false} layoutDependency={order} initial={false}
+      exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.16, ease: 'easeIn' } }}
+      transition={{ layout: T.settle }}
       style={{ position: 'relative', borderRadius: T.r.md, overflow: 'hidden' }}>
-      <motion.div role="button" tabIndex={0} whileTap={{ scale: T.tap.card }} transition={T.press} onClick={() => { leaveCover(d.id, cover.current); go('reader', d.id); if (!working || d.status === 'voicing') openPlayer(d.id, { autoplay: false }) }}
+      <div role="button" tabIndex={0} data-press="" data-rise={landing ? undefined : String(Math.min(i, T.enter.held))} onClick={() => { leaveCover(d.id, cover.current); go('reader', d.id); if (!working || d.status === 'voicing') openPlayer(d.id, { autoplay: false }) }}
         onKeyDown={e => e.key === 'Enter' && e.currentTarget.click()}
-        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 12, cursor: 'pointer', background: playing ? T.surface : 'transparent', borderRadius: T.r.md }}
+        style={{ '--press': T.tap.card, display: 'flex', alignItems: 'center', gap: 14, padding: 12, cursor: 'pointer', background: playing ? T.surface : 'transparent', borderRadius: T.r.md }}
         onPointerEnter={e => { if (!playing) e.currentTarget.style.background = T.surface }}
         onPointerLeave={e => { if (!playing) e.currentTarget.style.background = 'transparent' }}>
         <div ref={cover} style={{ display: 'flex', flexShrink: 0 }}><Cover d={d} /></div>
@@ -396,16 +400,13 @@ const DocCard = memo(function DocCard({ d, playing, ref }) {
             {d.author ? `${d.author} · ` : ''}{meta}
           </div>
           {/* The status changes in place (queued, reading, preparing, ready): one line fades into the next. */}
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={d.status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ duration: 0.18, ease: T.ease }}
-              style={{ fontSize: 12, minHeight: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><StatusLine d={d} /></motion.div>
-          </AnimatePresence>
+          <div key={d.status} data-fade="" style={{ fontSize: 12, minHeight: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><StatusLine d={d} /></div>
         </div>
         {d.finished && <Icon name="check" size={18} style={{ color: T.ok }} />}
         <div onClick={e => e.stopPropagation()}>
           <Menu trigger={toggle => <IconButton icon="more" label={`More options for ${d.title}`} onClick={toggle} />} items={docMenu(d)} />
         </div>
-      </motion.div>
+      </div>
       {listened > 0 && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0 }}><Progress value={listened} height={2} color={T.faint} track="transparent" /></div>}
     </motion.div>
   )

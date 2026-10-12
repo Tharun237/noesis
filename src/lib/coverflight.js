@@ -54,7 +54,7 @@ export function arriveCover(id, el) {
   const to = restingRect(el)
   if (!to.width || !to.height) { f.ghost.remove(); return false }
   el.style.opacity = '0'
-  animate(f.ghost, { x: to.left - f.from.left, y: to.top - f.from.top, scaleX: to.width / f.from.width, scaleY: to.height / f.from.height }, T.settle)
+  animate(f.ghost, { transform: ['translate(0px, 0px) scale(1, 1)', `translate(${to.left - f.from.left}px, ${to.top - f.from.top}px) scale(${to.width / f.from.width}, ${to.height / f.from.height})`] }, T.settle)
     .then(() => { el.style.opacity = ''; f.ghost.remove() })
   return true
 }

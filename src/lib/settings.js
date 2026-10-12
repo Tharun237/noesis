@@ -36,6 +36,7 @@ export const DEFAULTS = {
   archiveFinished: false, // move finished documents to Archived
   ambientMode: 'off', // off | focus | calm | brown: a quiet sound under the voice
   ambientVolume: 0.5,
+  motion: 'system', // system (follow the phone's reduced-motion setting) | full | less
   awareSlow: false, // aware listening: slow the voice a little while the room is noisy (microphone, on the device)
   awarePause: false, // aware listening: pause when the listener speaks
   awareClear: false, // aware listening: lift the crisp part of the voice while the room is noisy

@@ -45,7 +45,7 @@ export function openSheet(sheet, extra = {}) {
   ui.set({ sheet, ...extra })
 }
 
-export const closeSheet = () => { if (ui.get().sheet) history.back() }
+export const closeSheet = () => { if (ui.get().sheet) backOnce() }
 
 // The phone's library search is a history entry too: Back closes the search instead of leaving the app.
 export function openSearch() {
@@ -54,7 +54,7 @@ export function openSearch() {
   ui.set({ searching: true })
 }
 export function closeSearch() {
-  if (history.state?.searching) history.back()
+  if (history.state?.searching) backOnce()
   else ui.set({ searching: false, query: '' })
 }
 
@@ -65,13 +65,27 @@ export function pushPanel(name) {
   if (history.state?.panel) history.replaceState(entry, '')
   else history.pushState({ ...entry, depth: depth() + 1 }, '')
 }
-export const popPanel = () => { if (history.state?.panel) history.back() }
+export const popPanel = () => { if (history.state?.panel) backOnce() }
+
+// One Back for one thing to close. Going back takes the browser a moment, and until it has happened the
+// sheet (or page) being closed is still on screen and still says it is open: a second quick tap on it used to
+// go back a SECOND time, out of the document the sheet was on, or out of the app (found by the random
+// customer). So a Back that is on its way is not asked for again.
+let leaving = false
+const BACK_GIVE_UP_MS = 600 // if the browser never reports the move (it had nowhere to go), allow the next one
+function backOnce() {
+  if (leaving) return
+  leaving = true
+  setTimeout(() => { leaving = false }, BACK_GIVE_UP_MS)
+  history.back()
+}
+addEventListener('popstate', () => { leaving = false })
 
 // How many in-app pages sit behind this one. Back must never depend on browser history the app didn't
 // create (opened straight into a book, restored after an update, arrived from a share or a link).
 const depth = () => history.state?.depth || 0
 export function goBack() {
-  if (depth() > 0) return history.back()
+  if (depth() > 0) return backOnce()
   history.replaceState({ view: 'library', docId: null, depth: 0 }, '')
   ui.set({ view: 'library', docId: null, sheet: null })
 }

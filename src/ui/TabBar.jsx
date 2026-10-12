@@ -26,14 +26,15 @@ export function TabBar() {
       {TABS.map(t => {
         const on = t.id === current
         return (
-          <button key={t.id} type="button" onClick={t.run} aria-current={on ? 'page' : undefined}
+          <button key={t.id} type="button" onClick={t.run} aria-current={on ? 'page' : undefined} data-press=""
             style={{
+              '--press': 1, // the tab itself stays put; its icon makes the movement (press.js)
               flex: 1, position: 'relative', border: 'none', background: 'transparent', color: on ? T.accent : T.sub, cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: T.font, fontSize: 11.5, fontWeight: 600,
               WebkitTapHighlightColor: 'transparent',
             }}>
-            {on && <motion.span layoutId="tab-indicator" transition={T.spring} style={{ position: 'absolute', top: -1, width: 28, height: 3, borderRadius: 3, background: T.accent }} />}
-            <motion.span variants={{ tap: { scale: 0.86 } }} whileTap="tap" transition={T.press} style={{ display: 'grid' }}><Icon name={t.icon} size={22} /></motion.span>
+            {on && <motion.span layoutId="tab-indicator" layoutDependency={t.id} transition={T.spring} style={{ position: 'absolute', top: -1, width: 28, height: 3, borderRadius: 3, background: T.accent }} />}
+            <Icon name={t.icon} size={22} />
             {t.label}
           </button>
         )

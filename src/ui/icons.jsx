@@ -1,5 +1,4 @@
-import { useEffect, useRef } from 'react'
-import { motion } from 'motion/react'
+import { useRef } from 'react'
 import { T } from "../theme.js"
 import { WORDMARK, MARK, TAGLINE } from "./brand-paths.js"
 
@@ -47,32 +46,19 @@ const P = {
   eye:'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
 }
 
-// What each icon does when the button it sits in is pressed (or pointed at, on a computer): a small movement
-// that says what the button does. An arrow leans the way it points, refresh turns, the bell rings, the bin
-// rattles. The button passes "tap" and "hover" down (kit.jsx); an icon outside such a button stays still.
-const LEAN = 3 // px an arrow leans
-const MOVE = {
-  back: { x: -LEAN }, prev: { x: -LEAN }, next: { x: LEAN }, send: { x: LEAN, y: -LEAN }, list: { x: 2 }, toc: { x: 2 },
-  up: { y: -LEAN }, upload: { y: -LEAN }, folder: { y: -2 }, file: { y: -2 }, bookmark: { y: -2, scale: 1.12 },
-  down: { y: LEAN }, download: { y: LEAN }, install: { y: LEAN }, archive: { y: 2 },
-  refresh: { rotate: 180 }, settings: { rotate: 60 }, close: { rotate: 90 }, plus: { rotate: 90 }, edit: { rotate: -12 }, link: { rotate: -15 }, moon: { rotate: -20 },
-  bell: { rotate: [0, -14, 12, -6, 0] }, trash: { rotate: [0, -8, 8, -4, 0] }, sparkle: { rotate: 30, scale: 1.15 },
-  search: { scale: 1.15 }, check: { scale: 1.2 }, play: { scale: 1.12 }, pause: { scale: 0.88 }, stop: { scale: 0.88 }, more: { scale: 1.2 },
-  speaker: { scale: 1.12 }, voice: { scale: 1.12 }, type: { scale: 1.12 }, grid: { scale: 0.9 }, waves: { scaleY: 1.3 }, sliders: { scaleX: 0.82 }, minus: { scaleX: 0.7 }, text: { scaleX: 1.1 },
-}
-const GESTURE = Object.fromEntries(Object.entries(MOVE).map(([name, move]) => [name, { tap: move, hover: move }]))
-const DRAW = { duration: 0.28, ease: T.ease }
-
+// An icon is a plain drawing. It leans, turns or shakes when the thing it sits in is pressed, and draws
+// itself in when it replaces another icon in the same place (play to pause, upload to a tick): both are done
+// by the style sheet in press.js, so an icon costs nothing to put on screen.
 export function Icon({ name, size = 20, stroke = 1.8, fill = false, style }) {
-  // When the icon in one place changes (play to pause, upload to a tick) the new one draws itself in. The
-  // first one is simply there: a page full of icons drawing at once would be noise.
-  const shown = useRef(false)
-  useEffect(() => { shown.current = true }, [])
+  const last = useRef(name)
+  const drawn = useRef(null) // the icon that replaced another here, and so draws itself
+  if (last.current !== name) { last.current = name; drawn.current = name }
+  const draw = drawn.current === name
   return (
-    <motion.svg variants={GESTURE[name]} transition={T.press} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0, display: 'block', ...style }}
+    <svg data-ico={name} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ flexShrink: 0, display: 'block', ...style }}
       fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">
-      <motion.path key={name} d={P[name]} initial={shown.current ? { pathLength: 0, opacity: 0 } : false} animate={{ pathLength: 1, opacity: 1 }} transition={DRAW} />
-    </motion.svg>
+      <path key={name} d={P[name]} pathLength={draw ? 1 : undefined} data-draw={draw ? '' : undefined} />
+    </svg>
   )
 }
 

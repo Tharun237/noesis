@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { indexLines, locate, rects, locatePage, sentenceAt } from './locate.js'
+import { indexLines, locate, rects, locatePage, sentenceAt, partOf } from './locate.js'
 
 const line = (text, x = 0.1, y = 0.2, w = 0.8, h = 0.05) => ({ text, x, y, w, h })
 const approx = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} !== ${b}`)
@@ -97,4 +97,14 @@ test('sentenceAt finds the rect under the point and the nearest from the margin'
   assert.equal(sentenceAt(located, 0.01, r0.y + r0.h / 2), 3)
   // Empty page: null.
   assert.equal(sentenceAt([], 0.5, 0.5), null)
+})
+
+test('partOf cuts a share of a marked sentence, across a line end when it has to', () => {
+  const rects = [{ x: 0.1, y: 0.2, w: 0.6, h: 0.02 }, { x: 0.1, y: 0.23, w: 0.2, h: 0.02 }]
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} is not ${b}`)
+  const first = partOf(rects, 0, 0.25)
+  assert.equal(first.length, 1); near(first[0].x, 0.1); near(first[0].w, 0.2)
+  const across = partOf(rects, 0.5, 1)
+  assert.equal(across.length, 2); near(across[0].x, 0.5); near(across[0].w, 0.2); near(across[1].x, 0.1); near(across[1].w, 0.2)
+  assert.deepEqual(partOf([], 0, 1), [])
 })

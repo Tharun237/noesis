@@ -3,24 +3,19 @@ import { motion, AnimatePresence, useDragControls, useMotionValue, useSpring, us
 import { T, label } from '../theme.js'
 import { Icon } from './icons.jsx'
 import { reducedMotion } from '../lib/motion.js'
+import { menuRow } from './press.js' // the style sheet behind data-press, data-ico, data-rise, Swap
 
 // Shared primitives. Motion is transform/opacity only (GPU-composited); no layout properties animate.
 
-// A press is named ("tap", and "hover" on a computer) so that what is inside the button hears it too: the
-// icon makes its own small movement (icons.jsx) while the button gives way.
-const PRESS = { tap: { scale: T.tap.control } }
-const PRESS_ICON = { tap: { scale: T.tap.icon } }
-const PRESS_ROW = { tap: { scale: T.tap.row } }
-
 // Text that changes in place (Play to Stop, a status, a count) slides to its new value instead of blinking.
-// The old and the new share one cell, so nothing around them moves while they change.
+// Nothing moves the first time it is shown; only a change does (the style sheet in press.js).
 export function Swap({ children }) {
+  const last = useRef(children)
+  const turn = useRef(0)
+  if (last.current !== children) { last.current = children; turn.current++ }
   return (
     <span style={{ display: 'inline-grid', overflow: 'hidden', verticalAlign: 'bottom' }}>
-      <AnimatePresence initial={false}>
-        <motion.span key={String(children)} initial={{ y: '70%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-70%', opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } }}
-          transition={{ duration: 0.2, ease: T.ease }} style={{ gridArea: '1 / 1' }}>{children}</motion.span>
-      </AnimatePresence>
+      <span key={turn.current} data-swap={turn.current ? '' : undefined}>{children}</span>
     </span>
   )
 }
@@ -51,23 +46,23 @@ export function Button({ children, onClick, kind = 'ghost', icon, disabled, full
     ghost: {},
   }
   return (
-    <motion.button type={type} title={title} onClick={onClick} disabled={disabled} variants={PRESS} whileTap={disabled ? undefined : 'tap'} whileHover={disabled ? undefined : 'hover'}
-      transition={T.press} style={{ ...base, ...kinds[kind], ...style }}>
+    <button type={type} title={title} onClick={onClick} disabled={disabled} data-press="" style={{ ...base, ...kinds[kind], ...style }}>
       {icon && <Icon name={icon} size={17} />}
       {typeof children === 'string' ? <Swap>{children}</Swap> : children}
-    </motion.button>
+    </button>
   )
 }
 
 export function IconButton({ icon, onClick, label: aria, size = 40, iconSize = 20, active, style, fill }) {
   return (
-    <motion.button type="button" aria-label={aria} title={aria} onClick={onClick} variants={PRESS_ICON} whileTap="tap" whileHover="hover" transition={T.press}
+    <button type="button" aria-label={aria} title={aria} onClick={onClick} data-press=""
       style={{
+        '--press': T.tap.icon,
         width: size, height: size, borderRadius: T.r.pill, border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer',
         background: active ? T.accentSoft : 'transparent', color: active ? T.accent : T.text, flexShrink: 0, padding: 0, ...style,
       }}>
       <Icon name={icon} size={iconSize} fill={fill} />
-    </motion.button>
+    </button>
   )
 }
 
@@ -84,7 +79,7 @@ export function Segmented({ options, value, onChange, disabled = [], size = 'md'
               color: on ? T.bg : off ? T.faint : T.sub, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: off ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 10px', whiteSpace: 'nowrap',
             }}>
-            {on && <motion.span layoutId={'seg-' + options.map(x => x.value).join()} transition={T.spring}
+            {on && <motion.span layoutId={'seg-' + options.map(x => x.value).join()} layoutDependency={value} transition={T.spring}
               style={{ position: 'absolute', inset: 0, borderRadius: T.r.pill, background: T.text }} />}
             <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
               {o.icon && <Icon name={o.icon} size={15} />}{o.label}
@@ -137,19 +132,16 @@ export function Progress({ value, height = 3, color = T.accent, track = T.surfac
   )
 }
 
-// Anything that arrives after the screen is already showing (an answer, an error, a status line) eases in:
+// Anything that arrives after the screen is already showing (an answer, an error, a status line) rises in:
 // the eye is told something new is here, instead of the layout just jumping.
-export function Appear({ as = 'div', children, style }) {
-  const M = motion[as]
-  return <M initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: T.ease }} style={style}>{children}</M>
+export function Appear({ as: Tag = 'div', children, style }) {
+  return <Tag data-rise="0" style={style}>{children}</Tag>
 }
 
-// Rows of a list that has just appeared come in one after another, quickly, and only the first ten are held
-// back: a long list must never make anyone wait. Spread onto a motion element: <motion.button {...rowIn(i)}>.
-const ROW_STEP = 0.028
-const ROWS_HELD = 10
-// The delay belongs to the entrance alone, so a press on the row still answers at once.
-export const rowIn = i => ({ initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: T.ease, delay: 0.06 + Math.min(i, ROWS_HELD) * ROW_STEP } }, transition: T.press })
+// Rows of a list that has just appeared come in one after another, and only the first few are held back
+// (T.enter): a long list must never make anyone wait. Spread onto any element: <button {...rowIn(i)}>.
+// It is one attribute; the style sheet in press.js does the moving.
+export const rowIn = i => ({ 'data-rise': String(Math.min(i, T.enter.held)) })
 
 // A number that counts up to its value when it appears and glides when it changes, so a total reads as
 // something that was added up. Written straight to the page (no renders).
@@ -160,11 +152,10 @@ export function Count({ value, format = Math.round }) {
   return <motion.span>{text}</motion.span>
 }
 
+// The dot beside something that is still working. It pulses for as long as it is on screen, so it is the
+// style sheet's job (press.js), not a script's on every frame.
 export function Pulse({ color = T.lime }) {
-  return (
-    <motion.span animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-      style={{ width: 6, height: 6, borderRadius: 6, background: color, display: 'inline-block', flexShrink: 0 }} />
-  )
+  return <span data-pulse="" style={{ width: 6, height: 6, borderRadius: 6, background: color, display: 'inline-block', flexShrink: 0 }} />
 }
 
 // Bottom sheet on phones, centred dialog on wide screens. Escape and backdrop close it.
@@ -185,7 +176,7 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div key="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: T.dur.fast }}
+        <motion.div key="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1, pointerEvents: 'auto' }} exit={{ opacity: 0, pointerEvents: 'none' }} transition={{ duration: T.dur.fast }} // a sheet that is closing takes no more taps
           onClick={onClose}
           style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: wide ? 'center' : 'flex-end', justifyContent: 'center', padding: wide ? 24 : 0 }}>
           <motion.div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: T.scrim, opacity: wide ? 1 : dim }} />
@@ -209,7 +200,7 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
               </div>
             )}
             {/* What is inside settles a moment after the sheet itself: the sheet arrives, then its content. */}
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: T.ease, delay: 0.05 }}>{children}</motion.div>
+            <div data-rise="sheet">{children}</div>
           </motion.div>
         </motion.div>
       )}
@@ -219,8 +210,6 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
 
 // Popover menu anchored to its trigger.
 const MENU_W = 260
-const MENU_ROW_STEP = 0.018 // the rows of a menu follow one another, the first eight only
-const MENU_ROWS_HELD = 8
 const EDGE = 8
 
 // Popover menu anchored to its trigger. On open it measures the room around the trigger and
@@ -255,8 +244,8 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
       {trigger(toggle, open)}
       <AnimatePresence>
         {open && (
-          <motion.div role="menu" initial={{ opacity: 0, y: place.up ? 6 : -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: place.up ? 6 : -6, scale: 0.97 }} transition={{ duration: T.dur.fast, ease: T.ease }}
+          <motion.div role="menu" initial={{ opacity: 0, y: place.up ? 12 : -12, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1, transition: T.spring }}
+            exit={{ opacity: 0, y: place.up ? 8 : -8, scale: 0.94, transition: { duration: 0.12, ease: 'easeIn' } }}
             style={{
               position: 'absolute', [place.side]: 0, [place.up ? 'bottom' : 'top']: 'calc(100% + 8px)', minWidth: 230, maxWidth: `min(${MENU_W + 60}px, calc(100vw - ${EDGE * 2}px))`,
               maxHeight: place.maxH, overflowY: 'auto', zIndex: 40,
@@ -266,12 +255,12 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
             {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : it.heading ? (
               <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{it.heading}</div>
             ) : (
-              <motion.button key={i} role="menuitem" type="button" disabled={it.disabled} variants={PRESS_ROW} whileTap={it.disabled ? undefined : 'tap'} whileHover={it.disabled ? undefined : 'hover'} transition={T.press}
-                initial={{ opacity: 0, y: place.up ? 4 : -4 }} animate={{ opacity: it.disabled ? 0.4 : 1, y: 0, transition: { duration: 0.16, ease: T.ease, delay: Math.min(i, MENU_ROWS_HELD) * MENU_ROW_STEP } }}
+              <button key={i} role="menuitem" type="button" disabled={it.disabled} data-press="" data-rise={menuRow(i)}
                 onClick={() => { setOpen(false); it.onClick() }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', border: 'none', borderRadius: T.r.sm,
                   background: 'transparent', color: it.danger ? T.danger : T.text, fontFamily: T.font, fontSize: 14,
+                  '--press': T.tap.row, opacity: it.disabled ? 0.4 : 1,
                   cursor: it.disabled ? 'default' : 'pointer', textAlign: 'left',
                 }}
                 onPointerEnter={e => { e.currentTarget.style.background = T.surfaceHi }}
@@ -279,7 +268,7 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
                 {it.icon && <Icon name={it.icon} size={17} />}
                 <span style={{ flex: 1 }}>{it.label}</span>
                 {it.right && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub }}>{it.right}</span>}
-              </motion.button>
+              </button>
             ))}
           </motion.div>
         )}

@@ -1,4 +1,3 @@
-import { motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
@@ -14,6 +13,7 @@ import { CreditsCard } from './Credits.jsx'
 import { AmbientCard } from './AmbientCard.jsx'
 import { AwarenessCard } from './AwarenessCard.jsx'
 import { askAware } from '../lib/extras.js'
+import { REDUCE, phoneAsksForLess } from '../lib/motion.js'
 
 
 export function Settings({ wide }) {
@@ -34,6 +34,7 @@ export function Settings({ wide }) {
         <VoiceCard Card={Card} />
         <AmbientCard Card={Card} mode={s.ambientMode || 'off'} volume={s.ambientVolume ?? 0.5} haptics={!!s.haptics}
           onChange={c => settings.set({ ...('mode' in c ? { ambientMode: c.mode } : {}), ...('volume' in c ? { ambientVolume: c.volume } : {}), ...('haptics' in c ? { haptics: c.haptics } : {}) })} />
+        <MotionCard choice={s.motion || 'system'} />
         {/* A switch turned on asks for the microphone there and then; it stays off if the answer is no. */}
         <AwarenessCard Card={Card} slow={!!s.awareSlow} clear={!!s.awareClear} pauseOnSpeech={!!s.awarePause}
           onChange={async c => {
@@ -72,13 +73,37 @@ export function Settings({ wide }) {
   )
 }
 
+// Motion: the phone's own setting is followed unless the customer says otherwise, and the card says plainly
+// what is happening. (A phone in battery saver asks every app for less motion: Noesis then looked dead, and
+// nothing told the owner why.)
+const MOTION_OPTIONS = [{ value: 'system', label: 'Follow my phone' }, { value: 'full', label: 'Full' }, { value: 'less', label: 'Less' }]
+function MotionCard({ choice }) {
+  const [asks, setAsks] = useState(phoneAsksForLess)
+  useEffect(() => {
+    const q = matchMedia(REDUCE)
+    const on = () => setAsks(q.matches)
+    q.addEventListener('change', on)
+    return () => q.removeEventListener('change', on)
+  }, [])
+  const line = choice === 'full' ? 'Noesis moves in full, whatever your phone is set to.'
+    : choice === 'less' ? 'Noesis keeps to gentle fades.'
+    : asks ? 'Your phone is asking apps for less motion right now (battery saver and "Remove animations" both do this), so Noesis is keeping almost still. Choose Full to have its motion anyway.'
+    : 'Your phone allows motion, and Noesis moves in full.'
+  return (
+    <Card title="Motion">
+      <Segmented options={MOTION_OPTIONS} value={choice} onChange={v => settings.set({ motion: v })} />
+      <p style={{ fontSize: 13, lineHeight: 1.55, color: asks && choice === 'system' ? T.text : T.sub, margin: 0 }}>{line}</p>
+    </Card>
+  )
+}
+
 function Card({ title, children, right }) {
   return (
-    <motion.section initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '0px 0px -40px 0px' }} transition={{ duration: 0.24, ease: T.ease }}
+    <section data-rise="0"
       style={{ padding: 20, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gap: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ ...label, flex: 1 }}>{title}</div>{right}</div>
       {children}
-    </motion.section>
+    </section>
   )
 }
 

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
-import { motion, AnimatePresence, useScroll, useIsPresent } from 'motion/react'
+import { motion, AnimatePresence, useIsPresent } from 'motion/react'
 import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
@@ -20,7 +20,7 @@ import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
-import { wordWeights } from '../lib/words.js'
+import { useLitWord } from './litword.js'
 import { numbersIn, columnsIn } from '../lib/sonify.js'
 import { findRef } from '../lib/citations.js'
 import { voiceName } from '../lib/voices.js'
@@ -48,6 +48,12 @@ const HEADER_H = 57
 // The app's name as a speech recogniser tends to write it.
 const WAKE = /^(?:hey\s+)?(?:noesis|no\s?esis|gnosis|no\s?thesis|know\s?esis|noises)[\s,.:!]*/i
 const SEEN_BELOW = 120 // px under the header where the reader's eye is taken to be, for the page beside the text
+const VIEW_SETTLE_MS = 320
+// Room under the last line. The app already keeps the page clear of the player; adding the player's height
+// here as well left more empty page than a sideways phone has screen: scroll to the end of a short document
+// and there was nothing on it (found by the random customer).
+const END_PAD = 48
+const FOCUS_PAD = 20 // px around the Focus stage
 const SUBROW_H = 44 // second header row (Text | Pages) on documents that have pages
 
 export function Reader({ wide }) {
@@ -73,6 +79,9 @@ export function Reader({ wide }) {
   }, [])
   const [tool, setTool] = useState(null) // the equation, table or figure a tool sheet is open on: { kind, bi }
   const [citedOpen, setCitedOpen] = useState([]) // the entries the citation sheet was opened on (the voice moves on meanwhile)
+  // The sheet on screen and the history entry behind it must never disagree: if navigation changed the entry
+  // under an open sheet, the sheet follows it. (Back must always close what is on top.)
+  useEffect(() => ui.sub(() => setPanelState(p => (!p || (wide && p === 'ask') || history.state?.panel === p ? p : history.state?.panel || null))), [wide])
   const [askAuto, setAskAuto] = useState(null) // a one-tap question for the Ask panel: { id, n }
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [voiceState, setVoiceState] = useState('off')
@@ -207,7 +216,7 @@ export function Reader({ wide }) {
     for (const m of marks || []) { const ci = chunkOf(chunks, m.i); if (ci >= 0) by.set(ci, (by.get(ci) || '') + m.i + ',') }
     return by
   }, [marks, chunks])
-  const near = useNearChunks(chunks, typo)
+  const [near, watch] = useNearChunks()
   const colRef = useRef(null)
   const heights = useRef(new Map()) // chunk -> measured height, so a chunk scrolled away keeps its exact size
   useEffect(() => { heights.current = new Map() }, [typo, doc, wide, width])
@@ -248,10 +257,30 @@ export function Reader({ wide }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sideBySide, active, doc])
 
+  // A change of view keeps the reader's place. Focus is one screen: it starts at the top. Coming back to the
+  // text, the page goes to the sentence that was being read, not to the first line of the book.
+  const lastView = useRef(view)
+  useEffect(() => {
+    const from = lastView.current
+    lastView.current = view
+    if (from === view) return undefined
+    if (view === 'focus') { window.scrollTo(0, 0); return undefined }
+    if (view !== 'text') return undefined
+    const place = active >= 0 ? active : d?.pos || 0
+    if (!(place > 0)) return undefined
+    const t = setTimeout(() => scrollToSentence(place), VIEW_SETTLE_MS) // after the views have cross-faded
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
+
   if (!d) return null
   const onSeek = i => { userScroll.current = 0; playId === id ? seekTo(i) : openPlayer(id, { at: i }) }
   const showToc = wide && tocOpen && headings.length > 1
   const askDocked = wide && panel === 'ask'
+  // What is being said, for the page views: they mark the sentence and, inside it, the word.
+  const spoken = doc && active >= 0 && active < doc.segs.length ? { text: doc.segs[active].t, dur: doc.durs[active], tail: doc.tails?.[active] || 0, words: typo.words } : null
+  // Where "now" is on the original pages: the mark on the sentence, or its page while the mark is not found yet.
+  const nowOnPage = () => document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"]') || document.querySelector(`[data-testid="page-view"] [data-page="${activePage}"]`)
   const showPane = sideBySide && !askDocked && !!doc // Ask takes the same side of the screen: one at a time
   const panePage = showPane ? (pageOf(active) ?? seenPage ?? pageOf(d.pos || 0) ?? 1) : null
   const dock = (showToc ? 1 : 0) + (askDocked ? 2 : 0) + (showPane ? 4 : 0)
@@ -334,23 +363,25 @@ export function Reader({ wide }) {
         )}
         </AnimatePresence>
 
-        <article style={{ flex: 1, minWidth: 0, padding: wide ? `48px 32px ${120 + bottom}px` : `28px 20px ${100 + bottom}px`, marginRight: askDocked ? T.askW : 0 }}>
+        <article style={{ flex: 1, minWidth: 0, padding: view === 'focus' ? `${FOCUS_PAD}px 20px` : wide ? `48px 32px ${END_PAD}px` : `28px 20px ${END_PAD}px`, marginRight: askDocked ? T.askW : 0 }}>
           {/* When a side panel opens or closes, the text glides to its new place instead of jumping (measured only then). */}
           <motion.div layout={wide ? 'position' : false} layoutDependency={dock} transition={{ layout: T.settle }} style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
+            {view !== 'focus' && (
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', marginBottom: 36 }}>
               <motion.div initial={landing ? false : { scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.settle} style={{ flexShrink: 0, transformOrigin: '0 100%' }}>
                 <div ref={coverRef} style={{ display: 'flex' }}><Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} /></div>
               </motion.div>
               <div style={{ minWidth: 0, display: 'grid', gap: 8 }}>
-                <motion.h1 {...rowIn(0)} style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</motion.h1>
-                <motion.div {...rowIn(1)} style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
+                <h1 {...rowIn(0)} style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</h1>
+                <div {...rowIn(1)} style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
                   {[d.author, d.chars ? fmtDur(docDuration(d)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
-                </motion.div>
+                </div>
                 {playId !== id && (d.status === 'voicing' || d.status === 'ready') && (
-                  <motion.div {...rowIn(2)}><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></motion.div>
+                  <div {...rowIn(2)}><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></div>
                 )}
               </div>
             </div>
+            )}
 
             {d.status !== 'ready' && <Preparing d={d} doc={doc} pos={active >= 0 ? active : d.pos || 0} />}
             <WelcomeBack key={d.id} d={d} onRecap={() => quick('recap')} />
@@ -365,12 +396,16 @@ export function Reader({ wide }) {
               <Suspense fallback={null}>
                 <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
                   onPages={setNumPages} onVisible={setVisPage}
-                  pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek}
+                  pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek} spoken={spoken}
                   onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }}
                   onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
               </Suspense>
             ) : view === 'focus' ? (
-              doc && <FocusView doc={doc} active={active} onSeek={onSeek} playing={isPlaying && playId === id} />
+              doc && (
+                <div style={{ minHeight: `calc(100dvh - ${headH + bottom + FOCUS_PAD * 2}px)`, display: 'grid', alignContent: 'safe center' }}>
+                  <FocusView doc={doc} active={active} onSeek={onSeek} playing={isPlaying && playId === id} stickTop={headH} />
+                </div>
+              )
             ) : doc && (
               <div ref={colRef} onClick={e => {
                 if (window.getSelection()?.toString()) return
@@ -385,7 +420,7 @@ export function Reader({ wide }) {
                     mounted={near.has(ci) || hasActive || hasHit}
                     est={heights.current.get(ci) ?? estimateHeight(ch, typo, colRef.current?.clientWidth || (wide ? width : innerWidth - 40))}
                     active={hasActive ? active : -1} dur={hasActive ? doc.durs[active] : 0} tail={hasActive ? (doc.tails?.[active] || 0) : 0} hit={hasHit ? hit : -1}
-                    marks={marksBy.get(ci) || ''} onHeight={onHeight} />
+                    marks={marksBy.get(ci) || ''} onHeight={onHeight} watch={watch} />
                 })}
               </div>
             )}
@@ -399,7 +434,7 @@ export function Reader({ wide }) {
           <motion.aside key="pane" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.12, ease: 'easeIn' } }} transition={{ duration: 0.24, ease: T.ease }}
             style={{ width: T.paneW, flexShrink: 0, position: 'sticky', top: headH, height: `calc(100dvh - ${headH + bottom}px)`, padding: 20, boxSizing: 'border-box', borderLeft: `1px solid ${T.border}` }}>
             <Suspense fallback={null}>
-              <PagePane key={id} id={id} page={panePage} invert={invertPages} pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek}
+              <PagePane key={id} id={id} page={panePage} invert={invertPages} pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek} spoken={spoken}
                 onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }} onPages={setNumPages}
                 onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
             </Suspense>
@@ -419,7 +454,8 @@ export function Reader({ wide }) {
 
       {sheet('cites', 'Cited here', panel === 'cites' && citedOpen.length
         ? <Suspense fallback={null}><CitationSheet refs={citedOpen} d={d} onClose={() => setPanel(null)} /></Suspense> : null, 560)}
-      <JumpToNow active={active} bottom={bottom} onJump={() => { userScroll.current = 0; scrollToSentence(active) }} />
+      <JumpToNow active={active} bottom={bottom} find={view === 'pages' ? nowOnPage : undefined}
+        onJump={() => { userScroll.current = 0; view === 'pages' ? nowOnPage()?.scrollIntoView({ block: 'center', behavior: scrollBehavior() }) : scrollToSentence(active) }} />
 
       {sheet('toc', 'Contents', <div style={{ padding: '20px 10px 24px' }}><div style={{ ...label, padding: '0 12px 12px' }}>Contents</div>
         <Toc headings={headings} offs={offs} rate={rate} active={active} onSeek={onSeek} onClose={() => setPanel(null)} /></div>, 480)}
@@ -436,11 +472,10 @@ export function Reader({ wide }) {
   )
 }
 
-// A hairline under the header that fills as the page is read: where am I in this document. It is tied to
-// the scroll itself, so it costs no renders.
+// A hairline under the header that fills as the page is read: where am I in this document. The style sheet
+// ties it to the scroll (press.js), so no script runs as the page moves.
 function ReadLine() {
-  const { scrollYProgress } = useScroll()
-  return <motion.div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, background: T.text, opacity: 0.5, scaleX: scrollYProgress, transformOrigin: '0 50%' }} />
+  return <div aria-hidden="true" data-readline="" style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2, background: T.text, opacity: 0.5 }} />
 }
 
 // -- windowed rendering -----------------------------------------------------------------
@@ -482,23 +517,34 @@ function estimateHeight(ch, typo, colW) {
   return Math.round((ch.chars / perLine + blocks * 0.6) * typo.size * typo.leading + blocks * typo.size * 1.1)
 }
 
-// Which chunks are on or near the screen. One observer for the whole book.
-function useNearChunks(chunks, typo) {
+// Which chunks are on or near the screen. One observer for the whole book, and every chunk hands itself to
+// it when it appears (`watch`) and takes itself back when it goes. The first version looked the chunks up
+// once, when the book loaded: after a change of view (Text to Focus and back) the page held new elements
+// that nobody was watching, and scrolling showed an empty page (Tharun, 2026-10-12).
+function useNearChunks() {
   const [near, setNear] = useState(() => new Set([0, 1]))
-  useEffect(() => {
-    setNear(new Set([0, 1]))
-    if (!chunks.length) return
-    const io = new IntersectionObserver(entries => {
-      setNear(prev => {
-        const next = new Set(prev)
-        for (const e of entries) e.isIntersecting ? next.add(+e.target.dataset.c) : next.delete(+e.target.dataset.c)
-        return next
-      })
-    }, { rootMargin: `${AHEAD_PX}px 0px` })
-    document.querySelectorAll('[data-c]').forEach(el => io.observe(el))
-    return () => io.disconnect()
-  }, [chunks, typo])
-  return near
+  const io = useRef(null)
+  const watch = useCallback(el => {
+    if (!io.current) {
+      io.current = new IntersectionObserver(entries => {
+        setNear(prev => {
+          let next = prev
+          for (const e of entries) {
+            const c = +e.target.dataset.c
+            if (e.isIntersecting === next.has(c)) continue
+            if (next === prev) next = new Set(prev)
+            e.isIntersecting ? next.add(c) : next.delete(c)
+          }
+          return next
+        })
+      }, { rootMargin: `${AHEAD_PX}px 0px` })
+    }
+    const o = io.current
+    o.observe(el) // the observer reports where a newly watched element is at once
+    return () => o.unobserve(el)
+  }, [])
+  useEffect(() => () => { io.current?.disconnect(); io.current = null }, [])
+  return [near, watch]
 }
 
 // Far jumps (a chapter away) cut straight there; near ones glide. Gliding across a whole book would build
@@ -511,10 +557,11 @@ function scrollToSentence(i) {
   el.scrollIntoView({ block: 'center', behavior: far ? 'auto' : scrollBehavior() })
 }
 
-const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight }) {
+const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight, watch }) {
   const ref = useRef(null)
+  useEffect(() => watch(ref.current), [watch]) // watched from the moment it is on the page, whichever view put it there
   useLayoutEffect(() => { if (mounted && ref.current) onHeight(ci, ref.current.offsetHeight) })
-  if (!mounted) return <div data-c={ci} style={{ height: est }} />
+  if (!mounted) return <div ref={ref} data-c={ci} style={{ height: est }} />
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const out = []
   for (let bi = ch.from; bi < ch.to; bi++) {
@@ -648,28 +695,9 @@ function Preparing({ d, doc, pos }) {
   )
 }
 
-// Word timing lives in src/lib/words.js so the lock screen can reuse it.
+// Word timing lives in src/lib/words.js so the lock screen can reuse it; the clock is useLitWord (litword.js).
 function ActiveSentence({ i, text, dur, tail, words, plain }) {
-  const { ws, ends } = useMemo(() => wordWeights(text), [text])
-  const starts = useMemo(() => { let at = 0; return ws.map(x => { const s0 = at; at += x.length + 1; return s0 }) }, [ws])
-  const [w, setW] = useState(-1)
-  // Built-in voice: exact word positions reported by the speech engine.
-  const sys = useStore(settings, s => activeEngine(s) === 'system')
-  const spoken = useStore(player, s => s.word)
-  const sysWord = sys ? Math.max(0, starts.findLastIndex(x => x <= spoken)) : -1
-  useEffect(() => {
-    if (sys || !words || !dur) return
-    let raf
-    const tick = () => {
-      const f = (audioClock() - 0.06) / Math.max(0.2, dur - (tail || 0))
-      setW(f <= 0 ? 0 : ends.findIndex(e => e >= f))
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [sys, words, dur, tail, ends])
-  const lit = sys ? sysWord : w
-  const showWords = words && (sys || dur)
+  const { ws, lit, shown: showWords } = useLitWord(text, dur, tail, words)
   return (
     <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: plain ? 'transparent' : T.accentSoft, color: T.text, boxShadow: plain ? 'none' : `0 0 0 2px ${T.accentSoft}` }}>
       {showWords ? ws.map((x, k) => <span key={k} style={{ color: k === lit ? T.lime : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
@@ -728,7 +756,9 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
   const host = useRef(null)
   const at = active >= 0 ? start + active : -1
   const boxes = useGlow(host, at)
-  const glow = <Glow boxes={boxes} at={at} />
+  const lit = useRef(false) // has the light ever been on this paragraph? Most never: they carry nothing for it.
+  if (at >= 0) lit.current = true
+  const glow = lit.current ? <Glow boxes={boxes} at={at} /> : null
   const tool = useMemo(() => (VISUAL_KINDS.has(b.k) ? toolFor(b) : null), [b])
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const sentences = b.s.map((t, k) => k === active

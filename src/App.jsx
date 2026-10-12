@@ -3,6 +3,8 @@ import { motion, AnimatePresence, MotionConfig } from 'motion/react'
 import { T } from './theme.js'
 import { useStore, useWidth } from './lib/store.js'
 import { ui } from './lib/nav.js'
+import { settings } from './lib/settings.js'
+import { reducedMotion } from './lib/motion.js'
 import { Route } from './lib/route.js'
 import { boot } from './lib/library.js'
 import { startHistory } from './lib/history.js'
@@ -11,21 +13,31 @@ import { player, toggle, nextSentence, prevSentence } from './lib/player.js'
 import { Library } from './ui/Library.jsx'
 import { Reader } from './ui/Reader.jsx'
 import { PlayerBar, playerHeight } from './ui/PlayerBar.jsx'
-import { Sheets } from './ui/Sheets.jsx'
 import { InstallPrompt } from './ui/InstallPrompt.jsx'
 import { TabBar } from './ui/TabBar.jsx'
 import { ActivityStrip, useActivity, ACTIVITY_H } from './ui/Activity.jsx'
 
+// The sheets (Add a document, voices, languages and the rest) load just after the first screen, in their own file.
+const Sheets = lazy(() => import('./ui/Sheets.jsx').then(m => ({ default: m.Sheets })))
 const Settings = lazy(() => import('./ui/Settings.jsx').then(m => ({ default: m.Settings })))
 
 // A page moves the way the customer is going. Going deeper, the new page arrives from the right and the old
 // one leaves to the left; going back (the Back button, Android's back gesture) it is the mirror image, so
 // the screen follows the thumb. Between tabs there is no direction: a short rise. `custom` carries the
 // direction to the page that is leaving, which can no longer receive props (motion.dev, AnimatePresence).
+const PAGE_TRAVEL = 18 // % of the screen's width a page travels as it arrives
 const PAGE = {
-  enter: dir => ({ opacity: 0, x: dir * 28, y: dir ? 0 : 8 }),
-  show: { opacity: 1, x: 0, y: 0, transition: { duration: 0.24, ease: T.ease } },
-  exit: dir => ({ opacity: 0, x: dir * -20, transition: { duration: 0.12, ease: 'easeIn' } }),
+  // Going in, the new page comes from the right; coming back, from the left; a tab change rises. Far enough
+  // and long enough to be seen as a move (the first version was 28 px in a quarter of a second: a flicker).
+  // The move is written as ONE `transform`, which the browser's compositor runs by itself: it stays smooth
+  // while the new page is still being built. (Written as separate x and y it is animated by script, frame
+  // by frame, on the thread that is busy building: measured, that is what stuttered on a phone.) At rest
+  // the transform is taken off again, or the page would trap everything fixed inside it (sheets, "Back to now").
+  enter: dir => (reducedMotion() ? { opacity: 0 } : { opacity: 0, transform: dir ? `translate(${dir * PAGE_TRAVEL}%, 0px)` : `translate(0%, ${T.enter.y}px)` }),
+  show: { opacity: 1, transform: 'translate(0%, 0px)', pointerEvents: 'auto', transition: { duration: 0.44, ease: T.enter.ease }, transitionEnd: { transform: 'none' } },
+  // A page that is leaving takes no more taps. A fast customer could press a button on it as it faded; the
+  // page was then brought back with a sheet that history knew nothing about (found by the random customer).
+  exit: dir => ({ opacity: 0, ...(dir && !reducedMotion() ? { transform: ['translate(0%, 0px)', `translate(${dir * -PAGE_TRAVEL / 2}%, 0px)`] } : {}), pointerEvents: 'none', transition: { duration: 0.14, ease: 'easeIn' } }),
 }
 
 export default function App() {
@@ -70,11 +82,15 @@ export default function App() {
   }
   const dir = trip.current.dir
 
+  // Motion follows the phone's own setting unless the customer chose otherwise (Settings, Motion).
+  const motionPref = useStore(settings, st => st.motion || 'system')
+  useEffect(() => { document.documentElement.dataset.motion = motionPref }, [motionPref])
+
   const full = view === 'reader'
   const dock = playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
   const lift = activity ? ACTIVITY_H : 0
   return (
-    <MotionConfig reducedMotion="user" transition={{ duration: T.dur.fast, ease: T.ease }}>
+    <MotionConfig reducedMotion={motionPref === 'full' ? 'never' : motionPref === 'less' ? 'always' : 'user'} transition={{ duration: T.dur.fast, ease: T.ease }}>
     <div style={{ fontFamily: T.font, color: T.text, background: T.bg, minHeight: '100dvh', WebkitFontSmoothing: 'antialiased' }}>
       {/* A page slides a little as it arrives or leaves. `clip` keeps that from widening the screen (on a
           phone a wider page makes the whole view rescale and every fixed bar jump); unlike `hidden` it does
@@ -96,7 +112,7 @@ export default function App() {
       </div>
       <PlayerBar wide={wide} full={full} />
       {!wide && !full && <TabBar />}
-      <Sheets wide={wide} />
+      <Suspense fallback={null}><Sheets wide={wide} /></Suspense>
       <ActivityStrip activity={activity} bottom={dock} />
       <InstallPrompt wide={wide} full={full} lift={lift} />
       <AnimatePresence mode="wait">

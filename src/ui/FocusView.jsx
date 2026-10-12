@@ -16,7 +16,9 @@ import { Button, IconButton } from './kit.jsx'
 // otherwise this is a speed reader on a per-word timer.
 const PIVOT_AT = 38 // percent of the width: a little left of centre, because most of a word lies after its pivot
 
-export function FocusView({ doc, active, onSeek, playing }) {
+const WORD_H = 110 // px: the height of the word's row
+
+export function FocusView({ doc, active, onSeek, playing, stickTop = 0 }) {
   const id = useRoute().docId
   const wpm = useStore(settings, s => s.focusWpm ?? 300)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
@@ -162,7 +164,7 @@ export function FocusView({ doc, active, onSeek, playing }) {
 
   if (!doc || curSent == null || curSent < 0 || !words.length) {
     return (
-      <div style={{ maxWidth: 560, margin: '12vh auto 0', textAlign: 'center', fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
+      <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center', fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
         {!doc ? 'Preparing the text.' : 'Nothing readable in this document yet.'}
       </div>
     )
@@ -204,11 +206,11 @@ export function FocusView({ doc, active, onSeek, playing }) {
 
   const fit = word.length > 14 ? Math.round(size * 14 / word.length) : size // a very long word is shown smaller rather than cut
   return (
-    <div style={{ maxWidth: 640, margin: '10vh auto 0', padding: '0 20px 40px' }}>
+    <div style={{ width: '100%', maxWidth: 640, margin: '0 auto', padding: '0 20px', boxSizing: 'border-box' }}>
       {/* The lime letter's left edge sits at one fixed spot (PIVOT_AT of the width) for every word: the part
           before it is right-aligned up to that spot, the rest starts there. Words may run past the edges of
           their halves; nothing moves the spot. */}
-      <div style={{ position: 'relative', height: 110, fontFamily: T.font, fontWeight: 700, fontSize: fit, lineHeight: '110px', whiteSpace: 'pre' }}>
+      <div data-testid="focus-word" style={{ position: 'sticky', top: stickTop, zIndex: 1, background: T.bg, height: WORD_H, fontFamily: T.font, fontWeight: 700, fontSize: fit, lineHeight: `${WORD_H}px`, whiteSpace: 'pre' }}>
         <span style={{ position: 'absolute', right: `${100 - PIVOT_AT}%`, color: T.text }}>{word.slice(0, pi)}</span>
         <span style={{ position: 'absolute', left: `${PIVOT_AT}%`, color: T.text }}><span data-pivot style={{ color: T.lime }}>{word.slice(pi, pi + 1)}</span>{word.slice(pi + 1)}</span>
       </div>

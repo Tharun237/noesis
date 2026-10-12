@@ -74,3 +74,27 @@ Android's back gesture is the customer's main control. Whatever opened last is w
 - Fixed things at the bottom of the screen stand on `var(--dock)` (player plus status strip), set by App.
 - Never put an entrance delay in `transition` on something that can be pressed: it delays the press too. Put it
   inside `animate.transition`.
+
+## Cost: what may be a Motion component, and what may not (measured 2026-10-12, e2e/feel.mjs)
+
+When every icon, button and label was its own Motion component, more than half of all script time on a slowed
+processor was inside the Motion library and opening a book ran at 24 frames a second. So:
+
+- **Small reactions are the style sheet's job** (`src/ui/press.js`, built from the theme's numbers): a press
+  (`data-press`, depth by `--press`), an icon's movement (automatic inside a `data-press`), a label that changes
+  (`Swap`), a status that changes (`data-fade`), anything that arrives (`data-rise`, `rowIn(i)`, `Appear`), the
+  pulsing dot, and the two things tied to scrolling. They run on the compositor and cost nothing per element.
+- **Motion is for what only it can do**: pages, sheets and their drag, menus, things leaving (`AnimatePresence`),
+  shared elements (`layoutId`), the flying cover, the sentence light, counting numbers.
+- **Movement is written as one `transform`**, never as separate `x` / `y` / `scale`, wherever the page is busy
+  at the same time (a page arriving): one `transform` is run by the compositor; separate values are animated
+  by script on every frame, on the thread that is building the page. Take the transform off at rest
+  (`transitionEnd: { transform: 'none' }`) or it traps everything `position: fixed` inside it.
+- **Every `layout` / `layoutId` element has a `layoutDependency`**: without it Motion measures the element on
+  every re-render of its parent. Cards glide to a new place on desktop only.
+- **Nothing slow in a render that runs often**: the player re-renders every tick. One `Intl` formatter made
+  once, never `toLocaleTimeString` in a render.
+- **How much a thing moves** is `T.enter` (rise, duration, easing, stagger) and `T.tap` (press depth), from the
+  ACS pages. The first values were a fifth of a second and 8 px: Tharun could not feel them at all.
+- **The customer can turn motion up or down** (Settings, Motion). A phone in battery saver asks for less motion;
+  the card says so, and Full overrides it.

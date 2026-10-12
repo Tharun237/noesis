@@ -97,11 +97,14 @@ export function ActivityStrip({ activity, bottom }) {
   useEffect(() => { setOpen(false) }, [activity?.key]) // new work starts small
   const wide = !!activity && (open || !!activity.error || !!activity.action)
   const pct = activity?.progress != null ? `${Math.floor(activity.progress * 100)}%` : null
+  // What decides the island's size. It is measured for a move only when this changes, not on every tick of
+  // the percentage (each measure reads the page's layout: on a phone that was felt).
+  const shape = `${wide}|${activity?.text}|${activity?.detail}|${pct?.length}|${!!activity?.error}`
   return (
     <div style={{ position: 'fixed', left: 8, right: 8, zIndex: 34, bottom: `calc(env(safe-area-inset-bottom) + ${bottom + 8}px)`, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <AnimatePresence>
         {activity && (
-          <motion.div key="activity" layout role="status" aria-live="polite" aria-expanded={wide}
+          <motion.div key="activity" layout layoutDependency={shape} role="status" aria-live="polite" aria-expanded={wide}
             initial={{ opacity: 0, y: 14, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 14, scale: 0.9 }} transition={ISLAND}
             onClick={() => setOpen(o => !o)}
             style={{
@@ -110,15 +113,15 @@ export function ActivityStrip({ activity, bottom }) {
               borderRadius: wide ? T.r.md : 17, background: T.bg, border: `1px solid ${activity.error ? T.danger : T.borderHi}`,
               boxShadow: '0 12px 32px rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', gap: wide ? 10 : 8, padding: wide ? '0 8px 0 14px' : '0 14px 0 12px',
             }}>
-            <motion.span layout="position" style={{ display: 'inline-flex', flexShrink: 0 }}><Pulse color={activity.error ? T.danger : T.lime} /></motion.span>
-            <motion.div layout="position" style={{ flex: wide ? 1 : '0 1 auto', minWidth: 0, display: 'grid', gap: 1 }}>
+            <motion.span layout="position" layoutDependency={shape} style={{ display: 'inline-flex', flexShrink: 0 }}><Pulse color={activity.error ? T.danger : T.lime} /></motion.span>
+            <motion.div layout="position" layoutDependency={shape} style={{ flex: wide ? 1 : '0 1 auto', minWidth: 0, display: 'grid', gap: 1 }}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div key={activity.text} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: T.dur.fast }}
                   style={{ fontSize: 13.5, fontWeight: 600, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activity.text}</motion.div>
               </AnimatePresence>
               {wide && activity.detail && <div style={{ fontFamily: T.mono, fontSize: 11, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activity.detail}</div>}
             </motion.div>
-            {pct && <motion.div layout="position" style={{ fontFamily: T.mono, fontSize: 12, color: wide ? T.text : T.sub, paddingRight: wide ? 6 : 0, flexShrink: 0 }}>{pct}</motion.div>}
+            {pct && <motion.div layout="position" layoutDependency={shape} style={{ fontFamily: T.mono, fontSize: 12, color: wide ? T.text : T.sub, paddingRight: wide ? 6 : 0, flexShrink: 0 }}>{pct}</motion.div>}
             {wide && activity.open && !activity.action && (
               <button type="button" onClick={e => { e.stopPropagation(); go('reader', activity.open) }}
                 style={{ height: 30, padding: '0 14px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>

@@ -8,7 +8,8 @@ import { useEffect, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { db } from '../lib/db.js'
-import { locatePage, sentenceAt } from '../lib/locate.js'
+import { locatePage, sentenceAt, partOf } from '../lib/locate.js'
+import { useLitWord } from './litword.js'
 import { scrollBehavior } from '../lib/motion.js'
 
 const MAX_DRAWN = 6
@@ -20,7 +21,25 @@ const FALLBACK_RATIO = 1.4142 // A4-ish until the first page reports its true si
 export const MARK = { position: 'absolute', background: T.lime, borderRadius: 3 }
 export const MARK_INK = { light: { opacity: 0.5, mixBlendMode: 'multiply' }, dark: { opacity: 0.32, mixBlendMode: 'normal' } }
 
-export function PageView({ id, activePage, invert, userScroll, onPages, onVisible, onTapPage, onFail, pageSentences, activeSentence, onTapSentence }) {
+// The word being said, on the page: a second, stronger stroke of the pen inside the marked sentence. Its
+// place is worked out from the word's share of the sentence's length (the page gives lines, not words).
+const WORD_INK = { light: { opacity: 0.55, mixBlendMode: 'multiply' }, dark: { opacity: 0.5, mixBlendMode: 'normal' } }
+export function WordOnPage({ rects, spoken, invert }) {
+  const { ws, starts, lit, shown } = useLitWord(spoken?.text, spoken?.dur, spoken?.tail, !!spoken?.words)
+  if (!shown || lit < 0 || lit >= ws.length) return null
+  const length = spoken.text.length || 1
+  const ink = WORD_INK[invert ? 'dark' : 'light']
+  return (
+    <motion.div key={lit} data-testid="word-mark" initial={{ opacity: 0 }} animate={{ opacity: ink.opacity }} transition={{ duration: 0.08 }}
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', mixBlendMode: ink.mixBlendMode }}>
+      {partOf(rects, starts[lit] / length, (starts[lit] + ws[lit].length) / length).map((rc, k) => (
+        <div key={k} style={{ ...MARK, left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` }} />
+      ))}
+    </motion.div>
+  )
+}
+
+export function PageView({ id, activePage, invert, userScroll, onPages, onVisible, onTapPage, onFail, pageSentences, activeSentence, onTapSentence, spoken }) {
   const [numPages, setNumPages] = useState(0)
   const [near, setNear] = useState(() => new Set([1]))
   const [visible, setVisible] = useState(1)
@@ -307,6 +326,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
                 ))}
               </motion.div>
             )}
+            {p === activeLocPage && activeRects && <WordOnPage rects={activeRects} spoken={spoken} invert={invert} />}
           </div>
         )
       })}

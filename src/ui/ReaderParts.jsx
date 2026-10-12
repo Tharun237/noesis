@@ -123,15 +123,28 @@ export function SearchBar({ doc, onHit, onClose }) {
 }
 
 // ── "back to what's playing" ───────────────────────────────────────────────────────
-export function JumpToNow({ active, bottom, onJump }) {
+const LOOK_AGAIN_MS = 500
+export function JumpToNow({ active, bottom, onJump, find }) {
   const [away, setAway] = useState(false)
+  const finder = useRef(find)
+  finder.current = find
   useEffect(() => {
-    if (active < 0) return setAway(false)
-    const el = document.querySelector(`[data-i="${active}"]`)
-    if (!el) return
-    const io = new IntersectionObserver(([e]) => setAway(!e.isIntersecting), { rootMargin: '-60px 0px -140px 0px' })
-    io.observe(el)
-    return () => io.disconnect()
+    if (active < 0) { setAway(false); return undefined }
+    // Several reports can arrive together (the place was on screen, then a fling took it away): the LAST one is
+    // how things are now. Reading the first left the button missing while the voice read on off screen (found
+    // by the random customer).
+    const io = new IntersectionObserver(seen => setAway(!seen[seen.length - 1].isIntersecting), { rootMargin: '-60px 0px -140px 0px' })
+    let el = null
+    const look = () => {
+      const now = (finder.current ? finder.current() : document.querySelector(`[data-i="${active}"]`)) || null
+      if (now === el) return
+      if (el) io.unobserve(el)
+      el = now
+      if (el) io.observe(el); else setAway(false) // nothing to go back to in this view
+    }
+    look()
+    const again = setInterval(look, LOOK_AGAIN_MS)
+    return () => { clearInterval(again); io.disconnect() }
   }, [active])
   return (
     <AnimatePresence>

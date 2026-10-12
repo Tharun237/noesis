@@ -13,6 +13,14 @@ Every numbered item below is built and live. What is left is not building:
   notes, a choice per document of how figures and tables are read, Google sign-in set-up.
 - **Cannot be done in a web app:** watch apps, earbud sensors (see "Limits of a web app").
 
+After Tharun's test on his phone the same night ("every UI element is breaking", "lagging and not
+optimised", "me finding every bug is a very bad way"): the reader no longer goes blank after a change of
+view, the page views mark the word being said and offer "Back to now", and two tools now do what he was
+doing by hand. `e2e/chaos.mjs` is an impatient random customer (it found nine more faults, all fixed: see
+`.claude/skills/customer/SKILL.md`). `e2e/feel.mjs` measures the app at phone speed (script time for the
+same sixteen actions fell from 5,429 to about 3,850 ms and late frames from 50 to 28, with larger motion).
+Settings has a Motion card: a phone in battery saver was silently switching motion off.
+
 ## How the work is done
 
 | Role | Who | Does |

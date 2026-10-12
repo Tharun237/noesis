@@ -19,3 +19,5 @@ public/ort
 tools/listen/out/
 tools/listen/.cache/
 public/espeak
+.chaos-profile
+.feel-profile

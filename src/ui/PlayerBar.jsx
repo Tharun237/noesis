@@ -115,15 +115,15 @@ function Transport({ size = 58 }) {
 
 function PlayButton({ playing, waiting, size }) {
   return (
-    <motion.button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} whileTap={{ scale: 0.9 }} transition={T.press}
-      style={{ width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
+    <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} data-press=""
+      style={{ '--press': T.tap.icon, width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
       {waiting && (
         <span data-spin style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
       )}
       <motion.span key={playing ? 'pause' : 'play'} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.spring} style={{ display: 'grid' }}>
         <Icon name={playing ? 'pause' : 'play'} size={size * 0.4} stroke={playing ? 2.6 : 1.6} fill={!playing} style={{ marginLeft: playing ? 0 : 2 }} />
       </motion.span>
-    </motion.button>
+    </button>
   )
 }
 
@@ -159,13 +159,17 @@ export function sleepText(sleep) {
   return null
 }
 
+// One formatter, made once. Asking the browser for a fresh one on every render of the player (which is what
+// toLocaleTimeString does) took 111 ms of a short session on a slowed processor: measured, e2e/feel.mjs.
+const CLOCK = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' })
+
 function MoreMenu({ d }) {
   const sleep = useStore(player, s => s.sleep)
   const skip = useStore(settings, s => s.skipVisuals)
   const running = sleep?.until || sleep?.chapter || sleep?.doc
   const minsLeft = sleep?.until ? Math.max(1, Math.round((sleep.until - Date.now()) / 60000)) : null
   const runningRight = sleep?.until ? `${minsLeft} min left` : sleep?.chapter ? 'at end of chapter' : sleep?.doc ? 'at end of document' : 'off'
-  const at = m => new Date(Date.now() + m * 60000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const at = m => CLOCK.format(Date.now() + m * 60000)
   return (
     <Menu up trigger={t => <IconButton icon="more" label="Player menu" onClick={t} />} items={[
       ...(running ? [{ label: 'Turn sleep timer off', icon: 'moon', right: runningRight, onClick: () => setSleep(null) }] : []),

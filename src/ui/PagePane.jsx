@@ -7,12 +7,12 @@ import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { db } from '../lib/db.js'
 import { locatePage, sentenceAt } from '../lib/locate.js'
-import { MARK, MARK_INK } from './PageView.jsx'
+import { MARK, MARK_INK, WordOnPage } from './PageView.jsx'
 
 const FALLBACK_RATIO = 1.4142 // A4-ish until the page reports its true size
 const TURN = { duration: 0.2, ease: T.ease }
 
-export function PagePane({ id, page, invert, pageSentences, activeSentence, onTapSentence, onTapPage, onPages, onFail }) {
+export function PagePane({ id, page, invert, pageSentences, activeSentence, onTapSentence, onTapPage, onPages, onFail, spoken }) {
   const [pdf, setPdf] = useState(null) // { doc, mod }: the open PDF and the module that reads it
   const [size, setSize] = useState(null) // the pane's inner size
   const [drawn, setDrawn] = useState(0) // the last page whose drawing finished
@@ -62,7 +62,7 @@ export function PagePane({ id, page, invert, pageSentences, activeSentence, onTa
     <div ref={pane} style={{ position: 'relative', width: '100%', height: '100%' }}>
       {pages.map(p => (
         <PageSheet key={p} pdf={pdf} page={p} size={size} invert={invert} current={p === page}
-          sentences={pageSentences} activeSentence={activeSentence} onTapSentence={onTapSentence} onTapPage={onTapPage}
+          sentences={pageSentences} activeSentence={activeSentence} spoken={spoken} onTapSentence={onTapSentence} onTapPage={onTapPage}
           onDrawn={() => setDrawn(p)} />
       ))}
     </div>
@@ -71,7 +71,7 @@ export function PagePane({ id, page, invert, pageSentences, activeSentence, onTa
 
 // One drawn page: its own canvas (pdf.js cannot draw two pages onto one canvas at once), its sentences found
 // in its own text layer, and the mark on the sentence being read.
-function PageSheet({ pdf, page, size, invert, current, sentences, activeSentence, onTapSentence, onTapPage, onDrawn }) {
+function PageSheet({ pdf, page, size, invert, current, sentences, spoken, activeSentence, onTapSentence, onTapPage, onDrawn }) {
   const canvas = useRef(null)
   const [ratio, setRatio] = useState(FALLBACK_RATIO)
   const [located, setLocated] = useState(null) // [{ i, rects }] for this page's sentences
@@ -131,6 +131,7 @@ function PageSheet({ pdf, page, size, invert, current, sentences, activeSentence
           ))}
         </motion.div>
       )}
+      {hit && <WordOnPage rects={hit.rects} spoken={spoken} invert={invert} />}
     </motion.div>
   )
 }

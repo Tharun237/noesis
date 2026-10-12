@@ -65,6 +65,24 @@ export function locate(index, sentence, from = 0) {
   return { start, end: Math.min(norm.length, start + s.length) }
 }
 
+// The part of a marked sentence between two shares of its length (0 to 1), as rects: one word of it, say.
+// `rects` are the sentence's line rects in reading order; a part that crosses a line end comes back as two.
+export function partOf(rects, from, to) {
+  const total = rects.reduce((a, r) => a + r.w, 0)
+  if (!(total > 0)) return []
+  const a = Math.max(0, Math.min(1, from)) * total
+  const b = Math.max(0, Math.min(1, to)) * total
+  const out = []
+  let at = 0
+  for (const r of rects) {
+    const s = Math.max(a, at)
+    const e = Math.min(b, at + r.w)
+    if (e > s) out.push({ x: r.x + (s - at), y: r.y, w: e - s, h: r.h })
+    at += r.w
+  }
+  return out
+}
+
 // One rect per line touched, in line order. For each line the covered part runs
 // from the first to the last covered character OF THAT LINE, turned into
 // horizontal fractions of the line by character count.
