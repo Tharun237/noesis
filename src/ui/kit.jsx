@@ -6,6 +6,37 @@ import { reducedMotion } from '../lib/motion.js'
 
 // Shared primitives. Motion is transform/opacity only (GPU-composited); no layout properties animate.
 
+// A press is named ("tap", and "hover" on a computer) so that what is inside the button hears it too: the
+// icon makes its own small movement (icons.jsx) while the button gives way.
+const PRESS = { tap: { scale: T.tap.control } }
+const PRESS_ICON = { tap: { scale: T.tap.icon } }
+const PRESS_ROW = { tap: { scale: T.tap.row } }
+
+// Text that changes in place (Play to Stop, a status, a count) slides to its new value instead of blinking.
+// The old and the new share one cell, so nothing around them moves while they change.
+export function Swap({ children }) {
+  return (
+    <span style={{ display: 'inline-grid', overflow: 'hidden', verticalAlign: 'bottom' }}>
+      <AnimatePresence initial={false}>
+        <motion.span key={String(children)} initial={{ y: '70%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-70%', opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } }}
+          transition={{ duration: 0.2, ease: T.ease }} style={{ gridArea: '1 / 1' }}>{children}</motion.span>
+      </AnimatePresence>
+    </span>
+  )
+}
+
+// A drawing (a chart, a map) is uncovered from left to right when it appears: a cover the colour of the
+// sheet slides off it. Only for drawings that sit on the plain black of a page or sheet.
+export function Reveal({ children, style }) {
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden', ...style }}>
+      {children}
+      <motion.span aria-hidden="true" initial={{ x: 0 }} animate={{ x: '102%' }} transition={{ duration: 0.8, ease: T.ease, delay: 0.12 }}
+        style={{ position: 'absolute', inset: 0, background: T.bg, pointerEvents: 'none' }} />
+    </div>
+  )
+}
+
 export function Button({ children, onClick, kind = 'ghost', icon, disabled, full, type = 'button', style, title }) {
   const base = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, padding: '0 16px',
@@ -20,17 +51,17 @@ export function Button({ children, onClick, kind = 'ghost', icon, disabled, full
     ghost: {},
   }
   return (
-    <motion.button type={type} title={title} onClick={onClick} disabled={disabled} whileTap={disabled ? undefined : { scale: 0.96 }}
+    <motion.button type={type} title={title} onClick={onClick} disabled={disabled} variants={PRESS} whileTap={disabled ? undefined : 'tap'} whileHover={disabled ? undefined : 'hover'}
       transition={T.press} style={{ ...base, ...kinds[kind], ...style }}>
       {icon && <Icon name={icon} size={17} />}
-      {children}
+      {typeof children === 'string' ? <Swap>{children}</Swap> : children}
     </motion.button>
   )
 }
 
 export function IconButton({ icon, onClick, label: aria, size = 40, iconSize = 20, active, style, fill }) {
   return (
-    <motion.button type="button" aria-label={aria} title={aria} onClick={onClick} whileTap={{ scale: 0.9 }} transition={T.press}
+    <motion.button type="button" aria-label={aria} title={aria} onClick={onClick} variants={PRESS_ICON} whileTap="tap" whileHover="hover" transition={T.press}
       style={{
         width: size, height: size, borderRadius: T.r.pill, border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer',
         background: active ? T.accentSoft : 'transparent', color: active ? T.accent : T.text, flexShrink: 0, padding: 0, ...style,
@@ -113,6 +144,13 @@ export function Appear({ as = 'div', children, style }) {
   return <M initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: T.ease }} style={style}>{children}</M>
 }
 
+// Rows of a list that has just appeared come in one after another, quickly, and only the first ten are held
+// back: a long list must never make anyone wait. Spread onto a motion element: <motion.button {...rowIn(i)}>.
+const ROW_STEP = 0.028
+const ROWS_HELD = 10
+// The delay belongs to the entrance alone, so a press on the row still answers at once.
+export const rowIn = i => ({ initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: T.ease, delay: 0.06 + Math.min(i, ROWS_HELD) * ROW_STEP } }, transition: T.press })
+
 // A number that counts up to its value when it appears and glides when it changes, so a total reads as
 // something that was added up. Written straight to the page (no renders).
 export function Count({ value, format = Math.round }) {
@@ -170,7 +208,8 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
                 <div style={{ width: 40, height: 4, borderRadius: 4, background: T.surfaceTop, margin: '0 auto' }} />
               </div>
             )}
-            {children}
+            {/* What is inside settles a moment after the sheet itself: the sheet arrives, then its content. */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: T.ease, delay: 0.05 }}>{children}</motion.div>
           </motion.div>
         </motion.div>
       )}
@@ -180,6 +219,8 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
 
 // Popover menu anchored to its trigger.
 const MENU_W = 260
+const MENU_ROW_STEP = 0.018 // the rows of a menu follow one another, the first eight only
+const MENU_ROWS_HELD = 8
 const EDGE = 8
 
 // Popover menu anchored to its trigger. On open it measures the room around the trigger and
@@ -225,11 +266,12 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
             {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : it.heading ? (
               <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{it.heading}</div>
             ) : (
-              <button key={i} role="menuitem" type="button" disabled={it.disabled}
+              <motion.button key={i} role="menuitem" type="button" disabled={it.disabled} variants={PRESS_ROW} whileTap={it.disabled ? undefined : 'tap'} whileHover={it.disabled ? undefined : 'hover'} transition={T.press}
+                initial={{ opacity: 0, y: place.up ? 4 : -4 }} animate={{ opacity: it.disabled ? 0.4 : 1, y: 0, transition: { duration: 0.16, ease: T.ease, delay: Math.min(i, MENU_ROWS_HELD) * MENU_ROW_STEP } }}
                 onClick={() => { setOpen(false); it.onClick() }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '10px 12px', border: 'none', borderRadius: T.r.sm,
-                  background: 'transparent', color: it.danger ? T.danger : T.text, opacity: it.disabled ? 0.4 : 1, fontFamily: T.font, fontSize: 14,
+                  background: 'transparent', color: it.danger ? T.danger : T.text, fontFamily: T.font, fontSize: 14,
                   cursor: it.disabled ? 'default' : 'pointer', textAlign: 'left',
                 }}
                 onPointerEnter={e => { e.currentTarget.style.background = T.surfaceHi }}
@@ -237,7 +279,7 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
                 {it.icon && <Icon name={it.icon} size={17} />}
                 <span style={{ flex: 1 }}>{it.label}</span>
                 {it.right && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub }}>{it.right}</span>}
-              </button>
+              </motion.button>
             ))}
           </motion.div>
         )}

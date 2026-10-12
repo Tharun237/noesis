@@ -2,6 +2,7 @@ import { useId, useMemo } from 'react'
 import { motion } from 'motion/react'
 import { T, label } from '../theme.js'
 import { arc, splitSections, hardWords } from '../lib/insights.js'
+import { Reveal } from './kit.jsx'
 
 // Chart box in viewBox units; the SVG stretches to 100% width (preserveAspectRatio none).
 const CHART_W = 100
@@ -58,7 +59,7 @@ export function Insights({ doc, title, onSeek, onAsk }) {
           <div style={note}>This document is too short for an arc.</div>
         ) : (
           <>
-            <ArcChart points={sections} />
+            <Reveal><ArcChart points={sections} /></Reveal>
             <div style={note}>Counted from ordinary English words of feeling. It does not understand irony, and it works for English text only.</div>
             <div style={{ display: 'grid', gap: 2 }}>
               {sections.map((s, i) => (

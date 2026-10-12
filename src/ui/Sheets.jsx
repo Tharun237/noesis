@@ -15,7 +15,7 @@ import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
-import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle, Appear } from './kit.jsx'
+import { Button, IconButton, Segmented, Sheet, Toggle, Field, inputStyle, Appear, rowIn } from './kit.jsx'
 import { LibraryAsk } from './LibraryAsk.jsx'
 import { ConceptMap } from './ConceptMap.jsx'
 import { Briefing } from './Briefing.jsx'
@@ -254,8 +254,8 @@ function VoicePicker() {
       {d.voice && isCloudVoice(d.voice) && (
         <div style={{ padding: '0 12px 14px', fontSize: 12.5, color: T.sub, lineHeight: 1.55 }}>{cloudTruth(d.voice)}</div>
       )}
-      {voicesFor(d.lang || 'en').map(v => (
-        <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
+      {voicesFor(d.lang || 'en').map((v, i) => (
+        <motion.div key={v.id} {...rowIn(i)} style={{ display: 'flex', alignItems: 'center', gap: 6, borderRadius: T.r.sm, background: v.id === d.voice ? T.surfaceHi : 'transparent' }}>
           <button type="button" onClick={() => { changeVoice(d.id, v.id); toast(`Switching to ${v.name}`); closeSheet() }}
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', fontFamily: T.font }}>
             <span style={{ width: 18, color: T.accent }}>{v.id === d.voice && <Icon name="check" size={17} />}</span>
@@ -263,7 +263,7 @@ function VoicePicker() {
             <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.cloud ? v.accent : `${v.accent} · ${v.g}`}</span>
           </button>
           <PreviewButton voice={v.id} busy={busy} setBusy={setBusy} />
-        </div>
+        </motion.div>
       ))}
     </div>
   )

@@ -34,6 +34,9 @@ export const T = {
   // Timed springs (motion.dev: visualDuration + bounce): they arrive when they say they will.
   spring: { type: 'spring', visualDuration: 0.26, bounce: 0.14 }, // sheets, pills, things that land
   press: { type: 'spring', stiffness: 400, damping: 30 }, // a finger going down: instant
+  // How far a pressed thing gives way: the larger it is, the less (a whole card barely moves, a small control
+  // moves clearly). Same scale as the ACS shop: cards 0.985, pills 0.92 to 0.93 (docs/research/acs-motion-study.md).
+  tap: { card: 0.985, row: 0.98, control: 0.96, icon: 0.9 },
   settle: { type: 'spring', visualDuration: 0.3, bounce: 0.08 }, // things moving to a new place in a list
   dur: { fast: 0.16, base: 0.28, slow: 0.5 },
 

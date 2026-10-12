@@ -12,6 +12,8 @@ import { VoiceCard } from './VoiceCard.jsx'
 import { DiagnosticsCard } from './Diagnostics.jsx'
 import { CreditsCard } from './Credits.jsx'
 import { AmbientCard } from './AmbientCard.jsx'
+import { AwarenessCard } from './AwarenessCard.jsx'
+import { askAware } from '../lib/extras.js'
 
 
 export function Settings({ wide }) {
@@ -32,6 +34,13 @@ export function Settings({ wide }) {
         <VoiceCard Card={Card} />
         <AmbientCard Card={Card} mode={s.ambientMode || 'off'} volume={s.ambientVolume ?? 0.5} haptics={!!s.haptics}
           onChange={c => settings.set({ ...('mode' in c ? { ambientMode: c.mode } : {}), ...('volume' in c ? { ambientVolume: c.volume } : {}), ...('haptics' in c ? { haptics: c.haptics } : {}) })} />
+        {/* A switch turned on asks for the microphone there and then; it stays off if the answer is no. */}
+        <AwarenessCard Card={Card} slow={!!s.awareSlow} pauseOnSpeech={!!s.awarePause}
+          onChange={async c => {
+            const next = 'slow' in c ? { awareSlow: c.slow } : { awarePause: c.pauseOnSpeech }
+            if (Object.values(next)[0] && !(await askAware())) return
+            settings.set(next)
+          }} />
         <Card title="Listening">
           <Field title={`Default speed · ${s.speed}x`}>
             <input type="range" min={0.5} max={3} step={0.05} value={s.speed} onChange={e => settings.set({ speed: +e.target.value })} style={{ accentColor: T.accent, width: '100%' }} />

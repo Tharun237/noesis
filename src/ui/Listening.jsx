@@ -5,7 +5,8 @@ import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { useHistory, summarise, makeRetrospective } from '../lib/history.js'
 import { go, closeSheet } from '../lib/nav.js'
-import { Button, IconButton, Pulse, Appear, Count } from './kit.jsx'
+import { motion } from 'motion/react'
+import { Button, IconButton, Pulse, Appear, Count, rowIn } from './kit.jsx'
 
 function fmtListened(s) {
   s = Math.max(0, Math.floor(s || 0))
@@ -66,11 +67,11 @@ export function Listening({ wide }) {
         <IconButton icon="close" label="Close" onClick={closeSheet} />
       </div>
       <div style={{ display: 'grid', gap: 10 }}>
-        {rows.map(([k, v, f]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        {rows.map(([k, v, f], i) => (
+          <motion.div key={k} {...rowIn(i)} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
             <div style={{ flex: 1, fontSize: 14, color: T.sub }}>{k}</div>
             <div style={{ fontFamily: T.mono, fontSize: 14, color: T.text }}><Count value={v} format={f} /></div>
-          </div>
+          </motion.div>
         ))}
       </div>
       {summary.top.length > 0 && (

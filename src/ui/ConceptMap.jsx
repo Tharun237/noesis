@@ -7,7 +7,8 @@ import { db } from '../lib/db.js'
 import { pause } from '../lib/text.js'
 import { closeSheet } from '../lib/nav.js'
 import { conceptMap, layout } from '../lib/concepts.js'
-import { IconButton, Pulse, Appear } from './kit.jsx'
+import { motion } from 'motion/react'
+import { IconButton, Pulse, Appear, Reveal, rowIn } from './kit.jsx'
 
 const H = 420
 const SIZE_MIN = 11
@@ -88,7 +89,7 @@ export function ConceptMap({ wide }) {
       {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
       {result && docs.length < 2 && <Appear style={note}>Add at least two documents to see how they connect.</Appear>}
       {mapped && (
-        <Appear><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Concept map of your library"
+        <Reveal><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Concept map of your library"
           style={{ width: '100%', height: H, display: 'block' }}>
           {concepts.map((c, i) => c.docs.map(d => {
             const a = pos.concepts[i]
@@ -113,7 +114,7 @@ export function ConceptMap({ wide }) {
                 style={{ cursor: 'pointer' }} onClick={() => setPicked(c.key === picked ? null : c.key)}>{c.label}</text>
             )
           })}
-        </svg></Appear>
+        </svg></Reveal>
       )}
       {mapped && !concepts.some(c => c.docs.length > 1) && (
         <Appear style={note}>These documents do not share any names or terms yet.</Appear>
@@ -122,12 +123,12 @@ export function ConceptMap({ wide }) {
         <Appear key={sel.key} style={{ display: 'grid', gap: 8 }}>
           <div style={{ ...caption, color: T.lime }}>{sel.label}</div>
           <div style={{ fontSize: 13, color: T.sub }}>Each document opens where this first comes up.</div>
-          {sel.docs.map(d => (
-            <button key={d.id} type="button" onClick={() => hearConcept(d.id, sel.key)}
+          {sel.docs.map((d, i) => (
+            <motion.button key={d.id} {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => hearConcept(d.id, sel.key)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text }}>{titles.get(d.id)}</span>
               <span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.sub }}>{d.count}</span>
-            </button>
+            </motion.button>
           ))}
         </Appear>
       )}

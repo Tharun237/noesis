@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
-import { motion, AnimatePresence, useScroll } from 'motion/react'
+import { motion, AnimatePresence, useScroll, useIsPresent } from 'motion/react'
+import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet } from '../lib/nav.js'
@@ -24,7 +25,7 @@ import { numbersIn, columnsIn } from '../lib/sonify.js'
 import { findRef } from '../lib/citations.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
-import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, fmtDur } from './kit.jsx'
+import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Swap, fmtDur, rowIn } from './kit.jsx'
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts.jsx'
@@ -214,6 +215,14 @@ export function Reader({ wide }) {
   }, [doc, active])
 
   const citedLabel = cited.length === 1 ? '1 work cited here' : `${cited.length} works cited here`
+  // The cover is one object shared with the library card (coverflight.js): it lands here from the card, and
+  // lifts off again the moment this page starts to leave for the library.
+  const coverRef = useRef(null)
+  const [landing] = useState(() => coverInFlight(id))
+  const present = useIsPresent()
+  useLayoutEffect(() => { arriveCover(id, coverRef.current) }, [id])
+  useLayoutEffect(() => { if (!present && history.state?.view === 'library') leaveCover(id, coverRef.current) }, [present, id])
+
   if (!d) return null
   const onSeek = i => { userScroll.current = 0; playId === id ? seekTo(i) : openPlayer(id, { at: i }) }
   const showToc = wide && tocOpen && headings.length > 1
@@ -266,7 +275,7 @@ export function Reader({ wide }) {
                 <motion.button key="cited" type="button" aria-label={citedLabel} onClick={() => { setCitedOpen(cited); setPanel('cites') }} whileTap={{ scale: 0.96 }}
                   initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={T.spring}
                   style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                  <Icon name="link" size={13} style={{ color: T.lime }} />{view === 'pages' && !wide ? cited.length : citedLabel}
+                  <Icon name="link" size={13} style={{ color: T.lime }} /><Swap>{view === 'pages' && !wide ? String(cited.length) : citedLabel}</Swap>
                 </motion.button>
               )}
             </AnimatePresence>
@@ -302,16 +311,16 @@ export function Reader({ wide }) {
           {/* When a side panel opens or closes, the text glides to its new place instead of jumping (measured only then). */}
           <motion.div layout={wide ? 'position' : false} layoutDependency={dock} transition={{ layout: T.settle }} style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', marginBottom: 36 }}>
-              <motion.div initial={{ scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.settle} style={{ flexShrink: 0, transformOrigin: '0 100%' }}>
-                <Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} />
+              <motion.div initial={landing ? false : { scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.settle} style={{ flexShrink: 0, transformOrigin: '0 100%' }}>
+                <div ref={coverRef} style={{ display: 'flex' }}><Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} /></div>
               </motion.div>
               <div style={{ minWidth: 0, display: 'grid', gap: 8 }}>
-                <h1 style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</h1>
-                <div style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
+                <motion.h1 {...rowIn(0)} style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</motion.h1>
+                <motion.div {...rowIn(1)} style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
                   {[d.author, d.chars ? fmtDur(docDuration(d)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
-                </div>
+                </motion.div>
                 {playId !== id && (d.status === 'voicing' || d.status === 'ready') && (
-                  <div><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></div>
+                  <motion.div {...rowIn(2)}><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></motion.div>
                 )}
               </div>
             </div>
@@ -600,7 +609,7 @@ function Preparing({ d, doc, pos }) {
 }
 
 // Word timing lives in src/lib/words.js so the lock screen can reuse it.
-function ActiveSentence({ i, text, dur, tail, words }) {
+function ActiveSentence({ i, text, dur, tail, words, plain }) {
   const { ws, ends } = useMemo(() => wordWeights(text), [text])
   const starts = useMemo(() => { let at = 0; return ws.map(x => { const s0 = at; at += x.length + 1; return s0 }) }, [ws])
   const [w, setW] = useState(-1)
@@ -622,7 +631,7 @@ function ActiveSentence({ i, text, dur, tail, words }) {
   const lit = sys ? sysWord : w
   const showWords = words && (sys || dur)
   return (
-    <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: T.accentSoft, color: T.text, boxShadow: `0 0 0 2px ${T.accentSoft}` }}>
+    <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: plain ? 'transparent' : T.accentSoft, color: T.text, boxShadow: plain ? 'none' : `0 0 0 2px ${T.accentSoft}` }}>
       {showWords ? ws.map((x, k) => <span key={k} style={{ color: k === lit ? T.lime : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
     </span>
   )
@@ -634,11 +643,56 @@ const hasSound = b => (b.d ? columnsIn(b.d).length > 0 : numbersIn(b.s.join(' ')
 const toolFor = b => (b.k === 'math' ? 'equation' : (b.k === 'table' || b.k === 'fig') && hasSound(b) ? 'sonify' : null)
 const TOOL_LABEL = { equation: 'Take it apart', sonify: 'Hear as sound' }
 
+// The light behind the sentence being read. A sentence wraps over several lines, so its background cannot
+// itself fade without repainting text; instead the same shapes are drawn behind the text as boxes measured
+// from the sentence's own lines, and the boxes fade: the light leaves one sentence as it reaches the next.
+// Until they are measured (or if they cannot be) the sentence keeps its own plain background.
+const LIT = { position: 'relative', isolation: 'isolate' }
+function useGlow(host, at) {
+  const [boxes, setBoxes] = useState(null) // 'x,y,w,h;...' relative to the host, or null
+  useLayoutEffect(() => {
+    const el = host.current
+    if (!el || at < 0) { setBoxes(null); return undefined }
+    const measure = () => {
+      const s = el.querySelector(`[data-i="${at}"]`)
+      const base = el.getBoundingClientRect()
+      const lines = s ? [...s.getClientRects()].filter(r => r.width > 1 && r.height > 1) : []
+      const next = lines.map(r => [r.left - base.left - el.clientLeft, r.top - base.top - el.clientTop, r.width, r.height].map(Math.round).join(',')).join(';')
+      setBoxes(next || null)
+    }
+    measure()
+    const ro = new ResizeObserver(measure) // type size, column width, a late font: the lines move
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [host, at])
+  return boxes
+}
+
+function Glow({ boxes, at }) {
+  return (
+    <AnimatePresence>
+      {boxes && (
+        <motion.span key={at} aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.22, ease: 'easeOut' } }} transition={{ duration: 0.16, ease: 'easeOut' }}
+          style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none' }}>
+          {boxes.split(';').map((box, k) => {
+            const [x, y, w, h] = box.split(',').map(Number)
+            return <span key={k} style={{ position: 'absolute', left: x, top: y, width: w, height: h, borderRadius: 4, background: T.accentSoft, boxShadow: `0 0 0 2px ${T.accentSoft}` }} />
+          })}
+        </motion.span>
+      )}
+    </AnimatePresence>
+  )
+}
+
 const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks, dim, typo }) {
+  const host = useRef(null)
+  const at = active >= 0 ? start + active : -1
+  const boxes = useGlow(host, at)
+  const glow = <Glow boxes={boxes} at={at} />
   const tool = useMemo(() => (VISUAL_KINDS.has(b.k) ? toolFor(b) : null), [b])
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const sentences = b.s.map((t, k) => k === active
-    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} />
+    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} plain={!!boxes} />
     : (
       <span key={k} data-i={start + k}
         style={{
@@ -648,7 +702,7 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
         }}>{t}{' '}</span>
     ))
   const box = { contentVisibility: 'auto', containIntrinsicSize: 'auto 120px' }
-  if (b.k === 'h') return <h2 style={{ ...box, fontSize: Math.round(typo.size * 1.2), lineHeight: 1.3, fontWeight: 700, letterSpacing: '-0.015em', color: T.text, margin: '44px 0 14px' }}>{sentences}</h2>
+  if (b.k === 'h') return <h2 ref={host} style={{ ...box, ...LIT, fontSize: Math.round(typo.size * 1.2), lineHeight: 1.3, fontWeight: 700, letterSpacing: '-0.015em', color: T.text, margin: '44px 0 14px' }}>{sentences}{glow}</h2>
   if (VISUAL_KINDS.has(b.k)) {
     return (
       <motion.figure initial={false} animate={{ opacity: dim ? 0.4 : 1 }}
@@ -662,13 +716,13 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
             </button>
           )}
         </div>
-        <div style={{ fontFamily: typo.font, fontSize: typo.size - 2, lineHeight: typo.leading, color: T.sub }}>{sentences}</div>
+        <div ref={host} style={{ ...LIT, fontFamily: typo.font, fontSize: typo.size - 2, lineHeight: typo.leading, color: T.sub }}>{sentences}{glow}</div>
       </motion.figure>
     )
   }
   return (
-    <p style={{ ...box, fontFamily: typo.font, fontSize: typo.size, lineHeight: typo.leading, color: T.body, margin: `0 0 ${Math.round(typo.size * 1.1)}px`, textAlign: typo.justify ? 'justify' : 'start', hyphens: typo.justify ? 'auto' : 'manual', textWrap: 'pretty' }}>
-      {sentences}
+    <p ref={host} style={{ ...box, ...LIT, fontFamily: typo.font, fontSize: typo.size, lineHeight: typo.leading, color: T.body, margin: `0 0 ${Math.round(typo.size * 1.1)}px`, textAlign: typo.justify ? 'justify' : 'start', hyphens: typo.justify ? 'auto' : 'manual', textWrap: 'pretty' }}>
+      {sentences}{glow}
     </p>
   )
 })

@@ -33,7 +33,7 @@ export function TabBar() {
               WebkitTapHighlightColor: 'transparent',
             }}>
             {on && <motion.span layoutId="tab-indicator" transition={T.spring} style={{ position: 'absolute', top: -1, width: 28, height: 3, borderRadius: 3, background: T.accent }} />}
-            <motion.span whileTap={{ scale: 0.86 }} transition={T.press} style={{ display: 'grid' }}><Icon name={t.icon} size={22} /></motion.span>
+            <motion.span variants={{ tap: { scale: 0.86 } }} whileTap="tap" transition={T.press} style={{ display: 'grid' }}><Icon name={t.icon} size={22} /></motion.span>
             {t.label}
           </button>
         )

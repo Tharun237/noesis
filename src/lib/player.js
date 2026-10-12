@@ -170,7 +170,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   if (covers(current, id, i) && audio.src) { // inside the stretch that is loaded: just move within it
     current.k = i - current.from
     audio.currentTime = current.starts[current.k] + offset
-    audio.playbackRate = player.get().rate
+    audio.playbackRate = speed()
     if (autoplay && audio.paused) audio.play().catch(playFailed)
     return
   }
@@ -187,7 +187,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   revoke(current)
   current = st
   audio.src = st.url
-  audio.playbackRate = player.get().rate
+  audio.playbackRate = speed()
   if (offset) audio.currentTime = offset
   if (autoplay) audio.play().catch(playFailed)
 }
@@ -203,7 +203,7 @@ function speak(c, i, autoplay, from = 0) {
   const locale = LANGS[getDoc(player.get().id)?.lang || 'en']?.locale || 'en'
   const voice = pickSystemVoice(locale)
   if (voice) { u.voice = voice; u.lang = voice.lang } else { u.lang = locale }
-  u.rate = player.get().rate
+  u.rate = speed()
   const est = secPerChar(getDoc(player.get().id) || { vChars: 0 })
   u.onboundary = e => {
     if (my !== utter || e.name === 'sentence') return
@@ -410,10 +410,21 @@ export const prevSentence = () => {
 }
 export const seekTo = i => load(i)
 
+// A passing slow-down on top of the listener's own speed (aware listening slows the voice while it is noisy).
+// It is not their setting: it is never saved or shown as their speed, and 1 takes it away.
+let ease = 1
+const MIN_SPEED = 0.5
+const speed = () => Math.max(MIN_SPEED, player.get().rate * ease)
+export function setEase(f) {
+  if (f === ease) return
+  ease = f
+  audio.playbackRate = speed()
+}
+
 export function setRate(r) {
   const rate = Math.round(Math.min(4, Math.max(0.5, r)) * 100) / 100
-  audio.playbackRate = rate
   player.set({ rate })
+  audio.playbackRate = speed()
   if (system() && player.get().playing) load(player.get().i, { autoplay: true, from: player.get().word }) // utterance rate is fixed once speaking
 }
 
@@ -423,7 +434,7 @@ export const setSleep = s => player.set({ sleep: s })
 export const audioClock = () => (current ? audio.currentTime - current.starts[current.k] : audio.currentTime) // seconds into the current sentence
 // For tests: the audio that is loaded right now.
 export const stretchInfo = () => (current ? { from: current.from, to: current.to, seconds: audio.duration } : null)
-export const audioState = () => ({ paused: audio.paused, ended: audio.ended, readyState: audio.readyState, currentTime: audio.currentTime, duration: audio.duration, hasSrc: !!audio.src, rate: audio.playbackRate, volume: audio.volume, muted: audio.muted, playError })
+export const audioState = () => ({ playbackRate: audio.playbackRate, paused: audio.paused, ended: audio.ended, readyState: audio.readyState, currentTime: audio.currentTime, duration: audio.duration, hasSrc: !!audio.src, rate: audio.playbackRate, volume: audio.volume, muted: audio.muted, playError })
 
 export function stopIf(id) {
   if (player.get().id !== id) return

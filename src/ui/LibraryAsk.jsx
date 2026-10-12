@@ -5,7 +5,8 @@ import { settings } from '../lib/settings.js'
 import { hasAiKey, providerName } from '../lib/ai.js'
 import { askLibrary, openPassage } from '../lib/libraryask.js'
 import { go, closeSheet } from '../lib/nav.js'
-import { Button, IconButton, Pulse, inputStyle, Appear } from './kit.jsx'
+import { motion } from 'motion/react'
+import { Button, IconButton, Pulse, inputStyle, Appear, rowIn } from './kit.jsx'
 
 export function LibraryAsk({ wide }) {
   useStore(settings)
@@ -79,12 +80,12 @@ export function LibraryAsk({ wide }) {
       {passages.length > 0 && (
         <Appear style={{ display: 'grid', gap: 8 }}>
           <div style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{keyed ? 'Passages' : 'Passages that match'}</div>
-          {passages.map(p => (
-            <button key={`${p.doc}:${p.block}`} type="button" onClick={() => openPassage(p)}
+          {passages.map((p, i) => (
+            <motion.button key={`${p.doc}:${p.block}`} {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => openPassage(p)}
               style={{ textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font, display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}><span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.lime, marginRight: 8 }}>[{p.n}]</span>{p.title}</span>
               <span style={{ fontSize: 13, color: T.sub, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.text}</span>
-            </button>
+            </motion.button>
           ))}
         </Appear>
       )}

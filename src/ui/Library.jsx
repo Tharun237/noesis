@@ -1,5 +1,6 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform } from 'motion/react'
+import { leaveCover, arriveCover } from '../lib/coverflight.js'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet, closeSearch } from '../lib/nav.js'
@@ -11,7 +12,7 @@ import { engine } from '../lib/tts.js'
 import { voiceName, VOICES } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
-import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur } from './kit.jsx'
+import { Button, IconButton, Menu, Progress, Pulse, inputStyle, fmtDur, Swap } from './kit.jsx'
 import { SAMPLE } from './sample.js'
 import { AccountChip } from './SyncStatus.jsx'
 import { waitSeconds } from '../lib/readiness-math.js'
@@ -99,10 +100,13 @@ function SidebarItem({ id, icon, name, onRemove, filter, count }) {
   return (
     <button type="button" onClick={() => ui.set({ filter: id })}
       style={{
+        position: 'relative', isolation: 'isolate', flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 40, padding: '0 12px', border: 'none', borderRadius: T.r.sm,
-        background: filter === id ? T.surfaceHi : 'transparent', color: filter === id ? T.text : T.sub, fontFamily: T.font, fontSize: 14,
+        background: 'transparent', color: filter === id ? T.text : T.sub, fontFamily: T.font, fontSize: 14,
         fontWeight: filter === id ? 600 : 500, cursor: 'pointer', textAlign: 'left',
       }}>
+      {/* The marker is one object: it slides to the shelf that was chosen. */}
+      {filter === id && <motion.span layoutId="side-pill" transition={T.spring} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: T.r.sm, background: T.surfaceHi }} />}
       <Icon name={icon} size={17} />
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
       <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{count}</span>
@@ -123,7 +127,7 @@ function Sidebar() {
   const count = f => docs.filter(d => (f === 'all' ? true : f === 'archived' ? d.archived : f === 'queue' ? !d.archived : d.collections.includes(f))).length
   return (
     <aside style={{ width: T.sidebarW, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '24px 14px', position: 'sticky', top: 0, height: 'calc(100dvh - var(--dock, 0px))', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <Wordmark />
+      <Wordmark reveal={docs.length === 0} />
       <div style={{ ...label, padding: '28px 12px 8px' }}>Library</div>
       <SidebarItem id="queue" icon="list" name="Queue" filter={filter} count={count('queue')} />
       <SidebarItem id="all" icon="grid" name="All" filter={filter} count={count('all')} />
@@ -158,8 +162,19 @@ function Sidebar() {
   )
 }
 
-export function Wordmark({ size = 26 }) {
-  return <div style={{ padding: '0 8px' }}><LogoWordmark height={Math.round(size * 0.82)} /></div>
+// On the very first screen (an empty library) the wordmark is revealed from left to right, once: a cover the
+// colour of the page slides off it. Afterwards it is simply there.
+let revealed = false
+export function Wordmark({ size = 26, reveal = false }) {
+  const [draw] = useState(() => { const first = reveal && !revealed; revealed = true; return first })
+  return (
+    <div style={{ padding: '0 8px' }}>
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        <LogoWordmark height={Math.round(size * 0.82)} />
+        {draw && <motion.span aria-hidden="true" initial={{ x: 0 }} animate={{ x: '102%' }} transition={{ duration: 0.9, ease: T.ease, delay: 0.2 }} style={{ position: 'absolute', inset: 0, background: T.bg }} />}
+      </div>
+    </div>
+  )
 }
 
 const FILTER_NAMES = { queue: 'Queue', all: 'All', archived: 'Archived' }
@@ -177,7 +192,7 @@ function DesktopHeader({ summary }) {
     <header style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
       <div style={{ flex: 1, minWidth: 0, visibility: summary ? 'visible' : 'hidden' }}>
         <div style={eyebrow}>{summary}</div>
-        <h1 style={{ margin: '12px 0 0', fontSize: 44, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}>{name}</h1>
+        <h1 style={{ margin: '12px 0 0', fontSize: 44, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}><Swap>{name}</Swap></h1>
       </div>
       <SearchBox value={query} width={220} />
       <SortMenu />
@@ -240,7 +255,7 @@ function MobileHeader({ summary }) {
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 56, padding: '0 10px 0 12px' }}>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            <Wordmark size={24} />
+            <Wordmark size={24} reveal={!hasDocs} />
             <BarTitle name={name} />
           </div>
           {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
@@ -251,7 +266,7 @@ function MobileHeader({ summary }) {
       {summary && (
         <div style={{ padding: '10px 20px 16px' }}>
           <div style={eyebrow}>{summary}</div>
-          <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: T.text }}>{name}</h1>
+          <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: T.text }}><Swap>{name}</Swap></h1>
         </div>
       )}
       <AnimatePresence initial={false}>
@@ -356,16 +371,19 @@ const DocCard = memo(function DocCard({ d, playing, ref }) {
   const dur = d.chars ? fmtDur(docDuration(d)) : null
   const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
+  // The cover is one object: it leaves with the tap and flies home when the reader is left (coverflight.js).
+  const cover = useRef(null)
+  useLayoutEffect(() => { arriveCover(d.id, cover.current) }, [d.id])
   return (
     <motion.div ref={ref} layout="position" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.14, ease: 'easeIn' } }}
       transition={{ duration: 0.22, ease: T.ease, layout: T.settle }}
       style={{ position: 'relative', borderRadius: T.r.md, overflow: 'hidden' }}>
-      <div role="button" tabIndex={0} onClick={() => { go('reader', d.id); if (!working || d.status === 'voicing') openPlayer(d.id, { autoplay: false }) }}
+      <motion.div role="button" tabIndex={0} whileTap={{ scale: T.tap.card }} transition={T.press} onClick={() => { leaveCover(d.id, cover.current); go('reader', d.id); if (!working || d.status === 'voicing') openPlayer(d.id, { autoplay: false }) }}
         onKeyDown={e => e.key === 'Enter' && e.currentTarget.click()}
         style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 12, cursor: 'pointer', background: playing ? T.surface : 'transparent', borderRadius: T.r.md }}
         onPointerEnter={e => { if (!playing) e.currentTarget.style.background = T.surface }}
         onPointerLeave={e => { if (!playing) e.currentTarget.style.background = 'transparent' }}>
-        <Cover d={d} />
+        <div ref={cover} style={{ display: 'flex', flexShrink: 0 }}><Cover d={d} /></div>
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 5 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             {playing && <Icon name="waves" size={15} style={{ color: T.lime, marginTop: 2 }} />}
@@ -383,7 +401,7 @@ const DocCard = memo(function DocCard({ d, playing, ref }) {
         <div onClick={e => e.stopPropagation()}>
           <Menu trigger={toggle => <IconButton icon="more" label={`More options for ${d.title}`} onClick={toggle} />} items={docMenu(d)} />
         </div>
-      </div>
+      </motion.div>
       {listened > 0 && <div style={{ position: 'absolute', left: 12, right: 12, bottom: 0 }}><Progress value={listened} height={2} color={T.faint} track="transparent" /></div>}
     </motion.div>
   )

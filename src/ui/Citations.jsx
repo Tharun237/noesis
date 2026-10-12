@@ -4,7 +4,8 @@ import { player, play } from '../lib/player.js'
 import { paperId, paperUrl, lookupPaper } from '../lib/citations.js'
 import { speak, stopSpeaking, voiceForText } from '../lib/aside.js'
 import { toast } from '../lib/nav.js'
-import { Appear, Button, IconButton, Pulse } from './kit.jsx'
+import { motion } from 'motion/react'
+import { Appear, Button, IconButton, Pulse, rowIn } from './kit.jsx'
 
 const note = { fontSize: 13, color: T.sub, lineHeight: 1.55 }
 
@@ -31,7 +32,7 @@ export function CitationSheet({ refs, d, onClose }) {
           <Button onClick={() => { stopSpeaking(); setVoice(null) }}>Stop</Button>
         </Appear>
       )}
-      {refs.map((r, i) => <RefCard key={i} r={r} onSpeak={say} />)}
+      {refs.map((r, i) => <motion.div key={i} {...rowIn(i)}><RefCard r={r} onSpeak={say} /></motion.div>)}
       <div style={note}>The entries are as this document lists them. Looking a paper up asks openalex.org, a free public index of research papers, for that one paper.</div>
     </div>
   )

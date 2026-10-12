@@ -36,6 +36,8 @@ export const DEFAULTS = {
   archiveFinished: false, // move finished documents to Archived
   ambientMode: 'off', // off | focus | calm | brown: a quiet sound under the voice
   ambientVolume: 0.5,
+  awareSlow: false, // aware listening: slow the voice a little while the room is noisy (microphone, on the device)
+  awarePause: false, // aware listening: pause when the listener speaks
   haptics: false, // vibrate with the rhythm of the text (Android)
   lockScreenWords: true, // show the words being read on the lock screen
   lockTipSeen: false, // the lock-screen guide toast was shown once on Android

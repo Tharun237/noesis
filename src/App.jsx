@@ -83,12 +83,13 @@ export default function App() {
         {/* The old page fades out quickly (ease-in), then the new one rises in (ease-out): one page at a time.
             The leaving page keeps its own route through context, so it never flashes the next page's content. */}
         <AnimatePresence mode="wait" initial={false} custom={dir}>
-          <motion.div key={view + (docId || '')} custom={dir} variants={PAGE} initial="enter" animate="show" exit="exit">
+          <motion.div key={view + (docId || '')} data-page="" custom={dir} variants={PAGE} initial="enter" animate="show" exit="exit">
             <Route.Provider value={route}>
+              {/* First, so the page is at its scroll position before anything on it measures where it is. */}
+              <PageScroll view={view} top={libraryScroll} />
               {view === 'library' && <Library wide={wide} />}
               {view === 'reader' && <Reader wide={wide} />}
               {view === 'settings' && <Suspense fallback={null}><Settings wide={wide} /></Suspense>}
-              <PageScroll view={view} top={libraryScroll} />
             </Route.Provider>
           </motion.div>
         </AnimatePresence>

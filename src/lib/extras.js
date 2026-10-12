@@ -1,10 +1,20 @@
 // Things that ride along with playback without the player knowing about them: the focus sound under the
-// voice, and the haptic pulse at the end of each sentence.
-import { player } from './player.js'
+// voice, the haptic pulse at the end of each sentence, and aware listening (the microphone measures the room
+// while a document plays: the voice slows in noise, the book pauses when the listener speaks).
+import { player, pause, setEase } from './player.js'
+import { startAwareness, awareSupported } from './aware.js'
+import { toast } from './nav.js'
 import { settings } from './settings.js'
 import { loadDoc } from './library.js'
 import { ambient } from './ambient.js'
 import { haptic, pulseFor } from './haptics.js'
+
+const NOISE_EASE = 0.9 // in noise the voice runs at nine tenths of the listener's speed
+
+// Asked when a switch is turned on, so the browser's microphone question appears where the choice is made.
+export async function askAware() {
+  try { (await startAwareness()).stop(); return true } catch (err) { toast(err.message); return false }
+}
 
 let started = false
 export function startExtras() {
@@ -25,10 +35,33 @@ export function startExtras() {
     if (mode !== 'off' && sounding()) { clearTimeout(previewTimer); ambient.playing(true) }
     else stopTimer = setTimeout(() => { if (!(settings.get().ambientMode !== 'off' && sounding())) ambient.playing(false) }, 1200)
   }
+  // Aware listening: the microphone is open only while a document is sounding, and closed the moment it is not.
+  let aware = null
+  let opening = false
+  const wanted = () => { const s = settings.get(); return (s.awareSlow || s.awarePause) && sounding() && awareSupported() }
+  const onRoom = e => {
+    const s = settings.get()
+    if (e.type === 'noisy' && s.awareSlow) { setEase(NOISE_EASE); toast('Slowed a little for the noise around you.') }
+    if (e.type === 'quiet') { setEase(1); if (s.awareSlow) toast('Quiet again: back to your speed.') }
+    if (e.type === 'speech' && s.awarePause) { pause(); toast('Paused because you spoke.') }
+  }
+  const applyAware = async () => {
+    if (!wanted()) { if (aware) { aware.stop(); aware = null } setEase(1); return }
+    if (aware || opening) return
+    opening = true
+    try {
+      const a = await startAwareness({ onEvent: onRoom })
+      if (wanted()) aware = a; else a.stop()
+    } catch (err) {
+      settings.set({ awareSlow: false, awarePause: false }) // refused: do not keep asking on every play
+      toast(err.message)
+    }
+    opening = false
+  }
   player.sub(() => {
     const p = player.get()
     const now = sounding()
-    if (now !== prev.sounding) applySound()
+    if (now !== prev.sounding) { applySound(); applyAware() }
     // The sentence that was being read has just ended: its pulse.
     if (now && settings.get().haptics && p.id === prev.id && p.i === prev.i + 1) {
       const ended = prev.i
@@ -43,8 +76,11 @@ export function startExtras() {
     prev = { id: p.id, i: p.i, sounding: now }
   })
   let lastMode = settings.get().ambientMode, lastVol = settings.get().ambientVolume
+  let lastAware = `${!!settings.get().awareSlow}${!!settings.get().awarePause}`
   settings.sub(() => {
     const s = settings.get()
+    const nowAware = `${!!s.awareSlow}${!!s.awarePause}`
+    if (nowAware !== lastAware) { lastAware = nowAware; applyAware() }
     if (s.ambientMode === lastMode && s.ambientVolume === lastVol) return
     lastMode = s.ambientMode; lastVol = s.ambientVolume
     applySound()

@@ -109,7 +109,9 @@ await step('voice engine loads and voices the sample', async () => {
 await step('play starts audio and highlights the sentence', async () => {
   await click('button', 'Play')
   await until(async () => (await playerState()).clock > 0.5, 15_000, 'audio clock to advance')
-  const active = await page.evaluate(() => [...document.querySelectorAll('[data-i]')].some(e => e.style.background && e.style.background !== 'transparent'))
+  // The light behind the sentence being read is drawn as boxes behind the text (they fade from sentence to
+  // sentence); until they are measured the sentence carries its own background.
+  const active = await page.evaluate(() => [...document.querySelectorAll('[data-i]')].some(e => (e.style.background && e.style.background !== 'transparent') || e.parentElement.querySelector(':scope > span[aria-hidden="true"] > span')))
   expect(active, 'no highlighted sentence')
 })
 

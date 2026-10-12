@@ -1,12 +1,14 @@
 // "Hear this as sound": the numbers in a passage, drawn as bars and played as a line of tones.
 // The parent passes the passage text; everything here is derived from it, no AI.
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { Button } from './kit.jsx'
 import { numbersIn, toTones, describe, playTones } from '../lib/sonify.js'
 
 const MIN_NUMBERS = 3
 const BAR_AREA = 120 // px: the height the tallest bar fills
+const BAR_STEP = 0.012 // s between one bar rising and the next: forty bars are all up in half a second
 const BAR_FLOOR = 0.06 // the lowest bar is a sliver, so every tone still has a visible bar
 
 const para = { fontSize: 13, lineHeight: 1.55, color: T.sub, margin: 0 }
@@ -49,7 +51,8 @@ export function SonifySheet({ text, values: given, from = 'passage' }) {
       <p style={sentence}>{summary}</p>
       <div aria-hidden="true" style={bars}>
         {tones.map((tone, i) => (
-          <div key={i} style={{ ...bar, background: i === current ? T.lime : T.sub, transform: `scaleY(${heightOf(tone.value)})` }} />
+          <motion.div key={i} initial={{ scaleY: 0 }} animate={{ scaleY: heightOf(tone.value) }} transition={{ duration: 0.32, ease: T.ease, delay: i * BAR_STEP }}
+            style={{ ...bar, background: i === current ? T.lime : T.sub }} />
         ))}
       </div>
       <div>
