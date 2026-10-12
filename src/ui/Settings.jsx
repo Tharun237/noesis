@@ -184,7 +184,10 @@ function SectionBody({ id, s }) {
       <InstallBody />
       <CreditsCard Card={Group} />
       <DiagnosticsCard Card={Group} />
-      <div><Button onClick={showWelcome}>See the welcome page</Button></div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        <Button onClick={showWelcome}>See the welcome page</Button>
+        <Button onClick={() => { location.href = '/privacy' }}>Privacy</Button>
+      </div>
       <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint, padding: '0 4px' }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')}</div>
     </>
   )

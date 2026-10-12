@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <title>Privacy · Noesis</title>
+    <meta name="description" content="What Noesis keeps on your device, what it stores if you sign in, and what leaves your device." />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <!-- A plain page on purpose: no script, so it can be read by anyone and anything, and it says nothing it cannot
+         keep. Every statement here is a fact about the code: when the code changes, this page changes with it
+         (what sync sends is listed at the top of src/lib/sync.js; what the server stores, in migrations/). -->
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #000; color: rgba(255, 255, 255, 0.72); font: 17px/1.65 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+      main { max-width: 680px; margin: 0 auto; padding: 56px 24px 96px; }
+      a { color: #fff; text-underline-offset: 3px; }
+      .mark { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; color: #fff; text-decoration: none; }
+      h1 { margin: 56px 0 8px; font-size: 44px; line-height: 1.05; letter-spacing: -0.04em; color: #fff; }
+      .date { font: 12px/1.6 ui-monospace, 'Cascadia Mono', Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255, 255, 255, 0.4); }
+      h2 { margin: 52px 0 10px; font-size: 22px; line-height: 1.25; letter-spacing: -0.02em; color: #fff; }
+      p, li { margin: 0 0 14px; }
+      ul { margin: 0 0 14px; padding-left: 22px; }
+      strong { color: #fff; font-weight: 600; }
+      .short { margin-top: 28px; font-size: 21px; line-height: 1.5; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="mark" href="/">Noesis</a>
+      <h1>Privacy</h1>
+      <div class="date">Last changed 12 October 2026</div>
+
+      <p class="short">Noesis runs on your own device. Your documents, the audio made from them and your settings are kept in your browser, on that device. Noesis has no advertising and no analytics, and it does not sell or share information about you.</p>
+
+      <h2>If you do not sign in</h2>
+      <p>Nothing about you or your library is stored by Noesis. Three things do go over the network:</p>
+      <ul>
+        <li><strong>A web link you add.</strong> Browsers do not let one site read another, so Noesis's server fetches the page for you and hands it to your device. The page is not kept on the server.</li>
+        <li><strong>A voice, the first time you use it.</strong> Its files are downloaded once from Hugging Face (huggingface.co), which sees that request the way any website sees a visitor. After that the voice works without a connection.</li>
+        <li><strong>The app itself.</strong> Your browser fetches Noesis and its updates from Cloudflare, which hosts it and, like any host, sees the address the request came from.</li>
+      </ul>
+
+      <h2>If you sign in with Google</h2>
+      <p>Signing in is optional. It exists for one purpose: to keep the same library on your phone and your computer.</p>
+      <p>From Google, Noesis receives your <strong>name, email address, profile picture and Google account number</strong>, and nothing else. It uses them to recognise you and to show which account is signed in.</p>
+      <p>To keep your devices the same, Noesis then stores on its server (a Cloudflare database):</p>
+      <ul>
+        <li>the text of your documents and their details (title, author, kind, length);</li>
+        <li>your place in each document;</li>
+        <li>your bookmarks and notes;</li>
+        <li>your collections.</li>
+      </ul>
+      <p><strong>Audio is never uploaded</strong>, and neither are your original files: each device makes its own audio from the text. This stored copy is protected by your sign-in. It is not end-to-end encrypted, which means it is kept in a form the service could read; it is not looked at, used for anything else, or given to anyone.</p>
+      <p>You can sign out at any time in Settings. To have your account and everything stored under it deleted, write to the address below from the email you signed in with; it will be deleted within 30 days.</p>
+
+      <h2>If you turn on AI features</h2>
+      <p>They are off until you add a key of your own, and the key is kept on your device.</p>
+      <ul>
+        <li><strong>Google Gemini:</strong> the text you ask about goes straight from your device to Google, under your own account with them.</li>
+        <li><strong>NVIDIA:</strong> NVIDIA does not accept requests from a browser, so your key and the text pass through Noesis's server on their way. Neither is stored there.</li>
+        <li><strong>Another service you name:</strong> the text goes to the address you gave.</li>
+      </ul>
+      <p>What those services do with what they receive is set by your agreement with them, not by Noesis.</p>
+
+      <h2>Cookies</h2>
+      <p>One, and only if you sign in: it keeps you signed in. There are no tracking cookies.</p>
+
+      <h2>Changes and questions</h2>
+      <p>If what Noesis does changes, this page changes first, and its date with it. Questions, or a request to delete your account: <a href="mailto:tharun2372002@gmail.com">tharun2372002@gmail.com</a>.</p>
+    </main>
+  </body>
+</html>
