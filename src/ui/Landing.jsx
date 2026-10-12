@@ -221,7 +221,7 @@ export function Landing({ wide, hasLibrary }) {
             </Button>
           </div>
           <div style={{ marginTop: 56, fontFamily: T.mono, fontSize: 11.5, lineHeight: 1.7, color: T.faint }}>
-            Your documents and their audio stay on this device.<br />Noesis {__APP_VERSION__}
+            Your documents stay on this device, unless you sign in to have them on your other devices too.<br />The audio never leaves it. Noesis {__APP_VERSION__}
           </div>
         </section>
       </main>
