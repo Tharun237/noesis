@@ -15,7 +15,7 @@ const drop = f => { clearTimeout(f.timer); f.ghost.remove() }
 // Where an element will rest once its page has finished sliding in (the page is still offset when it mounts).
 function restingRect(el) {
   const r = el.getBoundingClientRect()
-  const page = el.closest('[data-page]')
+  const page = el.closest('[data-screen]')
   const m = page ? new DOMMatrix(getComputedStyle(page).transform) : { m41: 0, m42: 0 }
   return { left: r.left - m.m41, top: r.top - m.m42, width: r.width, height: r.height }
 }

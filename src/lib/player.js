@@ -421,6 +421,34 @@ export function setEase(f) {
   audio.playbackRate = speed()
 }
 
+// Clarity in noise (aware listening): the crisp part of the voice, where consonants live, is lifted while
+// the room is noisy. The sound is passed through a filter from the first time this is asked for, and stays
+// so until the app is reopened (a browser cannot undo it); at rest the filter changes nothing. The filter's
+// own clock is started and checked BEFORE the sound is passed through it: sound sent into a stopped one
+// would be silence.
+const CLARITY = { hz: 2800, db: 7, glide: 0.4 }
+let clarity = null // { ctx, shelf }
+export async function setClarity(on) {
+  if (!clarity) {
+    if (!on) return true
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return false
+    const ctx = new Ctx()
+    await ctx.resume()
+    if (ctx.state !== 'running') { ctx.close(); return false }
+    const shelf = ctx.createBiquadFilter()
+    shelf.type = 'highshelf'
+    shelf.frequency.value = CLARITY.hz
+    shelf.gain.value = 0
+    ctx.createMediaElementSource(audio).connect(shelf).connect(ctx.destination)
+    ctx.onstatechange = () => { if (ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume() } // the phone took the sound away for a moment
+    clarity = { ctx, shelf }
+  }
+  clarity.shelf.gain.setTargetAtTime(on ? CLARITY.db : 0, clarity.ctx.currentTime, CLARITY.glide)
+  return true
+}
+export const clarityState = () => (clarity ? { routed: true, lift: clarity.shelf.gain.value, clock: clarity.ctx.state } : { routed: false })
+
 export function setRate(r) {
   const rate = Math.round(Math.min(4, Math.max(0.5, r)) * 100) / 100
   player.set({ rate })

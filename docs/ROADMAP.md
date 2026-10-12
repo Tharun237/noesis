@@ -3,6 +3,16 @@
 Source: Tharun's feature brief of 2026-10-11. Sorted by what unblocks trust first, then core gaps, then the
 AI features, then insight features. Every item keeps its original intent; nothing was dropped silently.
 
+## Where it stands (2026-10-12, night)
+
+Every numbered item below is built and live. What is left is not building:
+- **Needs Tharun's phone or ears:** all motion on a real phone; aware listening with a real microphone, and
+  whether the clarity switch keeps playing with the screen locked on Android; the table tones, the focus
+  sounds and the new Hindi voice (Rohan) by ear; an iPhone for anything Safari.
+- **Parked by Tharun, not started:** the "Goods and services" skill (market and pricing), highlights with
+  notes, a choice per document of how figures and tables are read, Google sign-in set-up.
+- **Cannot be done in a web app:** watch apps, earbud sensors (see "Limits of a web app").
+
 ## How the work is done
 
 | Role | Who | Does |
@@ -46,8 +56,11 @@ Still needs a human: Tharun's ears on Alba and the tones; a real iPhone for anyt
 ## Sprint 2: core gaps (now; item 5 in build as M6)
 
 5. **Original view.** The source page (PDF) beside or instead of the flowing text, following the playhead and
-   highlighting the sentence being read; later the dual-pane "glass" view.
-6. **Languages.** Telugu voices SHIPPED 2026-10-11 (M7, with the Credits and licences screen); Hindi waits for a voice with a usable licence. Translation SHIPPED 2026-10-11 (M8): any book into English, Telugu or Hindi, from Add a document or from the reader menu, with the customer's Gemini key; tested with a stand-in translator only, real-model quality unchecked. Spec: (docs/specs/M7-languages.md; measurements in docs/research/languages.md).
+   highlighting the sentence being read; later the dual-pane "glass" view. The dual pane SHIPPED 2026-10-12
+   as "Both" in the reader's view switch on a wide screen: the flowing text, and beside it the page that
+   holds the sentence being read, marked, turning by itself with the voice or the reader's scrolling.
+   Verified with a real three-page PDF: page 1 drawn, the mark on the page, the turn to page 2.
+6. **Languages.** Telugu voices SHIPPED 2026-10-11 (M7, with the Credits and licences screen); Hindi on the device SHIPPED 2026-10-12 (the voice Rohan: its recordings' licence was found and read, see docs/research/languages.md; a Hindi document spoke with it, 5 of 5 sentences; not yet heard by Tharun). Translation SHIPPED 2026-10-11 (M8): any book into English, Telugu or Hindi, from Add a document or from the reader menu, with the customer's Gemini key; tested with a stand-in translator only, real-model quality unchecked. Spec: (docs/specs/M7-languages.md; measurements in docs/research/languages.md).
    The app's pronunciation library is English-only; a multilingual eSpeak build (24 MB, GPL-3.0, loaded only
    for non-English documents) covers the rest. Telugu has two voices a paid product may use; Hindi has none
    with a verified licence yet. Item 5 (sentence on the page) shipped 2026-10-11 as M6.
@@ -135,10 +148,19 @@ switches in Settings: the voice slows to nine tenths in steady noise and returns
 pauses when the listener speaks. The microphone is open only while a document is sounding. Verified with a
 stand-in microphone (Chrome playing a sound file): slowed after 4.6 s of noise, paused on a burst. NOT
 verified: a real phone, a real room, whether opening the microphone changes how the book sounds on Android.
-Clarity boost in noise is not built: the tone of the voice is set when the audio is made, not at playback.
+The clarity boost came later the same day (see below).
+Shipped 2026-10-12, the last of the roadmap: the vocabulary heatmap (item 19: one block per section in
+Insights, brighter where the hard words crowd, a tap goes there); where a passage is as a time as well as a
+page in Ask your library (item 16, "p. 43 · at 57:24"; exact where the audio exists, worked out from the
+length of the text where it does not yet); the line to slide along on the concept map (item 18: the whole
+document as a line with a mark at each place the concept comes up; slide to read the sentence, let go to
+open the document there); the voice made clearer in noise (aware listening's third switch: the crisp part
+of the voice is lifted 7 dB while the room is noisy; natural and online voices only; verified with a
+stand-in microphone: the filter came on, the sound kept moving). Citations were walked on a real PDF: its
+reference list was kept and not read aloud, and the right two entries came up for the cited sentence.
 Item 18, the map that moves the audio, first version: on the concept map a document under a concept opens
 at the place the concept first comes up (verified: opened at the sentence of the first mention; Back returns
-to the library). Not built: dragging across the map itself to scrub. Binaural study
+to the library). Binaural study
 mode in 21 is covered by Focus sounds (Focus and Calm are binaural beats).
 Shipped 2026-10-12: item 22 in part (M15), Focus view: one word at a time with a fixed lime pivot letter;
 follows the voice while it plays, or reads at 200 to 900 words a minute without it; emphasis shown larger.
@@ -153,7 +175,7 @@ parts (what each says, where they agree and disagree, shared methods, what to re
 NVIDIA key: about 2 s with a fast model; a reasoning model sat on "Writing the briefing" for over 2 minutes.
 Shipped 2026-10-11: item 16, Ask your library (M12): keyword ranking on the device, the top passages go to
 the customer's AI, the answer cites numbered passages and each opens its book at that place. Without an AI
-key it still lists matching passages. Page numbers and a spoken answer came later (see above); time references not.
+key it still lists matching passages. Page numbers and a spoken answer came later (see above), time references too.
 
 15. Multi-paper audio briefing (3 to 5 PDFs: overlaps, conflicts, shared methods).
 16. Ask my entire library (cross-book answers with page and time references).
@@ -183,7 +205,7 @@ key it still lists matching passages. Page numbers and a spoken answer came late
 
 - **Listening** (item 4).
 - **Goods and services**: market, geography, selling mode, customer needs and feedback, pricing and
-  business models for Noesis as a private, commercial product.
+  business models for Noesis as a private, commercial product. PARKED by Tharun (2026-10-10): not started.
 - **Dynamic skill development**: when a situation needs a skill that does not exist, write it.
 
 ## Decisions (Tharun, 2026-10-11)

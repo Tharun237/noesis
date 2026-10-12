@@ -1,9 +1,10 @@
 // Things that ride along with playback without the player knowing about them: the focus sound under the
 // voice, the haptic pulse at the end of each sentence, and aware listening (the microphone measures the room
 // while a document plays: the voice slows in noise, the book pauses when the listener speaks).
-import { player, pause, setEase } from './player.js'
+import { player, pause, setEase, setClarity } from './player.js'
 import { startAwareness, awareSupported } from './aware.js'
 import { toast } from './nav.js'
+import { activeEngine } from './engine.js'
 import { settings } from './settings.js'
 import { loadDoc } from './library.js'
 import { ambient } from './ambient.js'
@@ -38,22 +39,32 @@ export function startExtras() {
   // Aware listening: the microphone is open only while a document is sounding, and closed the moment it is not.
   let aware = null
   let opening = false
-  const wanted = () => { const s = settings.get(); return (s.awareSlow || s.awarePause) && sounding() && awareSupported() }
+  const wanted = () => { const s = settings.get(); return (s.awareSlow || s.awarePause || s.awareClear) && sounding() && awareSupported() }
   const onRoom = e => {
     const s = settings.get()
-    if (e.type === 'noisy' && s.awareSlow) { setEase(NOISE_EASE); toast('Slowed a little for the noise around you.') }
-    if (e.type === 'quiet') { setEase(1); if (s.awareSlow) toast('Quiet again: back to your speed.') }
+    // The device's own voice is spoken by the device, not played by Noesis: it cannot be made clearer here.
+    const clear = s.awareClear && activeEngine(s) !== 'system'
+    if (e.type === 'noisy') {
+      if (s.awareSlow) setEase(NOISE_EASE)
+      if (clear) setClarity(true)
+      if (s.awareSlow || clear) toast(s.awareSlow && clear ? 'Slower and clearer for the noise around you.' : s.awareSlow ? 'Slowed a little for the noise around you.' : 'Made clearer for the noise around you.')
+    }
+    if (e.type === 'quiet') {
+      setEase(1)
+      setClarity(false)
+      if (s.awareSlow || clear) toast(s.awareSlow ? 'Quiet again: back to your speed.' : 'Quiet again: back to the usual sound.')
+    }
     if (e.type === 'speech' && s.awarePause) { pause(); toast('Paused because you spoke.') }
   }
   const applyAware = async () => {
-    if (!wanted()) { if (aware) { aware.stop(); aware = null } setEase(1); return }
+    if (!wanted()) { if (aware) { aware.stop(); aware = null } setEase(1); setClarity(false); return }
     if (aware || opening) return
     opening = true
     try {
       const a = await startAwareness({ onEvent: onRoom })
       if (wanted()) aware = a; else a.stop()
     } catch (err) {
-      settings.set({ awareSlow: false, awarePause: false }) // refused: do not keep asking on every play
+      settings.set({ awareSlow: false, awarePause: false, awareClear: false }) // refused: do not keep asking on every play
       toast(err.message)
     }
     opening = false
@@ -76,10 +87,10 @@ export function startExtras() {
     prev = { id: p.id, i: p.i, sounding: now }
   })
   let lastMode = settings.get().ambientMode, lastVol = settings.get().ambientVolume
-  let lastAware = `${!!settings.get().awareSlow}${!!settings.get().awarePause}`
+  let lastAware = `${!!settings.get().awareSlow}${!!settings.get().awarePause}${!!settings.get().awareClear}`
   settings.sub(() => {
     const s = settings.get()
-    const nowAware = `${!!s.awareSlow}${!!s.awarePause}`
+    const nowAware = `${!!s.awareSlow}${!!s.awarePause}${!!s.awareClear}`
     if (nowAware !== lastAware) { lastAware = nowAware; applyAware() }
     if (s.ambientMode === lastMode && s.ambientVolume === lastVol) return
     lastMode = s.ambientMode; lastVol = s.ambientVolume

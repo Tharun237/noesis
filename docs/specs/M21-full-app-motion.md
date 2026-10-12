@@ -68,7 +68,8 @@ All three items listed above as decided against were built after all, each in a 
 transform and opacity. Sweep clean on phone and desktop, QA 41/41.
 Deliberately still: the words of the document itself as you scroll (reading comfort, and thousands of
 paragraphs), the contents list rows (hundreds, re-rendered every sentence), numbers that tick every second.
-Not seen with my own eyes: any of this on a real phone; the desktop contents panel sliding in.
+Not seen with my own eyes: any of this on a real phone. (The desktop contents panel and the page pane were
+seen sliding in on 2026-10-12, in the side-by-side walk.)
 
 ## To do, in this order (most seen first)
 1. **One motion system** (`src/lib/motion.js`): named transitions (`press`, `quick` 0.16 s, `page` 0.24 s,

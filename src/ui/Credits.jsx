@@ -9,6 +9,7 @@ const LICENCE_URL = {
   'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/',
   'CC BY-SA 4.0': 'https://creativecommons.org/licenses/by-sa/4.0/',
   'CC0': 'https://creativecommons.org/publicdomain/zero/1.0/',
+  'IIT Madras TTS licence': 'https://www.iitm.ac.in/donlab/indictts/downloads/license.pdf',
 }
 
 const SOFTWARE = [
@@ -47,6 +48,8 @@ export function CreditsCard({ Card }) {
                 {LICENCE_URL[v.license] ? <Out href={LICENCE_URL[v.license]}>{v.license}</Out> : v.license}
                 {v.data && <> · <Out href={v.data}>recordings</Out></>}
               </span>
+              {/* A notice its licence says must stay with the voice; and its one restriction, said plainly. */}
+              {v.notice && <span style={{ ...faint, flexBasis: '100%' }}>{v.notice}. This voice is built on openly shared recordings and may not be resold or sublicensed on its own.</span>}
             </div>
           ))}
           <div style={row}>

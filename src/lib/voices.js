@@ -27,6 +27,12 @@ export const VOICES = [
   { id: 'en_US-mike-medium', name: 'Mike', accent: 'US', g: 'M', license: 'CC0', lang: 'en', data: 'https://github.com/OHF-Voice/voice-datasets' },
   { id: 'te_IN-padmavathi-medium', name: 'Padmavathi', accent: 'Telugu', g: 'F', license: 'CC BY 4.0', lang: 'te', data: 'https://huggingface.co/datasets/ai4bharat/indicvoices_r' },
   { id: 'te_IN-venkatesh-medium', name: 'Venkatesh', accent: 'Telugu', g: 'M', license: 'CC BY 4.0', lang: 'te', data: 'https://huggingface.co/datasets/ai4bharat/indicvoices_r' },
+  // Hindi on the device. The recordings are IIT Madras's IndicTTS "Hindi Mono Male". Their licence was read
+  // on 2026-10-12 (docs/research/languages.md): free of charge, copies and derived works allowed and may be
+  // distributed, the copyright notice must stay with it (`notice`, shown in Credits), and the voice may
+  // not be resold or sublicensed on its own.
+  { id: 'hi_IN-rohan-medium', name: 'Rohan', accent: 'Hindi', g: 'M', license: 'IIT Madras TTS licence', lang: 'hi', data: 'https://www.iitm.ac.in/donlab/indictts',
+    notice: 'COPYRIGHT 2016 TTS Consortium, TDIL, Meity represented by Hema A Murthy & S Umesh, DEPARTMENT OF Computer Science and Engineering and Electrical Engineering, IIT Madras. ALL RIGHTS RESERVED' },
 ]
 export const DEFAULT_VOICE = VOICES[0].id
 

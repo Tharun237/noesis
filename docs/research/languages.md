@@ -43,3 +43,31 @@ documents use the device's built-in voice until the IndicTTS licence is read
   app may ship it is a licence decision for Tharun.
 - 24 MB download for non-English documents: load it only when such a document is voiced, cache it like a voice.
 - Nothing here has run in a browser Web Worker yet. That is the first thing M7 must prove.
+
+## The Hindi voice's licence, read on 2026-10-12
+
+`hi_IN-rohan-medium` (Piper) is trained on IIT Madras's IndicTTS "Hindi Mono Male". Its model card names the
+licence at https://www.iitm.ac.in/donlab/indictts/downloads/license.pdf. The university's server did not
+answer; the text below is from the Internet Archive's copy of that address made on 2025-03-16 (three pages,
+"END USER LICENSE AGREEMENT"). Read by Opus, not by a lawyer.
+
+What it says, in its own words:
+- 2.1: "a perpetual, nonexclusive, worldwide, transferable, sub licensable, royaltyfree license to a) make
+  copies of the Licensed Software in source and object code and data; b) modify copies of the Licensed
+  Software and data to create derivative works thereof." And: "Licensee shall be allowed to freely distribute
+  the Derivative Work."
+- 2.2: "The Licensee agrees not to remove any copyright, trademark or patent notices". "The Licensee shall
+  ensure that the third party to whom the Derivative Work is sold is made aware that the Derivative Work has
+  few open source component along with Licensee's IP. Such third party shall not be allowed to further sell,
+  lease, license, sublicense, decompile, disassemble or reverse engineer any portion of the Licensed Software
+  or the Derivative Work."
+- 5: "REDISTRIBUTORS MUST RETAIN THE FOLLOWING COPYRIGHT NOTICE: COPYRIGHT 2016 TTS Consortium, TDIL, Meity
+  represented by Hema A Murthy & S Umesh, DEPARTMENT OF Computer Science and Engineering and Electrical
+  Engineering, IIT Madras. ALL RIGHTS RESERVED"
+- Nothing in it forbids commercial use, and nothing asks for a fee or a registration.
+
+What Noesis does because of it: the voice is offered (Rohan, Hindi, on the device); the copyright notice is
+shown with it in Credits; Credits says the voice is built on openly shared recordings and may not be resold
+or sublicensed on its own. Open point for a lawyer, if Noesis is ever sold as a product: clause 2.2's wording
+about what a buyer may do with "the Derivative Work".
+The two other Piper Hindi voices (pratham, priyamvada) name CC BY-NC-SA 4.0: not for a paid product, not offered.

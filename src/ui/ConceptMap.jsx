@@ -28,32 +28,61 @@ async function hearConcept(docId, key) {
   openPassage({ doc: docId, block: Math.max(0, block) })
 }
 
-// Where a concept comes up in a document: the first few sentences that hold it, each a place to jump to.
-const MENTIONS = 4
-const SNIPPET = 96
+// Where a concept comes up in a document: every sentence that holds it (the first sixty), and how long the
+// document is, so each can be placed along a line.
+const MENTIONS = 60
+const SNIPPET = 110
 async function mentionsOf(docId, key) {
   const c = await loadDoc(docId)
-  const out = []
-  if (c) for (let i = 0; i < c.segs.length && out.length < MENTIONS; i++) if (c.segs[i].t.toLowerCase().includes(key)) out.push({ i, t: c.segs[i].t })
-  return out
+  const list = []
+  if (c) for (let i = 0; i < c.segs.length && list.length < MENTIONS; i++) if (c.segs[i].t.toLowerCase().includes(key)) list.push({ i, t: c.segs[i].t })
+  return { list, total: c ? c.segs.length : 0 }
 }
 const openAt = (docId, i) => { patch(docId, { pos: i }); go('reader', docId) }
 
+// The map that moves the audio: the document as a line from its start to its end, with a mark at each place
+// the concept comes up. Sliding a finger along the line shows the sentence under it; letting go opens the
+// document there.
 function Mentions({ docId, concept }) {
-  const [list, setList] = useState(null)
-  useEffect(() => { let live = true; mentionsOf(docId, concept).then(m => { if (live) setList(m) }); return () => { live = false } }, [docId, concept])
-  if (!list || list.length < 2) return null // one place only: the row above already opens it
+  const [found, setFound] = useState(null)
+  const [pick, setPick] = useState(-1)
+  const [held, setHeld] = useState(false)
+  useEffect(() => { let live = true; setPick(-1); mentionsOf(docId, concept).then(m => { if (live) setFound(m) }); return () => { live = false } }, [docId, concept])
+  if (!found || found.list.length < 2) return null // one place only: the row above already opens it
+  const { list, total } = found
+  const nearest = e => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const at = ((e.clientX - r.left) / (r.width || 1)) * total
+    let best = 0
+    for (let k = 1; k < list.length; k++) if (Math.abs(list[k].i - at) < Math.abs(list[best].i - at)) best = k
+    return best
+  }
+  const shown = pick >= 0 ? list[pick].t : null
   return (
-    <Appear style={{ display: 'grid', gap: 2, padding: '0 0 6px 14px' }}>
-      {list.map((m, k) => (
-        <motion.button key={m.i} {...rowIn(k)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => openAt(docId, m.i)}
-          style={{ textAlign: 'left', padding: '7px 12px', border: 'none', borderLeft: `1px solid ${T.borderHi}`, background: 'transparent', color: T.sub, cursor: 'pointer', fontFamily: T.font, fontSize: 13, lineHeight: 1.45 }}>
-          {m.t.length > SNIPPET ? m.t.slice(0, SNIPPET - 1) + '…' : m.t}
-        </motion.button>
-      ))}
+    <Appear style={{ display: 'grid', gap: 8, padding: '2px 14px 10px' }}>
+      <div role="slider" tabIndex={0} aria-label="Places this comes up" aria-valuemin={1} aria-valuemax={list.length} aria-valuenow={Math.max(1, pick + 1)}
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setHeld(true); setPick(nearest(e)) }}
+        onPointerMove={e => { if (held) setPick(nearest(e)) }}
+        onPointerUp={e => { setHeld(false); openAt(docId, list[nearest(e)].i) }}
+        onPointerCancel={() => setHeld(false)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowRight') setPick(p => Math.min(list.length - 1, p + 1))
+          if (e.key === 'ArrowLeft') setPick(p => Math.max(0, p - 1))
+          if (e.key === 'Enter' && pick >= 0) openAt(docId, list[pick].i)
+        }}
+        style={{ position: 'relative', height: LINE_H, borderRadius: T.r.sm, background: T.surface, border: `1px solid ${T.border}`, cursor: 'pointer', touchAction: 'none', overflow: 'hidden' }}>
+        {list.map((m, k) => (
+          <motion.span key={m.i} initial={{ scaleY: 0 }} animate={{ scaleY: k === pick ? 1 : 0.55, transition: { duration: 0.2, delay: k === pick ? 0 : Math.min(k, 30) * 0.01 } }}
+            style={{ position: 'absolute', left: `${(m.i / Math.max(1, total)) * 100}%`, top: 0, bottom: 0, width: 2, marginLeft: -1, background: k === pick ? T.lime : T.sub, transformOrigin: '50% 100%' }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 13, color: shown ? T.body : T.sub, lineHeight: 1.45, minHeight: 38 }}>
+        {shown ? (shown.length > SNIPPET ? shown.slice(0, SNIPPET - 1) + '…' : shown) : `${list.length} places. Slide along the line and let go to open the document there.`}
+      </div>
     </Appear>
   )
 }
+const LINE_H = 34
 
 export function ConceptMap({ wide }) {
   const width = useWidth()
@@ -149,7 +178,7 @@ export function ConceptMap({ wide }) {
       {sel && (
         <Appear key={sel.key} style={{ display: 'grid', gap: 8 }}>
           <div style={{ ...caption, color: T.lime }}>{sel.label}</div>
-          <div style={{ fontSize: 13, color: T.sub }}>Each document opens where this first comes up. The lines under it are the next places.</div>
+          <div style={{ fontSize: 13, color: T.sub }}>Each document opens where this first comes up. The line under it is the whole document: each mark is a place this comes up.</div>
           {sel.docs.map((d, i) => (
             <div key={d.id} style={{ display: 'grid', gap: 2 }}>
             <motion.button {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => hearConcept(d.id, sel.key)}

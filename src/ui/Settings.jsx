@@ -35,9 +35,9 @@ export function Settings({ wide }) {
         <AmbientCard Card={Card} mode={s.ambientMode || 'off'} volume={s.ambientVolume ?? 0.5} haptics={!!s.haptics}
           onChange={c => settings.set({ ...('mode' in c ? { ambientMode: c.mode } : {}), ...('volume' in c ? { ambientVolume: c.volume } : {}), ...('haptics' in c ? { haptics: c.haptics } : {}) })} />
         {/* A switch turned on asks for the microphone there and then; it stays off if the answer is no. */}
-        <AwarenessCard Card={Card} slow={!!s.awareSlow} pauseOnSpeech={!!s.awarePause}
+        <AwarenessCard Card={Card} slow={!!s.awareSlow} clear={!!s.awareClear} pauseOnSpeech={!!s.awarePause}
           onChange={async c => {
-            const next = 'slow' in c ? { awareSlow: c.slow } : { awarePause: c.pauseOnSpeech }
+            const next = 'slow' in c ? { awareSlow: c.slow } : 'clear' in c ? { awareClear: c.clear } : { awarePause: c.pauseOnSpeech }
             if (Object.values(next)[0] && !(await askAware())) return
             settings.set(next)
           }} />

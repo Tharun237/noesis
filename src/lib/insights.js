@@ -114,6 +114,17 @@ export function splitSections(blocks, starts) {
   return out
 }
 
+// Where the hard words are: for each section, how many of the document's hard words it holds in every
+// hundred words. `sections` as from splitSections, `words` as from hardWords.
+export function wordHeat(sections, words) {
+  const hard = new Set((words || []).map(w => w.word.toLowerCase()))
+  return (sections || []).map(s => {
+    const all = wordsOf(s.text)
+    const hits = all.filter(w => hard.has(w.toLowerCase())).length
+    return { title: s.title, start: s.start, density: all.length ? (hits / all.length) * 100 : 0 }
+  })
+}
+
 // Long words (9+ letters) that are not names, ranked by length times log(1 + count).
 // A use is a name signal only mid-sentence: a capital at a sentence start is grammar, not evidence.
 // A word is a name when most of its mid-sentence uses are capitalised.

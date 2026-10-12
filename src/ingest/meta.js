@@ -3,6 +3,8 @@ const EXT = /\.(indd|pdf|docx?|qxd|tex|dvi|ps|rtf|odt|pages|txt)$/i
 const MSWORD = /^microsoft\s+word\s*[-–—:]\s*/i
 const TOOLS = ['adobe', 'microsoft', 'acrobat', 'latex', 'tex', 'quark', 'indesign', 'word', 'pscript', 'calibre', 'writer']
 
+const ADDRESS = /^(?:about:|https?:\/\/|file:\/\/|chrome:|blob:|data:|www\.)/i // a page saved from a browser
+
 const hasLetters = t => /[\p{L}]/u.test(t)
 
 function isJunkTitle(raw) {
@@ -18,6 +20,7 @@ function isJunkTitle(raw) {
   if (lower === 'untitled' || lower === 'document') return true
   if (/^untitled[\s._-]*\d*$/i.test(cand) || /^document[\s._-]*\d*$/i.test(cand)) return true
   if (EXT.test(cand)) return true
+  if (ADDRESS.test(cand)) return true
   if (!/\s/.test(cand)) {
     if (cand.includes('_')) return true
     const digits = (cand.match(/\d/g) || []).length

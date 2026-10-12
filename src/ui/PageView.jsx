@@ -17,8 +17,8 @@ const FALLBACK_RATIO = 1.4142 // A4-ish until the first page reports its true si
 // stays black); on an inverted page it is a lime wash. The ink (opacity, blend) is on ONE layer and the
 // line shapes inside it are solid, so lines that overlap in tight type do not show darker bands.
 // Position is set once per sentence; only opacity animates.
-const MARK = { position: 'absolute', background: T.lime, borderRadius: 3 }
-const MARK_INK = { light: { opacity: 0.5, mixBlendMode: 'multiply' }, dark: { opacity: 0.32, mixBlendMode: 'normal' } }
+export const MARK = { position: 'absolute', background: T.lime, borderRadius: 3 }
+export const MARK_INK = { light: { opacity: 0.5, mixBlendMode: 'multiply' }, dark: { opacity: 0.32, mixBlendMode: 'normal' } }
 
 export function PageView({ id, activePage, invert, userScroll, onPages, onVisible, onTapPage, onFail, pageSentences, activeSentence, onTapSentence }) {
   const [numPages, setNumPages] = useState(0)

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { POSITIVE, NEGATIVE, tone, arc, splitSections, hardWords } from './insights.js'
+import { POSITIVE, NEGATIVE, tone, arc, splitSections, hardWords, wordHeat } from './insights.js'
 
 test('POSITIVE and NEGATIVE are about 120 lower-case words each, with no word in both', () => {
   for (const set of [POSITIVE, NEGATIVE]) {
@@ -70,4 +70,12 @@ test('hardWords keeps only words of 9+ letters and honours max', () => {
   const text = 'The village harvest was plenty. Gardeners celebrated every extraordinary morning.'
   assert.deepEqual(hardWords(text).map(w => w.word), ['extraordinary', 'celebrated', 'gardeners'])
   assert.equal(hardWords(text, { max: 1 }).length, 1)
+})
+
+test('wordHeat counts the hard words of each section in every hundred words', () => {
+  const sections = [{ title: 'One', start: 0, text: 'plain small words only here now' }, { title: 'Two', start: 9, text: 'the thermodynamics of thermodynamics is hard' }]
+  const heat = wordHeat(sections, [{ word: 'thermodynamics', count: 2 }])
+  assert.deepEqual(heat.map(h => [h.title, h.start]), [['One', 0], ['Two', 9]])
+  assert.equal(heat[0].density, 0)
+  assert.ok(Math.abs(heat[1].density - (2 / 6) * 100) < 1e-9)
 })

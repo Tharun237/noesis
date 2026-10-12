@@ -36,6 +36,7 @@ import { playerHeight } from './PlayerBar.jsx'
 const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
 const Insights = lazy(() => import('./Insights.jsx').then(m => ({ default: m.Insights })))
 const CitationSheet = lazy(() => import('./Citations.jsx').then(m => ({ default: m.CitationSheet })))
+const PagePane = lazy(() => import('./PagePane.jsx').then(m => ({ default: m.PagePane })))
 const BlockTool = lazy(() => import('./BlockTool.jsx').then(m => ({ default: m.BlockTool })))
 const FloatingReader = lazy(() => import('./FloatingReader.jsx').then(m => ({ default: m.FloatingReader })))
 function FloatingLazy() { return <Suspense fallback={null}><FloatingReader /></Suspense> }
@@ -46,6 +47,7 @@ const VISUAL_LABEL = { fig: 'Figure', table: 'Table', math: 'Equation', code: 'C
 const HEADER_H = 57
 // The app's name as a speech recogniser tends to write it.
 const WAKE = /^(?:hey\s+)?(?:noesis|no\s?esis|gnosis|no\s?thesis|know\s?esis|noises)[\s,.:!]*/i
+const SEEN_BELOW = 120 // px under the header where the reader's eye is taken to be, for the page beside the text
 const SUBROW_H = 44 // second header row (Text | Pages) on documents that have pages
 
 export function Reader({ wide }) {
@@ -158,6 +160,10 @@ export function Reader({ wide }) {
 
   const pagesAvailable = d?.kind === 'pdf' && hasSource === true
   const view = readerView === 'focus' ? 'focus' : pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
+  // "Both": the flowing text with the original page beside it. A wide screen only; elsewhere it is the text.
+  const sideBySide = wide && pagesAvailable && !pdfFail && readerView === 'both'
+  const pageOf = i => (doc && i >= 0 && i < doc.segs.length ? doc.blocks[doc.segs[i].b].p ?? null : null)
+  const [seenPage, setSeenPage] = useState(null) // the page of the text at the top of the screen, while nothing is being read
   // Sentence i belongs to block segs[i].b, so its page is blocks[segs[i].b].p (1-based; older
   // documents prepared before pages were linked have no p).
   const activePage = view === 'pages' && doc && active >= 0 ? (doc.blocks[doc.segs[active]?.b]?.p ?? null) : null
@@ -223,11 +229,32 @@ export function Reader({ wide }) {
   useLayoutEffect(() => { arriveCover(id, coverRef.current) }, [id])
   useLayoutEffect(() => { if (!present && history.state?.view === 'library') leaveCover(id, coverRef.current) }, [present, id])
 
+  // Side by side with nothing being read: the page follows the reader's own scrolling.
+  useEffect(() => {
+    if (!sideBySide || active >= 0 || !doc) return undefined
+    let raf = 0
+    const look = () => {
+      raf = 0
+      const col = colRef.current
+      if (!col) return
+      const r = col.getBoundingClientRect()
+      const el = document.elementFromPoint(r.left + r.width / 2, HEADER_H + SUBROW_H + SEEN_BELOW)?.closest('[data-i]')
+      if (el) setSeenPage(pageOf(+el.dataset.i))
+    }
+    const kick = () => { if (!raf) raf = requestAnimationFrame(look) }
+    kick()
+    addEventListener('scroll', kick, { passive: true })
+    return () => { removeEventListener('scroll', kick); if (raf) cancelAnimationFrame(raf) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sideBySide, active, doc])
+
   if (!d) return null
   const onSeek = i => { userScroll.current = 0; playId === id ? seekTo(i) : openPlayer(id, { at: i }) }
   const showToc = wide && tocOpen && headings.length > 1
   const askDocked = wide && panel === 'ask'
-  const dock = (showToc ? 1 : 0) + (askDocked ? 2 : 0)
+  const showPane = sideBySide && !askDocked && !!doc // Ask takes the same side of the screen: one at a time
+  const panePage = showPane ? (pageOf(active) ?? seenPage ?? pageOf(d.pos || 0) ?? 1) : null
+  const dock = (showToc ? 1 : 0) + (askDocked ? 2 : 0) + (showPane ? 4 : 0)
   const bottom = playerHeight(wide, true, !!playId)
   const headH = HEADER_H + SUBROW_H // every document has the view switch: Text, Focus, and Pages for a PDF on this device
   const sheet = (name, title, body, w) => (
@@ -249,7 +276,7 @@ export function Reader({ wide }) {
           <IconButton icon="sparkle" label="Ask about this document" active={panel === 'ask'} onClick={() => setPanel(panel === 'ask' ? null : 'ask')} />
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
             items={[...(wide ? [] : [{ label: 'Bookmarks & notes', icon: 'bookmark', onClick: () => setPanel('marks') }, '-']),
-              ...(view === 'pages' ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
+              ...(view === 'pages' || sideBySide ? [{ label: 'Invert colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }, '-'] : []),
               ...(floatingSupported() ? [{ label: 'Float the words over other windows', icon: 'eye', onClick: float }, '-'] : []),
               { label: 'Insights: emotional arc and hard words', icon: 'list', onClick: () => setPanel('insights') },
               { label: 'Explain what I just heard', icon: 'sparkle', onClick: () => quick('explain') },
@@ -260,13 +287,13 @@ export function Reader({ wide }) {
         </div>
         {d && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: SUBROW_H, padding: `0 ${wide ? 20 : 14}px 10px` }}>
-            <div style={{ width: pagesAvailable ? 240 : 164, flexShrink: 0 }}>
-              <Segmented size="sm" value={view}
-                options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), { value: 'focus', label: 'Focus' }]}
+            <div style={{ width: !pagesAvailable ? 164 : wide ? 320 : 240, flexShrink: 0 }}>
+              <Segmented size="sm" value={sideBySide ? 'both' : view}
+                options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), ...(pagesAvailable && wide ? [{ value: 'both', label: 'Both' }] : []), { value: 'focus', label: 'Focus' }]}
                 onChange={v => { setPdfFail(false); settings.set({ readerView: v }) }} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : ''}
+              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : showPane && numPages > 0 ? `Page ${panePage} of ${numPages}` : ''}
             </div>
             {/* The works cited in the paragraph being heard. It lives here, not floating over the page: the bottom
                 of the screen already holds the player, the status pill and toasts. */}
@@ -366,6 +393,19 @@ export function Reader({ wide }) {
             </AnimatePresence>
           </motion.div>
         </article>
+
+        <AnimatePresence initial={false} mode="popLayout">
+        {showPane && (
+          <motion.aside key="pane" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.12, ease: 'easeIn' } }} transition={{ duration: 0.24, ease: T.ease }}
+            style={{ width: T.paneW, flexShrink: 0, position: 'sticky', top: headH, height: `calc(100dvh - ${headH + bottom}px)`, padding: 20, boxSizing: 'border-box', borderLeft: `1px solid ${T.border}` }}>
+            <Suspense fallback={null}>
+              <PagePane key={id} id={id} page={panePage} invert={invertPages} pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek}
+                onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }} onPages={setNumPages}
+                onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
+            </Suspense>
+          </motion.aside>
+        )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>

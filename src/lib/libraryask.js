@@ -1,4 +1,5 @@
 import { library, loadDoc, patch } from './library.js'
+import { timeline } from './player.js'
 import { db } from './db.js'
 import { pause } from './text.js'
 import { hasAiKey, contextChars, aiStream } from './ai.js'
@@ -69,7 +70,15 @@ export async function askLibrary(question, { onStage, onPassages, onText, signal
       used += p.text.length
     }
   }
-  const display = selected.map((p, i) => ({ doc: p.doc, title: p.title, block: p.block, page: cachedPages.get(p.doc)?.[p.block] ?? null, text: p.text.slice(0, 300), n: i + 1 }))
+  // Where each passage is in its book: the page (PDFs) and the time at normal speed. The time is exact where
+  // the audio exists and worked out from the length of the text where it does not yet.
+  const display = []
+  for (const [i, p] of selected.entries()) {
+    const c = await loadDoc(p.doc)
+    const d = library.get().docs.find(x => x.id === p.doc)
+    const time = c && d && c.starts[p.block] != null ? timeline(d, c)[c.starts[p.block]] : null
+    display.push({ doc: p.doc, title: p.title, block: p.block, page: cachedPages.get(p.doc)?.[p.block] ?? null, time, text: p.text.slice(0, 300), n: i + 1 })
+  }
   onPassages?.(display)
   if (!hasAiKey()) return { passages: display }
   onStage?.('asking')

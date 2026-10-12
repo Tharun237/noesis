@@ -63,3 +63,8 @@ test('file name underscores and dashes become spaces', () => {
   const out = cleanMeta({ title: '', author: '' }, { fileName: 'my-great_book.pdf', firstHeading: '' })
   assert.equal(out.title, 'my great book')
 })
+
+test('an address is not a title: a page printed to PDF from a browser falls back to its first heading', () => {
+  assert.equal(cleanMeta({ title: 'about:blank' }, { fileName: 'paper.pdf', firstHeading: 'Attention and Sequence Models' }).title, 'Attention and Sequence Models')
+  assert.equal(cleanMeta({ title: 'https://example.org/a/b?c=1' }, { fileName: 'saved page.pdf' }).title, 'saved page')
+})
