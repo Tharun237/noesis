@@ -73,6 +73,14 @@ try {
     const letters = [...text].filter(ch => /\p{L}/u.test(ch))
     const right = SCRIPT[code] ? letters.filter(ch => SCRIPT[code].test(ch)).length / Math.max(1, letters.length) : 1
     check(`${NAME[code]}: the text is written in its own script`, text.length > 40 && right > (code === 'ja' ? 0.3 : 0.7), `${Math.round(right * 100)}% of letters; ${((Date.now() - t0) / 1000).toFixed(1)} s`)
+    // and it is spoken: sentences of it are turned into sound by the language's own voice
+    let made = null
+    for (let k = 0; k < 480; k++) {
+      made = await lib(`(() => { const d = m.library.library.get().docs.find(x => x.target === ${JSON.stringify(code)}); return d ? { done: d.done, total: d.total, voice: d.voice, sec: Math.round(d.vSec || 0), error: d.error || null } : null })()`)
+      if (made?.done >= Math.min(3, made.total) || made?.error) break
+      await sleep(500)
+    }
+    check(`${NAME[code]}: its voice makes the audio`, !!made && made.done >= Math.min(3, made.total) && made.sec > 0, made ? `${made.voice}: ${made.done} of ${made.total} sentences, ${made.sec} s of sound` : 'no document')
     console.log('     said while working:', [...said].join('  →  ') || '(nothing)')
     console.log('     first words:', text.slice(0, 150))
     await page.screenshot({ path: `${OUT}/translate-${code}.png` })

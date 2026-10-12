@@ -33,8 +33,23 @@ export const VOICES = [
   // not be resold or sublicensed on its own.
   { id: 'hi_IN-rohan-medium', name: 'Rohan', accent: 'Hindi', g: 'M', license: 'IIT Madras TTS licence', lang: 'hi', data: 'https://www.iitm.ac.in/donlab/indictts',
     notice: 'COPYRIGHT 2016 TTS Consortium, TDIL, Meity represented by Hema A Murthy & S Umesh, DEPARTMENT OF Computer Science and Engineering and Electrical Engineering, IIT Madras. ALL RIGHTS RESERVED' },
+  // One free natural voice for each further language Noesis can translate into on the device. Each licence was
+  // read on 2026-10-13 from the voice's own MODEL_CARD in rhasspy/piper-voices. Left out because their cards
+  // say so: Japanese and Korean (the only voices are CC BY-NC-SA, non-commercial), Arabic (no licence stated
+  // by the recordings' source), and every other voice of these languages whose card is unclear or
+  // non-commercial. Chinese has one free voice (zh_CN-chaowen, CC0), but it is spoken from pinyin, which this
+  // engine cannot make (it makes eSpeak sounds): offered, it would speak nonsense, so it is not offered. `g` is given only where the source says who the speaker is.
+  { id: 'es_ES-davefx-medium', name: 'Dave', accent: 'Spanish', g: 'M', license: 'CC0', lang: 'es', data: 'https://github.com/OHF-Voice/voice-datasets' },
+  { id: 'fr_FR-siwis-medium', name: 'Siwis', accent: 'French', g: 'F', license: 'CC BY 4.0', lang: 'fr', data: 'https://datashare.is.ed.ac.uk/handle/10283/2353' },
+  { id: 'de_DE-thorsten-medium', name: 'Thorsten', accent: 'German', g: 'M', license: 'CC0', lang: 'de', data: 'https://github.com/thorstenMueller/Thorsten-Voice' },
+  { id: 'it_IT-serena-medium', name: 'Serena', accent: 'Italian', g: 'F', license: 'CC BY 4.0', lang: 'it', data: 'https://huggingface.co/datasets/committa/serena-synthetic-it-27h' },
+  { id: 'pt_BR-faber-medium', name: 'Faber', accent: 'Portuguese', g: 'M', license: 'CC0', lang: 'pt', data: 'https://github.com/OHF-Voice/voice-datasets' },
+  { id: 'vi_VN-vais1000-medium', name: 'Vais', accent: 'Vietnamese', license: 'CC BY 4.0', lang: 'vi', data: 'https://ieee-dataport.org/documents/vais-1000-vietnamese-speech-synthesis-corpus' },
 ]
 export const DEFAULT_VOICE = VOICES[0].id
+
+// What kind of voice it is, in a few words, for a list: "UK female", "Chinese", or the service an online voice comes from.
+export const voiceKind = (v, sep = ' ') => (v.cloud ? v.accent : [v.accent, sep === ' ' ? (v.g === 'F' ? 'female' : v.g === 'M' ? 'male' : null) : v.g].filter(Boolean).join(sep))
 
 function cloudFor(lang) {
   let s

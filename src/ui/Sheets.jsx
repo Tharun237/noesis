@@ -11,7 +11,7 @@ import { library, addDocument, changeVoice, addCollection, toggleInCollection, l
 import { synthesize, recordToBlob, loadEngine, engine, voiceWait } from '../lib/tts.js'
 import { kindOf, ACCEPT } from '../ingest/index.js'
 import { looksMarkdown } from '../ingest/text.js'
-import { voiceName, voicesFor } from '../lib/voices.js'
+import { voiceName, voicesFor, voiceKind } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
@@ -241,7 +241,7 @@ function AddForm({ wide }) {
         {langVoices.length > 0 && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select value={picked} onChange={e => setVoice(e.target.value)} style={{ ...inputStyle, flex: 1, appearance: 'auto' }}>
-              {langVoices.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.cloud ? v.accent : `${v.accent} ${v.g === 'F' ? 'female' : 'male'}`}</option>)}
+              {langVoices.map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {voiceKind(v)}</option>)}
             </select>
             {voiceLang === 'en' && <PreviewButton voice={picked} busy={busy} setBusy={setBusy} />}
           </div>
@@ -290,7 +290,7 @@ function VoicePicker() {
             style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', border: 'none', background: 'transparent', color: T.text, cursor: 'pointer', textAlign: 'left', fontFamily: T.font }}>
             <span style={{ width: 18, color: T.accent }}>{v.id === d.voice && <Icon name="check" size={17} />}</span>
             <span style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{v.name}</span>
-            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{v.cloud ? v.accent : `${v.accent} · ${v.g}`}</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint }}>{voiceKind(v, ' · ')}</span>
           </button>
           <PreviewButton voice={v.id} busy={busy} setBusy={setBusy} />
           {busy?.voice === v.id && <div style={{ flexBasis: '100%' }}><PreviewLine busy={busy} /></div>}

@@ -4,7 +4,7 @@ import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { cleanBase } from '../lib/ai.js'
 import { activeEngine, hasSystemVoice, isMobile, systemVoices, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
-import { voicesFor } from '../lib/voices.js'
+import { voicesFor, voiceKind } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth, parseVoiceNames, fetchOwnSpeech, encodeWav, explainVoiceError, ownHost } from '../lib/cloudvoice.js'
 import { Field, Segmented, Button, inputStyle, IconButton, Appear } from './kit.jsx'
 
@@ -124,7 +124,7 @@ export function VoiceCard({ Card }) {
           <>
             <Field title="Natural voice (default for new documents)" hint={isCloudVoice(s.voice) ? cloudTruth(s.voice) : null}>
               <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
-                {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {v.cloud ? v.accent : `${v.accent} ${v.g === 'F' ? 'female' : 'male'}`}</option>)}
+                {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {voiceKind(v)}</option>)}
               </select>
             </Field>
             <Field title="Tone" hint="Changes how the voice is made. Audio you already have is made again from where you are listening.">
