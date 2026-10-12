@@ -37,7 +37,13 @@ await page.addInitScript(() => {
 const lastDownload = () => until(() => page.evaluate(() => window.__downloads.at(-1)), 8000, 'export file')
 const errors = []
 page.on('pageerror', e => errors.push(String(e)))
-page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
+// With what was filled into it: React writes "In HTML, %s cannot be a descendant of <%s>" and hands the two
+// names over separately, and the bare sentence says nothing about where to look.
+page.on('console', async m => {
+  if (m.type() !== 'error') return
+  const parts = await Promise.all(m.args().map(a => a.jsonValue().catch(() => ''))).catch(() => [])
+  errors.push(parts.length > 1 ? parts.map(p => String(p).slice(0, 140)).join(' ¦ ') : m.text())
+})
 page.on('dialog', d => d.accept(d.type() === 'prompt' ? 'Renamed by QA' : undefined))
 page.on('crash', () => { errors.push('RENDERER CRASHED'); console.log('  !! renderer crashed') })
 page.on('close', () => console.log('  !! page closed'))

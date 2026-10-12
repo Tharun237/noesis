@@ -76,7 +76,23 @@ try {
   }, first)
   check('a deletion on A reaches B, and its text is taken out of the folder', left === 0, `${left} parts of it left`)
 
-  // signing out keeps the device's library and stops the server recognising it
+  // the folder emptied behind a device's back (the customer chose "Delete hidden app data" in Drive): the next
+  // round puts the library back instead of failing on files that are no longer there
+  const emptied = await a.page.evaluate(async () => {
+    const pass = await (await fetch('/api/auth/token', { method: 'POST' })).json()
+    const head = { authorization: `Bearer ${pass.access_token}` }
+    const files = (await (await fetch(`${pass.api}/drive/v3/files`, { headers: head })).json()).files
+    for (const f of files) await fetch(`${pass.api}/drive/v3/files/${f.id}`, { method: 'DELETE', headers: head })
+    return files.length
+  })
+  await a.lib(`(m.library.patch(${JSON.stringify(second)}, { pos: 1, lastPlayed: Date.now() }), 0)`)
+  await a.sync(); await sleep(400); await a.sync()
+  const back = await a.page.evaluate(async () => {
+    const pass = await (await fetch('/api/auth/token', { method: 'POST' })).json()
+    return (await (await fetch(`${pass.api}/drive/v3/files`, { headers: { authorization: `Bearer ${pass.access_token}` } })).json()).files.map(f => f.name.split(':')[0])
+  })
+  check('an emptied folder is filled again on the next round', emptied > 0 && back.includes('meta') && back.includes('pos') && back.includes('doc') && (await a.lib('m.sync.syncState.get().error')) == null, `${emptied} files removed, ${back.length} back`)
+
   await b.lib('m.sync.signOut()')
   const after = await b.page.evaluate(async () => ({ me: (await (await fetch('/api/auth/me')).json()).user, pass: (await fetch('/api/auth/token', { method: 'POST' })).status }))
   check('signing out keeps the library here and ends the session', after.me === null && after.pass === 401 && (await b.titles()).includes('Second device'))

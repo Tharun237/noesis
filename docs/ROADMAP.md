@@ -66,6 +66,16 @@ endpoints and their migrations are gone. `e2e/sync.mjs` runs two devices against
 (`server/devdrive.js`). Not yet proven against Google itself with a real account: that needs Tharun to sign
 in once. Known limit: a device whose clock is far in the future wins every disagreement until it is put right.
 
+After Tharun's phone test of 2026-10-12 (evening): motion is full for everyone and its setting is gone
+("it just shows we have failed to make it smooth"); spoken commands no longer need the app's name first and
+understand plain speech and an accent (`src/lib/voicecmd.js`: the book's own voice is told from the listener's
+by comparing what was heard with what is being read); a new book begins at the book, not at its copyright
+page (`src/ingest/front.js`); the reader's menu is about reading only; the text comes back where the reader
+had it; the install card no longer covers the last row; sync uses the server's clock, and puts a library back
+when its Drive folder was emptied. NOT yet tried on his phone: the spoken commands (they are tested as words,
+not as sound). `film/` holds a thirty-second film of the landing page (`node film/render.mjs`), drawn from
+the real fonts and words frame by frame, with sound made in code and the app's own voice reading one line.
+
 ## How the work is done
 
 | Role | Who | Does |

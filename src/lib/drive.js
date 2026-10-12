@@ -18,6 +18,12 @@ const PAGE = 1000
 const FILE = 'id,name,appProperties'
 
 let pass = null // { value, until, api }
+// How far this device's clock is from the server's, learnt each time a pass is fetched (the response says
+// what time the server thinks it is). Sync orders two devices' changes by time, so both must mean the same
+// thing by it: a phone set a day ahead used to win every disagreement until its clock was put right.
+const NEAR_ENOUGH_MS = 5000 // the answer takes a moment to travel: a few seconds apart is the same time
+let ahead = 0 // ms this device's clock is ahead of the server's
+export const clockNow = () => Date.now() - ahead
 
 async function getPass() {
   if (pass && Date.now() < pass.until) return pass
@@ -25,6 +31,8 @@ async function getPass() {
   if (res.status === 401) throw Object.assign(new Error('Signed out'), { signedOut: true })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Could not renew sign-in (${res.status})`)
   const got = await res.json()
+  const server = Date.parse(res.headers.get('date') || '')
+  if (server) { const d = Date.now() - server; ahead = Math.abs(d) > NEAR_ENOUGH_MS ? d : 0 }
   pass = { value: got.access_token, until: Date.now() + (got.expires_in - EARLY_S) * 1000, api: got.api || GOOGLE }
   return pass
 }
@@ -44,7 +52,7 @@ async function call(path, init = {}, again = true) {
   const p = await getPass()
   const res = await fetch(p.api + path, { ...init, headers: { ...init.headers, authorization: `Bearer ${p.value}` } })
   if (res.status === 401 && again) { forgetPass(); return call(path, init, false) } // the pass ran out early: one fresh one
-  if (!res.ok) throw new Error(await why(res))
+  if (!res.ok) throw Object.assign(new Error(await why(res)), { status: res.status })
   return res
 }
 const query = o => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null)).toString()

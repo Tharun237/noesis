@@ -427,19 +427,26 @@ const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
   )
 })
 
-export function docMenu(d) {
+// One menu for a document: how it is heard | where it is kept | take it out | delete. On its card in the
+// library, all of it. In the reader, where the document is being read and not filed, the keeping is left
+// out (`keeping: false`): twelve rows had become a list to read rather than a menu to use.
+export function docMenu(d, { keeping = true } = {}) {
   return [
     { label: 'Change voice', icon: 'voice', right: voiceName(d.voice), onClick: () => openSheet('voice', { docId: d.id }) },
     { label: 'Listen in another language', icon: 'globe', onClick: () => openSheet('language', { docId: d.id }) },
     '-',
-    { label: 'Rename', icon: 'edit', onClick: () => { const t = prompt('Rename', d.title); if (t?.trim()) patch(d.id, { title: t.trim(), renamed: true }) } },
-    { label: 'Add to collection', icon: 'folder', onClick: () => openSheet('collect', { docId: d.id }) },
-    { label: d.archived ? 'Move to queue' : 'Archive', icon: 'archive', onClick: () => patch(d.id, { archived: !d.archived }) },
-    '-',
+    ...(keeping ? [
+      { label: 'Rename', icon: 'edit', onClick: () => { const t = prompt('Rename', d.title); if (t?.trim()) patch(d.id, { title: t.trim(), renamed: true }) } },
+      { label: 'Add to collection', icon: 'folder', onClick: () => openSheet('collect', { docId: d.id }) },
+      { label: d.archived ? 'Move to queue' : 'Archive', icon: 'archive', onClick: () => patch(d.id, { archived: !d.archived }) },
+      '-',
+    ] : []),
     { label: 'Export transcript', icon: 'text', disabled: !d.total, onClick: () => exportTranscript(d.id) },
     { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'not yet', onClick: () => exportAudio(d.id) },
     d.status === 'error' && { label: 'Try again', icon: 'refresh', onClick: () => reprocess(d.id) },
-    '-',
-    { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) tab('library') } } },
+    ...(keeping ? [
+      '-',
+      { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) tab('library') } } },
+    ] : []),
   ]
 }

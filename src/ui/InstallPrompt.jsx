@@ -23,6 +23,7 @@ const iosSafari = () => {
 }
 const snoozed = () => { try { return Date.now() - +localStorage.getItem(DISMISS_KEY) < SNOOZE } catch { return false } }
 
+const CARD_SPACE = 104 // px of the page's bottom the card covers, with its margin
 export function InstallPrompt({ wide, full, lift = 0 }) {
   const evt = useStore(ui, s => s.installEvt)
   const installed = useStore(ui, s => s.installed)
@@ -40,6 +41,12 @@ export function InstallPrompt({ wide, full, lift = 0 }) {
 
   const ios = iosSafari()
   const show = ready && !hidden && !installed && !sheet && (evt || ios)
+  // The card sits over the bottom of the page. While it shows, the page is that much longer (App reads
+  // --prompt), so the last row of the library can be scrolled clear of it instead of living under it.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--prompt', show ? `${CARD_SPACE}px` : '0px')
+    return () => document.documentElement.style.setProperty('--prompt', '0px')
+  }, [show])
   const dismiss = () => { try { localStorage.setItem(DISMISS_KEY, String(Date.now())) } catch { /* private mode */ } setHidden(true) }
   const install = async () => {
     evt.prompt()

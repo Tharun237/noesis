@@ -1,7 +1,9 @@
 // A stand-in for Google Drive's app folder, for local development and the end-to-end tests ONLY (it answers
 // nowhere but localhost with DEV_LOGIN=1). It speaks the few Drive calls src/lib/drive.js makes, in Drive's
-// own shapes, so the app runs exactly the code it runs against Google; and it keeps everything in this
-// process's memory, per signed-in development name, until the dev server stops.
+// own shapes, so the app runs exactly the code it runs against Google. Like Drive, it does not forget: what
+// it holds is written to a file in the system's temporary folder, so it is still there when the dev server
+// is started again. (Kept only in memory, it emptied itself at every restart, and every test profile that was
+// signed in then met a folder emptied behind its back: real, but not what the tests were about.)
 //
 //   GET    /drive/v3/changes/startPageToken
 //   GET    /drive/v3/changes?pageToken=
@@ -10,7 +12,25 @@
 //   DELETE /drive/v3/files/<id>
 //   POST   /upload/drive/v3/files?uploadType=multipart
 //   PATCH  /upload/drive/v3/files/<id>?uploadType=multipart
+import { readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const KEPT = join(tmpdir(), 'noesis-devdrive.json')
 const drives = new Map() // development name → { seq, files: Map<id, { id, name, appProperties, bytes, seq }>, removed: [{ id, seq }] }
+try {
+  for (const [who, d] of Object.entries(JSON.parse(readFileSync(KEPT, 'utf8')))) {
+    drives.set(who, { seq: d.seq, removed: d.removed, files: new Map(d.files.map(f => [f.id, { ...f, bytes: new Uint8Array(Buffer.from(f.bytes, 'base64')) }])) })
+  }
+} catch { /* nothing kept yet */ }
+let saving = null
+const keep = () => {
+  saving ??= setTimeout(() => {
+    saving = null
+    const all = Object.fromEntries([...drives].map(([who, d]) => [who, { seq: d.seq, removed: d.removed, files: [...d.files.values()].map(f => ({ ...f, bytes: Buffer.from(f.bytes).toString('base64') })) }]))
+    try { writeFileSync(KEPT, JSON.stringify(all)) } catch { /* a stand-in that cannot write is only forgetful */ }
+  }, 200)
+}
 const te = new TextEncoder()
 const td = new TextDecoder()
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
@@ -64,6 +84,7 @@ export async function handleDevDrive(request, env) {
     if (!f) return refuse(404, 'notFound', 'File not found')
     Object.assign(f, { appProperties: { ...f.appProperties, ...meta.appProperties }, bytes: body, seq: ++d.seq })
     d.files.set(f.id, f)
+    keep()
     return json(shown(f))
   }
   if (id) {
@@ -72,6 +93,7 @@ export async function handleDevDrive(request, env) {
     if (request.method === 'DELETE') {
       d.files.delete(id)
       d.removed.push({ id, seq: ++d.seq })
+      keep()
       return new Response(null, { status: 204 })
     }
     return new Response(f.bytes, { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' } })

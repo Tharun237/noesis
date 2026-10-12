@@ -58,10 +58,6 @@ const rules = [
   `@keyframes noesis-played{from{transform:translateX(${PLAYED_FROM - 100}%)}to{transform:translateX(${PLAYED_TO - 100}%)}}`,
   `@keyframes noesis-played-in{from{transform:translateX(${100 - PLAYED_FROM}%)}to{transform:translateX(${100 - PLAYED_TO}%)}}`,
   '@supports (animation-timeline: view()){[data-played]{animation:noesis-played linear both;animation-timeline:--noesis-mood;animation-range:entry 40% exit 40%}[data-played-in]{animation:noesis-played-in linear both;animation-timeline:--noesis-mood;animation-range:entry 40% exit 40%}}',
-  // someone who asked for less motion gets the page standing still
-  'html[data-motion="less"] [data-enter],html[data-motion="less"] [data-lit]{animation:none;opacity:1}',
-  'html[data-motion="less"] [data-played],html[data-motion="less"] [data-played-in]{animation:none}',
-  '@media (prefers-reduced-motion: reduce){html:not([data-motion="full"]) [data-enter],html:not([data-motion="full"]) [data-lit]{animation:none;opacity:1}html:not([data-motion="full"]) [data-played],html:not([data-motion="full"]) [data-played-in]{animation:none}}',
 ]
 if (typeof document !== 'undefined' && !document.getElementById('noesis-landing')) {
   const sheet = document.createElement('style')

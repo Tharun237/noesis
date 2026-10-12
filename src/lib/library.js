@@ -12,6 +12,7 @@ import { activeEngine, hasSystemVoice } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
 import { cleanMeta } from '../ingest/meta.js'
+import { bookStart } from '../ingest/front.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
 import { touch, configureSync, startSync, downloadContent, deviceName } from './sync.js'
 
@@ -457,6 +458,9 @@ async function prepare(id) {
       for (const b of listening) { starts.push(at); at += b.s.length }
       pos = starts[Math.min(startBlock, starts.length - 1)]
       startPatch = { startBlock: null }
+    } else if (!d.pos) {
+      // a new document: the voice begins where the book does, after the copyright page and the contents (front.js)
+      pos = listening.slice(0, bookStart(listening)).reduce((a, b) => a + b.s.length, 0)
     }
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
     // settings.voice stays an English voice and is never changed here; only the document's own voice follows its lang.

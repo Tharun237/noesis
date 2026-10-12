@@ -1,86 +1,88 @@
-// M16 voice commands: transcript parsing and the no-browser listener path.
+// Voice commands: what people actually say, what a speech service actually hears, and the no-browser path.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { parseCommand, speechSupported, createListener } from './voicecmd.js'
+import { parseCommand, isEcho, speechLang, speechSupported, createListener } from './voicecmd.js'
 
-test('play phrases', () => {
-  for (const p of ['play', 'resume', 'continue', 'go on']) assert.deepEqual(parseCommand(p), { cmd: 'play' }, p)
+const means = (cmd, sayings) => { for (const s of sayings) assert.deepEqual(parseCommand(s), { cmd }, `"${s}" should mean ${cmd}`) }
+
+test('pausing, the ways people say it', () => {
+  means('pause', ['pause', 'Pause.', 'stop', 'stop it', 'can you pause', 'please stop reading', 'wait', 'wait wait', 'hold on', 'one second', 'ok stop', 'shut up', "that's enough", 'pause the book please'])
 })
 
-test('pause phrases', () => {
-  for (const p of ['pause', 'stop', 'wait', 'hold on']) assert.deepEqual(parseCommand(p), { cmd: 'pause' }, p)
+test('playing again', () => {
+  means('play', ['play', 'resume', 'continue', 'go on', 'carry on', 'keep going', 'start reading', 'continue reading', 'go ahead', 'play it', "don't stop", 'ok go'])
 })
 
-test('back phrases', () => {
-  for (const p of ['back', 'go back', 'repeat', 'repeat that', 'say that again']) assert.deepEqual(parseCommand(p), { cmd: 'back' }, p)
+test('back and next, by sentence', () => {
+  means('back', ['back', 'go back', 'go back a bit', 'repeat', 'repeat that', 'say that again', 'one more time', 'previous', 'rewind'])
+  means('next', ['next', 'skip', 'skip that', 'next one', 'move on', 'forward', 'skip ahead'])
 })
 
-test('next phrases', () => {
-  for (const p of ['next', 'skip', 'skip that']) assert.deepEqual(parseCommand(p), { cmd: 'next' }, p)
+test('pages and chapters', () => {
+  means('nextpage', ['next page', 'go to the next page', 'skip this page', 'turn the page'])
+  means('prevpage', ['previous page', 'last page', 'go back a page'])
+  means('nextchapter', ['next chapter', 'skip this chapter', 'skip this section', 'next section please'])
+  means('prevchapter', ['previous chapter', 'back to the last section'])
+  means('restart', ['start over', 'from the beginning', 'restart'])
 })
 
-test('bookmark phrases', () => {
-  for (const p of ['bookmark', 'bookmark that', 'save that', 'mark that', 'remember that']) assert.deepEqual(parseCommand(p), { cmd: 'bookmark' }, p)
+test('speed, including complaints', () => {
+  means('slower', ['slower', 'slow down', "that's too fast", 'too fast', 'a bit slower please'])
+  means('faster', ['faster', 'speed up', 'too slow', 'go faster'])
+  means('normal', ['normal speed'])
 })
 
-test('explain phrases', () => {
-  for (const p of ['explain', 'explain that', 'what does that mean', 'what was that']) assert.deepEqual(parseCommand(p), { cmd: 'explain' }, p)
+test('bookmarks and the AI commands', () => {
+  means('bookmark', ['bookmark', 'bookmark that', 'save that', 'mark this', 'remember that'])
+  means('explain', ['explain', 'explain that', 'what does that mean', 'what was that'])
+  means('recap', ['recap', 'where was i', 'what did i miss', 'give me a summary'])
+  means('skim', ['skim', 'skim this'])
+  means('micoff', ['stop listening', 'mic off'])
 })
 
-test('recap phrases', () => {
-  for (const p of ['recap', 'where was i', 'what did i miss']) assert.deepEqual(parseCommand(p), { cmd: 'recap' }, p)
+test('what a speech service hears from an accent still counts', () => {
+  means('pause', ['paws', 'pass', 'pos', 'paus', 'pawse']) // "pawse" is one letter from "pause"
+  means('play', ['presume', 'resum', 'continu'])
+  means('next', ['necks', 'nex page'.replace(' page', '')])
+  means('bookmark', ['bookmarks that', 'bookmrk'])
 })
 
-test('skim, slower and faster', () => {
-  for (const p of ['skim', 'skim this']) assert.deepEqual(parseCommand(p), { cmd: 'skim' }, p)
-  assert.deepEqual(parseCommand('slower'), { cmd: 'slower' })
-  assert.deepEqual(parseCommand('faster'), { cmd: 'faster' })
+test('ask and question carry the rest of the sentence', () => {
+  assert.deepEqual(parseCommand('ask what is entropy'), { cmd: 'ask', arg: 'what is entropy' })
+  assert.deepEqual(parseCommand('Question: why does this matter in the long run for the people living there?'), { cmd: 'ask', arg: 'why does this matter in the long run for the people living there' })
+  assert.equal(parseCommand('ask'), null)
 })
 
-test('ask and question carry the rest of the sentence as arg', () => {
-  assert.deepEqual(parseCommand('ask what is a sandbar'), { cmd: 'ask', arg: 'what is a sandbar' })
-  assert.deepEqual(parseCommand('question why is the sea salty'), { cmd: 'ask', arg: 'why is the sea salty' })
-  assert.equal(parseCommand('ask'), null) // nothing to ask
-  assert.equal(parseCommand('ask?'), null)
-})
-
-test('wake word is ignored', () => {
-  assert.deepEqual(parseCommand('noesis pause'), { cmd: 'pause' })
-  assert.deepEqual(parseCommand('hey noesis pause'), { cmd: 'pause' })
-  assert.deepEqual(parseCommand('hey noesis ask who wrote this'), { cmd: 'ask', arg: 'who wrote this' })
-  assert.equal(parseCommand('hey noesis'), null)
+test("the app's name may be said first, however it was heard, and is never needed", () => {
+  means('pause', ['noesis pause', 'hey noesis, pause', 'Noises stop', 'no thesis, wait', 'gnosis pause'])
   assert.equal(parseCommand('noesis'), null)
 })
 
-test('punctuation and capitals do not matter', () => {
-  assert.deepEqual(parseCommand('PLAY!'), { cmd: 'play' })
-  assert.deepEqual(parseCommand('  Pause.  '), { cmd: 'pause' })
-  assert.deepEqual(parseCommand('Hold on...'), { cmd: 'pause' })
-  assert.deepEqual(parseCommand('Where was I?'), { cmd: 'recap' })
-  assert.deepEqual(parseCommand('Hey, Noesis, bookmark that!'), { cmd: 'bookmark' })
-})
-
-test('the longer phrase wins over the shorter one', () => {
-  assert.deepEqual(parseCommand('skip this section'), { cmd: 'skim' })
-  assert.deepEqual(parseCommand('skip'), { cmd: 'next' })
-  assert.deepEqual(parseCommand('skip that'), { cmd: 'next' })
-  assert.deepEqual(parseCommand('repeat that'), { cmd: 'back' })
-  assert.deepEqual(parseCommand('what was that'), { cmd: 'explain' })
-})
-
-test('a command phrase at the start is enough, whole words only', () => {
-  assert.deepEqual(parseCommand('pause it please'), { cmd: 'pause' })
+test('whole words only, and a long remark is not a command', () => {
+  assert.equal(parseCommand('nonstop'), null)
   assert.equal(parseCommand('playground'), null)
-  assert.equal(parseCommand('stopwatch'), null)
+  assert.equal(parseCommand('banana'), null)
+  assert.equal(parseCommand(''), null)
+  assert.equal(parseCommand(undefined), null)
+  assert.equal(parseCommand('and so the army came to a stop at the river bank before the winter set in'), null)
 })
 
-test('nonsense is null', () => {
-  assert.equal(parseCommand(''), null)
-  assert.equal(parseCommand('   '), null)
-  assert.equal(parseCommand(undefined), null)
-  assert.equal(parseCommand('banana'), null)
-  assert.equal(parseCommand('i want to pause'), null)
+test('the book is told from the listener', () => {
+  const reading = 'The convoy had to stop at the border. Nobody knew what would come next, and the guards said wait.'
+  assert.equal(isEcho('the convoy had to stop at the border', reading), true) // the microphone heard the loudspeaker
+  assert.equal(isEcho('nobody knew what would come next', reading), true)
+  assert.equal(isEcho('stop', reading), false) // one word alone is the listener
+  assert.equal(isEcho('can you pause it please', reading), false)
+  assert.equal(isEcho('go back a bit', reading), false)
+})
+
+test('which English to listen for', () => {
+  assert.equal(speechLang('en-IN', 'Asia/Kolkata'), 'en-IN')
+  assert.equal(speechLang('en-US', 'Asia/Kolkata'), 'en-IN') // a phone left on "English (US)", in India
+  assert.equal(speechLang('en-GB', 'America/New_York'), 'en-GB')
+  assert.equal(speechLang('en-US', 'America/New_York'), 'en-US')
+  assert.equal(speechLang('te-IN', 'Asia/Kolkata'), 'en-IN')
 })
 
 test('no browser: speech is unsupported and stop ends off', () => {

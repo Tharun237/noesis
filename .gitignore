@@ -21,3 +21,9 @@ tools/listen/.cache/
 public/espeak
 .chaos-profile
 .feel-profile
+
+# the film: what is rendered, not what renders it
+film/*.mp4
+film/*.wav
+film/stills.png
+film/sound-picture.png

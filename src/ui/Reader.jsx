@@ -9,7 +9,7 @@ import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '
 import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate } from '../lib/player.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
-import { parseCommand, speechSupported } from '../lib/voicecmd.js'
+import { parseCommand, isEcho, speechSupported } from '../lib/voicecmd.js'
 import { VoiceControl, VoiceHud } from './VoiceControl.jsx'
 import { floatingSupported, openFloating } from '../lib/floating.js'
 import { settings } from '../lib/settings.js'
@@ -51,7 +51,6 @@ const pageGhost = <div aria-hidden style={{ width: '100%', aspectRatio: `1 / ${P
 const VISUAL_LABEL = { fig: 'Figure', table: 'Table', math: 'Equation', code: 'Code' }
 const HEADER_H = 57
 // The app's name as a speech recogniser tends to write it.
-const WAKE = /^(?:hey\s+)?(?:noesis|no\s?esis|gnosis|no\s?thesis|know\s?esis|noises)[\s,.:!]*/i
 const SEEN_BELOW = 120 // px under the header where the reader's eye is taken to be, for the page beside the text
 // Room under the last line. The app already keeps the page clear of the player; adding the player's height
 // here as well left more empty page than a sideways phone has screen: scroll to the end of a short document
@@ -95,26 +94,39 @@ export function Reader({ wide }) {
   const quick = qid => { setAskAuto({ id: qid, n: Date.now() }); setPanel('ask') }
   const [voiceState, setVoiceState] = useState('off')
   const [heard, setHeard] = useState('')
-  // What the microphone heard. While the book is playing through a loudspeaker the microphone hears the
-  // book too, and the book says "stop" and "next" all the time: then a command must start with "Noesis".
+  // What the microphone heard, and what was done about it. While the book plays through a loudspeaker the
+  // microphone hears the book too: that is told apart by comparing it with what is being read (voicecmd.js),
+  // so the listener just says what they want.
   const [done, setDone] = useState(null) // what was done with the last thing heard: { text, ok, at }
   const [saying, setSaying] = useState('') // the words as they are being heard
   const did = (text, ok = true) => setDone({ text, ok, at: Date.now() })
-  const onHeard = said => {
+  const onHeard = (said, guesses = [said]) => {
     setHeard(said)
     setSaying(said)
-    const m = said.trim().match(WAKE)
     const p = player.get()
-    const c = parseCommand(m ? said.trim().slice(m[0].length) : said)
-    if (!c) return did('Not a command. Nothing was done.', false)
-    if (p.playing && p.id === id && !m) return did('The book is playing: say “Noesis” first, then the command.', false)
+    if (p.playing && p.id === id && doc && isEcho(said, doc.segs.slice(Math.max(0, p.i - 2), p.i + 3).map(x => x.t).join(' '))) return // the book, not the listener
+    const c = guesses.map(parseCommand).find(Boolean) // every reading the speech service offered, best first
+    if (!c) return did('Not something I can do. Try: pause, go back, next page, slower.', false)
     const at = p.id === id ? p.i : d?.pos || 0
+    const goTo = (i, what) => { if (i == null) return did(`There is no ${what}.`, false); onSeek(i); did(`Going to the ${what}`) }
+    const pageFrom = (page, step) => { for (let n = page + step, tries = 0; tries < 20; n += step, tries++) { const i = firstOfPage.get(n); if (i != null) return i } return null }
     if (c.cmd === 'play') { p.id === id ? play() : openPlayer(id, { at }).then(play); did('Playing') }
     else if (c.cmd === 'pause') { pause(); did('Paused') }
     else if (c.cmd === 'back') { prevSentence(); did('Back one sentence') }
     else if (c.cmd === 'next') { nextSentence(); did('Next sentence') }
     else if (c.cmd === 'slower') { const r = Math.max(0.5, Math.round((p.rate - 0.1) * 10) / 10); setRate(r); did(`Slower: ${r}×`) }
     else if (c.cmd === 'faster') { const r = Math.min(3, Math.round((p.rate + 0.1) * 10) / 10); setRate(r); did(`Faster: ${r}×`) }
+    else if (c.cmd === 'normal') { setRate(1); did('Normal speed: 1×') }
+    else if (c.cmd === 'restart') goTo(0, 'beginning')
+    else if (c.cmd === 'nextpage' || c.cmd === 'prevpage') {
+      const step = c.cmd === 'nextpage' ? 1 : -1
+      const page = doc?.blocks[doc.segs[at]?.b]?.p
+      if (typeof page === 'number') goTo(pageFrom(page, step), step > 0 ? 'next page' : 'previous page')
+      else { step > 0 ? nextSentence() : prevSentence(); did(step > 0 ? 'This document has no pages: next sentence' : 'This document has no pages: back one sentence') }
+    }
+    else if (c.cmd === 'nextchapter') goTo(headings.find(x => x.i > at)?.i, 'next section')
+    else if (c.cmd === 'prevchapter') goTo(headings[headings.findLastIndex(x => x.i <= at) - 1]?.i, 'previous section')
+    else if (c.cmd === 'micoff') did('Tap the microphone to stop listening.', false)
     else if (c.cmd === 'bookmark') {
       // The bookmark keeps the last few sentences as its note, so "what was I marking?" has an answer later.
       if (!(d.marks || []).some(x => x.i === at)) toggleMark(id, at)
@@ -123,7 +135,7 @@ export function Reader({ wide }) {
     }
     else if (c.cmd === 'explain' || c.cmd === 'recap' || c.cmd === 'skim') { quick(c.cmd); did({ explain: 'Explaining what you just heard', recap: 'Recapping so far', skim: 'Skimming this section' }[c.cmd]) }
     else if (c.cmd === 'ask' && c.arg) { setAskAuto({ q: c.arg, n: Date.now() }); setPanel('ask'); did(`Asking: ${c.arg}`) }
-    else did('Not a command. Nothing was done.', false)
+    else did('Not something I can do. Try: pause, go back, next page, slower.', false)
   }
   const float = async () => {
     // Opening the window has to happen inside the tap; only its contents are loaded on demand.
@@ -285,14 +297,23 @@ export function Reader({ wide }) {
   // text, the page is already at the sentence that was being read when the text appears: placed before the
   // first paint, not scrolled to afterwards (that was a second movement after the view had arrived).
   const lastView = useRef(view)
+  const textScroll = useRef(0) // where the reader has the text scrolled to: remembered while another view is shown
+  useEffect(() => {
+    const on = () => { if (lastView.current === 'text') textScroll.current = window.scrollY }
+    addEventListener('scroll', on, { passive: true })
+    return () => removeEventListener('scroll', on)
+  }, [])
   useLayoutEffect(() => {
     const from = lastView.current
     lastView.current = view
     if (from === view) return
     if (view === 'focus') { window.scrollTo(0, 0); return }
     if (view !== 'text') return
+    // While the voice reads, the text comes back at the sentence being read. Otherwise it comes back where the
+    // reader had scrolled it to: they were reading by eye, and that is their place.
     const place = active >= 0 ? active : d?.pos || 0
-    if (place > 0) document.querySelector(`[data-i="${place}"]`)?.scrollIntoView({ block: 'center', behavior: 'auto' })
+    if (!(isPlaying && playId === id) && textScroll.current > 0) window.scrollTo(0, textScroll.current)
+    else if (place > 0) document.querySelector(`[data-i="${place}"]`)?.scrollIntoView({ block: 'center', behavior: 'auto' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 
@@ -337,7 +358,7 @@ export function Reader({ wide }) {
               ...(view === 'pages' || sideBySide ? [{ label: 'Invert the page colours', icon: 'eye', right: invertPages ? 'On' : 'Off', onClick: () => settings.set({ invertPages: !invertPages }) }] : []),
               ...(floatingSupported() ? [{ label: 'Float the words over other windows', icon: 'pip', onClick: float }] : []),
               '-',
-              ...docMenu(d)]} />
+              ...docMenu(d, { keeping: false })]} />
         </div>
         {d && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: SUBROW_H, padding: `0 ${wide ? 20 : 14}px 10px` }}>

@@ -27,7 +27,7 @@ export function VoiceControl({ onCommand, onState, onHeard, onInterim }) {
     if (was === 'listening') return
     const l = createListener({
       onCommand: c => handlers.current.onCommand?.(c),
-      onHeard: t => handlers.current.onHeard?.(t),
+      onHeard: (t, guesses) => handlers.current.onHeard?.(t, guesses),
       onInterim: t => handlers.current.onInterim?.(t),
       onState: emit,
     })
@@ -38,7 +38,7 @@ export function VoiceControl({ onCommand, onState, onHeard, onInterim }) {
   return <IconButton icon={ICON} label="Voice commands" onClick={toggle} active={state === 'listening'} />
 }
 
-const LISTEN_HINT = 'Listening. Say: play, pause, back, bookmark, explain, recap.'
+const LISTEN_HINT = 'Listening. Say what you want: pause, go back, next page, slower, bookmark that.'
 const PRIVACY = 'Your browser sends what it hears to its own speech service to recognise the words.'
 const MESSAGES = {
   denied: "The microphone is blocked for this site. Allow it in the browser's site settings.",
@@ -85,7 +85,7 @@ export function VoiceHud({ state, words, done, bottom, playing }) {
                 <span style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.sub }}>Listening</span>
               </div>
               <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.35, color: words ? T.text : T.faint, minHeight: 25, wordBreak: 'break-word' }}>
-                {words ? `“${words}”` : 'Say a command'}
+                {words ? `“${words}”` : 'Say what you want: pause, go back, next page'}
               </div>
               <AnimatePresence mode="wait" initial={false}>
                 {done && (

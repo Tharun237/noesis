@@ -86,21 +86,17 @@ export default function App() {
   }
   const dir = trip.current.dir
 
-  // Motion follows the phone's own setting unless the customer chose otherwise (Settings, Motion).
-  const motionPref = useStore(settings, st => st.motion || 'system')
-  useEffect(() => { document.documentElement.dataset.motion = motionPref }, [motionPref])
-
   const full = view === 'reader'
   const landing = useEmptyLibrary() && view === 'library' // nothing to list yet: the landing page, with no bars of the app around it
   const dock = landing ? 0 : playerHeight(wide, full, active) // fixed bars at the bottom; the activity strip, toasts and banners stack above
   const lift = activity ? ACTIVITY_H : 0
   return (
-    <MotionConfig reducedMotion={motionPref === 'full' ? 'never' : motionPref === 'less' ? 'always' : 'user'} transition={{ duration: T.dur.fast, ease: T.ease }}>
+    <MotionConfig reducedMotion="never" transition={{ duration: T.dur.fast, ease: T.ease }}>
     <div style={{ fontFamily: T.font, color: T.text, background: T.bg, minHeight: '100dvh', WebkitFontSmoothing: 'antialiased' }}>
       {/* A page slides a little as it arrives or leaves. `clip` keeps that from widening the screen (on a
           phone a wider page makes the whole view rescale and every fixed bar jump); unlike `hidden` it does
           not create a scroll box, so sticky headers keep working. */}
-      <div style={{ paddingBottom: dock + lift, overflowX: 'clip', '--dock': `${dock + lift}px` }}>
+      <div style={{ paddingBottom: `calc(${dock + lift}px + var(--prompt, 0px))`, overflowX: 'clip', '--dock': `${dock + lift}px` }}>
         {/* The old page fades out quickly (ease-in), then the new one rises in (ease-out): one page at a time.
             The leaving page keeps its own route through context, so it never flashes the next page's content. */}
         <AnimatePresence mode="wait" initial={false} custom={dir}>

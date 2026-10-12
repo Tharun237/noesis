@@ -86,7 +86,7 @@ async function tour(size) {
   await see('reader-pdf-pages', async () => { await page.getByRole('tab', { name: 'Pages', exact: true }).click(); await sleep(2800) }, async () => { await page.getByRole('tab', { name: 'Text', exact: true }).click() })
   await home()
   await see('settings', () => btn('Settings').click(), async () => {})
-  for (const name of ['Account', 'Voice', 'Listening', 'Sounds and haptics', 'AI', 'Motion', 'Storage', 'About']) {
+  for (const name of ['Account', 'Voice', 'Listening', 'Sounds and haptics', 'AI', 'Storage', 'About']) {
     await see(`settings-${name.toLowerCase().replace(/ /g, '-')}`, () => page.getByRole('button', { name: new RegExp('^' + name) }).first().click(), async () => { if (!wide) await page.goBack().catch(() => {}) })
   }
   await home()

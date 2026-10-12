@@ -66,8 +66,7 @@ phone, is not finished.
   document's More menu, not behind a second bookmark icon.
 - The player's progress line is the book's emotional arc (English documents). There is no separate arc chart.
 - Design values come from `src/theme.js`; the look is ACS monochrome, pure black, lime for highlights only.
-- Settings is a short list of sections (Account, Voice, Listening, Sounds and haptics, AI, Motion, Storage,
-  About). Each row says what the section is set to; each section is its own page on a phone and a page beside
+- Settings is a short list of sections (Account, Voice, Listening, Sounds and haptics, AI, Storage, About). Each row says what the section is set to; each section is its own page on a phone and a page beside
   the list on a wide screen. A setting lives in exactly one section and nowhere else (not in a menu as well).
 - A document has ONE menu, the same on its library card and in the reader: how it is heard | where it is
   kept | take it out | delete. The reader puts its own tools (find, bookmarks, hard words, float) above it.
@@ -92,3 +91,8 @@ phone, is not finished.
   working; ask the document), and the way in once more. Every claim on it must be true of the app as it is.
   Its motion is the browser's own (one keyframe rule for the spoken word, scroll-driven animations for the
   rest): no script runs while it scrolls. `e2e/tour.mjs` photographs it first, from a thrown-away profile.
+- No setting for motion. It is full for everyone; if it is not smooth on some phone, the motion is what gets
+  fixed. A setting that asks the customer how much the app should move says the app could not decide.
+- The reader's menu is about reading the document (find, bookmarks, hard words, float, voice, language,
+  export). Keeping it (rename, collection, archive, delete) is the library card's menu.
+- A spoken command is plain speech, anywhere in a short sentence, with no name to say first.

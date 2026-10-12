@@ -46,7 +46,7 @@ const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob
 
 export const configureSync = h => { hooks = h }
 
-export function touch(k, at = Date.now()) {
+export function touch(k, at = drive.clockNow()) {
   clock[k] = Math.max(clock[k] || 0, at)
   if (!uid) { early[k] = clock[k]; return }
   dirty[k] = clock[k]
@@ -71,15 +71,29 @@ function schedule(ms) {
 // See what changed in the folder and take what is newer than ours.
 async function pull() {
   let changed
-  if (cursor) ({ changes: changed, cursor } = await drive.changesSince(cursor))
-  else {
+  if (cursor) {
+    try { ({ changes: changed, cursor } = await drive.changesSince(cursor)) } catch (e) {
+      if (!GONE.has(e.status)) throw e
+      cursor = null // Drive no longer knows the place this device remembered: look at the whole folder again
+    }
+  }
+  if (!cursor) {
     const from = await drive.startToken() // before the list, so nothing written during it is missed
     changed = (await drive.listAll()).map(file => ({ fileId: file.id, file }))
     cursor = from
+    // What the folder holds is what the list says, not what this device remembered. Anything of ours it does
+    // not hold (the customer emptied the folder, or it was never sent) is sent again.
+    const there = new Set(changed.map(c => c.file.name))
+    ids = {}
+    for (const k of Object.keys(clock)) if (!k.startsWith(TEXT) && !there.has(k)) dirty[k] = clock[k]
   }
   for (const c of changed) {
     if (c.removed || !c.file) {
-      for (const [k, f] of Object.entries(ids)) if (f.id === c.fileId) delete ids[k]
+      for (const [k, f] of Object.entries(ids)) {
+        if (f.id !== c.fileId) continue
+        delete ids[k]
+        if (!k.startsWith(TEXT) && clock[k]) dirty[k] = clock[k] // a record is never removed on purpose (a deleted document is a record that says so): the folder was emptied, so it is sent again
+      }
       continue
     }
     const k = c.file.name
@@ -93,7 +107,10 @@ async function pull() {
     }
     ids[k] = seen
     if (k.startsWith(TEXT)) continue
-    if (seen.at > (clock[k] || 0)) await receive(k, seen.at, await (await drive.read(seen.id)).json())
+    if (seen.at > (clock[k] || 0)) {
+      const res = await drive.read(seen.id).catch(e => { if (!GONE.has(e.status)) throw e; delete ids[k]; return null }) // gone between the list and the reading
+      if (res) await receive(k, seen.at, await res.json())
+    }
     else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
   }
 }
@@ -105,6 +122,19 @@ async function receive(k, at, v) {
   await hooks.apply(k, v)
 }
 
+// Write a record over the file it already has, or as a new file. If the file it had is gone (the folder was
+// emptied since this device last looked), it is written as a new one: a round must heal itself, not fail.
+const GONE = new Set([404, 410])
+async function put(k, at, body, quick) {
+  if (ids[k]) {
+    try { return await drive.write(k, at, body, ids[k].id, quick) } catch (e) {
+      if (!GONE.has(e.status)) throw e
+      delete ids[k]
+    }
+  }
+  return drive.write(k, at, body, undefined, quick)
+}
+
 // Send what of ours is newer than what the folder holds.
 async function push(quick) {
   for (const [k, at] of Object.entries(dirty)) {
@@ -114,7 +144,7 @@ async function push(quick) {
       if (v !== undefined) {
         if (k.startsWith('meta:') && v.contentVer && !v.deleted) v.parts = await uploadContent(k.slice(5), v.contentVer)
         const body = JSON.stringify(v)
-        ids[k] = { id: await drive.write(k, at, body, ids[k]?.id, quick && body.length < QUICK_MAX), at }
+        ids[k] = { id: await put(k, at, body, quick && body.length < QUICK_MAX), at }
         if (k.startsWith('meta:') && v.deleted) await dropText(k.slice(5)) // a deleted document leaves nothing behind in their Drive
         if (k.startsWith('pos:')) lastPosPush = Date.now()
       }
@@ -186,7 +216,12 @@ export async function downloadContent(id, ver, parts) {
   const missing = names.find(k => !ids[k])
   if (missing) throw new Error('The text of this document has not reached your Google Drive yet. Open it on the device it was added on.')
   const chunks = []
-  for (const k of names) chunks.push(await (await drive.read(ids[k].id)).arrayBuffer())
+  for (const k of names) {
+    chunks.push(await (await drive.read(ids[k].id).catch(e => {
+      if (GONE.has(e.status)) { delete ids[k]; throw new Error('The text of this document is no longer in your Google Drive. Open it on the device it was added on.') }
+      throw e
+    })).arrayBuffer())
+  }
   return JSON.parse(td.decode(await pipe(new Uint8Array(await new Blob(chunks).arrayBuffer()), new DecompressionStream('gzip'))))
 }
 
@@ -211,7 +246,7 @@ async function resetFor(user) {
   clock = {}
   dirty = {}
   ids = {}
-  const now = Date.now()
+  const now = drive.clockNow()
   for (const k of await hooks.allKeys()) { clock[k] = now; dirty[k] = now } // first sync here = union of libraries
   await persist()
 }

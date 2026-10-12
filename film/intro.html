@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Noesis: thirty seconds</title>
+    <!-- The landing page as a film: the same words, type, black, white and lime, and the product doing its
+         one thing. Every frame is a pure function of the time, render(t): nothing here runs on a clock, so
+         film/render.mjs can step through it frame by frame and get the same picture every time.
+         Open through the dev server (http://localhost:5180/film/intro.html?play) to watch it; render with
+         `node film/render.mjs`. -->
+    <style>
+      @font-face { font-family: 'DM Sans'; src: url('/node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2') format('woff2'); font-weight: 100 1000; }
+      @font-face { font-family: 'Literata'; src: url('/node_modules/@fontsource-variable/literata/files/literata-latin-wght-normal.woff2') format('woff2'); font-weight: 200 900; }
+      @font-face { font-family: 'Literata'; font-style: italic; src: url('/node_modules/@fontsource-variable/literata/files/literata-latin-wght-italic.woff2') format('woff2'); font-weight: 200 900; }
+      @font-face { font-family: 'JetBrains Mono'; src: url('/node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2') format('woff2'); font-weight: 100 800; }
+      :root { --lime: #AAFF00; --sub: rgba(255, 255, 255, 0.56); --faint: rgba(255, 255, 255, 0.34); --line: rgba(255, 255, 255, 0.14); --card: rgba(255, 255, 255, 0.04); }
+      html, body { margin: 0; background: #000; }
+      #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #000; color: #fff; font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+      .scene { position: absolute; inset: 0; display: none; }
+      .cam { position: absolute; inset: 0; transform-origin: 50% 50%; }
+      .mono { font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.26em; font-size: 26px; color: var(--sub); }
+      .big { font-weight: 800; letter-spacing: -0.058em; line-height: 0.94; }
+      .h2 { font-weight: 800; letter-spacing: -0.05em; line-height: 0.98; font-size: 150px; }
+      .serif { font-family: 'Literata', serif; }
+      .w { display: inline-block; white-space: pre; }
+      .card { border-radius: 44px; border: 1px solid var(--line); background: var(--card); }
+      .abs { position: absolute; }
+      svg { display: block; overflow: visible; }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script type="module">
+      import { WORDMARK } from '/src/ui/brand-paths.js'
+
+      // ── small tools: everything is a function of t (seconds) ────────────────────────────────────────────
+      const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x))
+      const prog = (t, from, dur) => clamp((t - from) / dur)
+      const out = x => 1 - Math.pow(1 - x, 4) // arrives fast, settles long: the app's own entrance
+      const inOut = x => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
+      const back = x => { const c = 1.4; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2) } // lands with a little give
+      const el = (tag, cls, html, style) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (style) e.style.cssText = style; return e }
+      const stage = document.getElementById('stage')
+      const scenes = []
+      // a scene: on screen from `from` to `to`, drifting slowly toward the viewer, leaving upward
+      function scene(from, to, build) {
+        const root = el('div', 'scene')
+        const cam = el('div', 'cam')
+        root.append(cam)
+        stage.append(root)
+        const draw = build(cam)
+        scenes.push(t => {
+          const on = t >= from - 0.02 && t <= to + 0.02
+          root.style.display = on ? 'block' : 'none'
+          if (!on) return
+          const leave = inOut(prog(t, to - 0.5, 0.5))
+          root.style.opacity = String(1 - leave)
+          const drift = 1 + 0.035 * prog(t, from, to - from)
+          cam.style.transform = `translateY(${-70 * leave}px) scale(${drift})`
+          cam.style.filter = leave > 0 ? `blur(${14 * leave}px)` : 'none'
+          draw(t)
+        })
+      }
+      // a thing rising into place out of a blur
+      function rise(e, t, at, dur = 0.8, y = 70, blur = 16) {
+        const p = out(prog(t, at, dur))
+        e.style.opacity = String(p)
+        e.style.transform = `translateY(${(1 - p) * y}px)`
+        e.style.filter = p < 1 ? `blur(${(1 - p) * blur}px)` : 'none'
+      }
+      // a big word landing: from a little too large and low, with give
+      function land(e, t, at, dur = 0.75) {
+        const x = prog(t, at, dur)
+        const p = out(x)
+        e.style.opacity = String(clamp(x * 3))
+        e.style.transform = `translateY(${(1 - back(x)) * 110}px) scale(${1.14 - 0.14 * p})`
+        e.style.filter = p < 1 ? `blur(${(1 - p) * 20}px)` : 'none'
+      }
+      const words = (text, cls = 'w') => text.split(' ').map(w => `<span class="${cls}">${w} </span>`).join('')
+      const eyebrow = text => `<span style="display:inline-block;width:14px;height:14px;border-radius:14px;background:var(--lime);margin-right:26px;vertical-align:middle"></span>${text}`
+      const MOOD = 'M0 42 C 40 24, 72 12, 112 22 S 172 58, 216 62 S 292 32, 332 14 S 402 8, 442 30 S 512 68, 560 60 S 612 38, 640 40'
+      const moodLine = (w, h, stroke) => `<svg width="${w}" height="${h}" viewBox="0 0 640 80" preserveAspectRatio="none" class="abs" style="left:0;top:0"><path d="${MOOD}" fill="none" stroke="${stroke}" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`
+      // the mood line with its played part and the lime playhead: `played` 0..1
+      function mood(parent, w, h) {
+        const box = el('div', 'abs', moodLine(w, h, 'rgba(255,255,255,0.2)'), `width:${w}px;height:${h}px`)
+        const win = el('div', 'abs', '', `left:0;top:0;height:${h}px;overflow:hidden`)
+        win.innerHTML = moodLine(w, h, '#fff')
+        const head = el('div', 'abs', '', `top:${-h * 0.12}px;width:5px;height:${h * 1.24}px;border-radius:5px;background:var(--lime)`)
+        box.append(win, head)
+        parent.append(box)
+        return { box, set: played => { win.style.width = `${w * played}px`; head.style.left = `${w * played - 2}px` } }
+      }
+
+      // ── 1. the name ────────────────────────────────────────────────────────────────────────────────────
+      scene(0, 3.5, cam => {
+        const tag = el('div', 'mono abs', eyebrow('<span id="tag"></span>'), 'left:0;right:0;top:330px;text-align:center')
+        const mark = el('div', 'abs', `<svg width="900" viewBox="0 0 ${WORDMARK.w} ${WORDMARK.h}"><path fill-rule="evenodd" fill="#fff" d="${WORDMARK.d}"/></svg>`, 'left:510px;top:430px;width:900px')
+        cam.append(tag, mark)
+        const said = 'Listen deeper'
+        return t => {
+          rise(tag, t, 0.25, 0.6, 20, 6)
+          tag.querySelector('#tag').textContent = said.slice(0, Math.round(said.length * prog(t, 0.45, 0.9)))
+          const p = out(prog(t, 1.0, 1.3))
+          mark.style.clipPath = `inset(0 ${(1 - p) * 100}% 0 0)`
+          mark.style.transform = `scale(${1.08 - 0.08 * p})`
+          mark.style.filter = p < 1 ? `blur(${(1 - p) * 10}px)` : 'none'
+        }
+      })
+
+      // ── 2. what it is ──────────────────────────────────────────────────────────────────────────────────
+      scene(3.3, 7.9, cam => {
+        const h = el('div', 'big abs', `${words('Listen to')}<br>${words('anything.')}`, 'left:170px;top:150px;font-size:270px')
+        const sub = el('div', 'serif abs', 'Understand it.', 'left:182px;top:690px;font-size:104px;font-style:italic;color:var(--sub);letter-spacing:-0.02em')
+        const say = el('div', 'abs', 'Papers, books and articles, read to you in a natural voice<br>that is made on your own device.', 'left:186px;top:850px;font-size:42px;line-height:1.5;color:var(--sub)')
+        cam.append(h, sub, say)
+        const ws = [...h.querySelectorAll('.w')]
+        return t => {
+          ws.forEach((w, i) => land(w, t, 3.55 + i * 0.36))
+          rise(sub, t, 5.0, 0.9, 40)
+          rise(say, t, 5.7, 0.9, 40)
+        }
+      })
+
+      // ── 3. the thing itself: a voice moving through words ──────────────────────────────────────────────
+      const VOICE_AT = 8.05 // the same in film/sound.mjs
+      const VOICE_S = 5.3 // how long the voice takes to say it (the recording's 5.56 s, less the quiet at its end)
+      scene(7.7, 13.75, cam => {
+        const SAYS = 'Reading is one road to that moment. Listening is another, and for a long time it was the main one.'
+        const card = el('div', 'card abs', '', 'left:260px;top:170px;width:1400px;height:740px')
+        const lab = el('div', 'mono abs', '<span style="color:var(--lime)">▍▍▌▍</span>&nbsp; Now reading · On Listening', 'left:80px;top:74px;font-size:24px')
+        const para = el('div', 'serif abs', words(SAYS), 'left:80px;top:150px;width:1240px;font-size:66px;line-height:1.45;color:var(--faint)')
+        const btn = el('div', 'abs', '<div style="width:18px;height:44px;border-left:11px solid #000;border-right:11px solid #000;box-sizing:content-box"></div>', 'left:80px;top:582px;width:104px;height:104px;border-radius:104px;background:#fff;display:grid;place-items:center')
+        const lineAt = el('div', 'abs', '', 'left:230px;top:594px;width:980px;height:80px')
+        const speed = el('div', 'mono abs', '1x', 'right:80px;top:618px;font-size:28px;letter-spacing:0.04em;text-transform:none;color:var(--faint)')
+        card.append(lab, para, btn, lineAt, speed)
+        cam.append(card)
+        const m = mood(lineAt, 980, 80)
+        const ws = [...para.querySelectorAll('.w')]
+        const weight = w => w.replace(/[^a-z]/gi, '').length + 1.5 + (/\.$/.test(w) ? 7 : /,$/.test(w) ? 3.5 : 0)
+        const spans = SAYS.split(' ').map(weight)
+        const whole = spans.reduce((a, b) => a + b, 0)
+        const starts = spans.map((_, i) => VOICE_AT + (VOICE_S * spans.slice(0, i).reduce((a, b) => a + b, 0)) / whole)
+        return t => {
+          rise(card, t, 7.85, 0.9, 90)
+          const now = t < VOICE_AT ? -1 : starts.findLastIndex(x => t >= x) // the word the voice is on
+          const over = t > VOICE_AT + VOICE_S + 0.25
+          ws.forEach((w, i) => { w.style.color = i < now || over ? '#fff' : i === now ? 'var(--lime)' : '' })
+          m.set(clamp(0.06 + 0.5 * prog(t, VOICE_AT, VOICE_S)))
+        }
+      })
+
+      // ── 4. made on your device ─────────────────────────────────────────────────────────────────────────
+      scene(13.55, 16.9, cam => {
+        const tag = el('div', 'mono abs', '01 · Yours', 'left:170px;top:270px')
+        const h = el('div', 'h2 abs', `${words('Made on')}<br>${words('your device.')}`, 'left:166px;top:340px')
+        const say = el('div', 'abs', 'No account. Nothing uploaded to make<br>the audio. It keeps working<br>without a connection.', 'left:172px;top:690px;font-size:40px;line-height:1.5;color:var(--sub)')
+        cam.append(tag, h, say)
+        const tiles = [['₹0', 'Free forever'], ['Offline', 'Audio'], ['13', 'Natural voices']].map(([v, n], i) => {
+          const e = el('div', 'card abs', `<div style="font-family:'JetBrains Mono';font-weight:600;font-size:76px;line-height:1;letter-spacing:-0.02em">${v}</div><div class="mono" style="font-size:22px;margin-top:20px">${n}</div>`, `left:1150px;top:${220 + i * 226}px;width:600px;height:196px;box-sizing:border-box;padding:38px 48px`)
+          cam.append(e)
+          return e
+        })
+        const ws = [...h.querySelectorAll('.w')]
+        const count = tiles[2].firstChild
+        return t => {
+          rise(tag, t, 13.7, 0.6, 30)
+          ws.forEach((w, i) => land(w, t, 13.85 + i * 0.16, 0.7))
+          rise(say, t, 14.7, 0.8, 40)
+          tiles.forEach((e, i) => rise(e, t, 14.45 + i * 0.28, 0.8, 80))
+          count.textContent = String(Math.round(13 * out(prog(t, 15.0, 1.0))))
+        }
+      })
+
+      // ── 5. three ways ──────────────────────────────────────────────────────────────────────────────────
+      scene(16.7, 20.7, cam => {
+        const tag = el('div', 'mono abs', '02 · Your way', 'left:170px;top:270px')
+        const h = el('div', 'h2 abs', `${words('Follow it')}<br>${words('three ways.')}`, 'left:166px;top:340px')
+        const say = el('div', 'abs', 'Read along, see the real page,<br>or take one word at a time,<br>with sound or without.', 'left:172px;top:690px;font-size:40px;line-height:1.5;color:var(--sub)')
+        const card = el('div', 'card abs', '', 'left:1090px;top:210px;width:680px;height:660px')
+        const seg = el('div', 'abs', '', 'left:40px;top:40px;width:600px;height:92px;border-radius:92px;border:1px solid var(--line);background:var(--card)')
+        const pill = el('div', 'abs', '', 'left:8px;top:8px;width:190px;height:76px;border-radius:76px;background:#fff')
+        seg.append(pill)
+        const names = ['Text', 'Pages', 'Focus'].map((n, i) => { const e = el('div', 'abs', n, `left:${8 + i * 197}px;top:8px;width:190px;height:76px;line-height:76px;text-align:center;font-size:32px;font-weight:600`); seg.append(e); return e })
+        const box = el('div', 'abs', '', 'left:40px;top:160px;width:600px;height:460px;border-radius:32px;border:1px solid var(--line);background:#000;overflow:hidden')
+        const views = [
+          el('div', 'serif abs', 'Stories, laws and arguments travelled by <span style="color:var(--lime)">voice</span> long before they travelled on paper.', 'left:50px;top:110px;width:500px;font-size:44px;line-height:1.5;color:var(--sub)'),
+          el('div', 'abs', [88, 100, 94, 100, 72, 100, 90, 58].map((w, i) => `<div style="height:14px;width:${w}%;border-radius:7px;margin-bottom:17px;background:${i === 3 || i === 4 ? 'var(--lime)' : 'rgba(0,0,0,0.2)'}"></div>`).join(''), 'left:140px;top:74px;width:320px;height:312px;box-sizing:border-box;padding:38px 34px;border-radius:12px;background:#fff'),
+          el('div', 'abs', 'lis<span style="color:var(--lime)">t</span>ening', 'left:0;right:0;top:158px;text-align:center;font-size:118px;font-weight:800;letter-spacing:-0.04em'),
+        ]
+        box.append(...views)
+        card.append(seg, box)
+        cam.append(tag, h, say, card)
+        const ws = [...h.querySelectorAll('.w')]
+        const turns = [16.5, 18.25, 19.45] // when each way is chosen
+        return t => {
+          rise(tag, t, 16.65, 0.6, 30)
+          ws.forEach((w, i) => land(w, t, 16.8 + i * 0.2, 0.7))
+          rise(say, t, 17.7, 0.8, 40)
+          rise(card, t, 17.0, 0.9, 90)
+          const x = back(prog(t, turns[1], 0.5)) + back(prog(t, turns[2], 0.5)) // the pill slides, with give
+          pill.style.transform = `translateX(${x * 197}px)`
+          const now = t < turns[1] + 0.2 ? 0 : t < turns[2] + 0.2 ? 1 : 2
+          names.forEach((e, i) => { e.style.color = i === now ? '#000' : 'var(--sub)' })
+          views.forEach((v, i) => { v.style.display = i === now ? 'block' : 'none'; if (i === now) rise(v, t, i ? turns[i] + 0.2 : 17.3, 0.55, 26, 8) })
+        }
+      })
+
+      // ── 6. your language ───────────────────────────────────────────────────────────────────────────────
+      scene(20.5, 24.7, cam => {
+        const tag = el('div', 'mono abs', '03 · Your language', 'left:170px;top:270px')
+        const h = el('div', 'h2 abs', `${words('Hear it in')}<br>${words('your language.')}`, 'left:166px;top:340px;font-size:138px')
+        const say = el('div', 'abs', 'Any document, translated with<br>the AI key you choose, and read to you.', 'left:172px;top:680px;font-size:40px;line-height:1.5;color:var(--sub)')
+        const card = el('div', 'card abs', '', 'left:1130px;top:290px;width:640px;height:440px')
+        const TONGUES = [['Listening', 'is another road, and for a long time it was the main one.'], ['सुनना', 'एक और रास्ता है, और लंबे समय तक वही मुख्य रास्ता था।'], ['వినడం', 'మరొక మార్గం, చాలా కాలం పాటు అదే ప్రధాన మార్గం.'], ['Escuchar', 'es otro camino, y durante mucho tiempo fue el principal.']]
+        const lines = TONGUES.map(([a, b]) => { const e = el('div', 'serif abs', `<span style="color:var(--lime)">${a}</span> ${b}`, 'left:56px;top:70px;width:528px;font-size:50px;line-height:1.5;color:var(--sub)'); card.append(e); return e })
+        const list = el('div', 'mono abs', 'English · Hindi · Telugu · Spanish · French · German · Italian · Portuguese · Vietnamese · Chinese · Japanese · Korean · Arabic', 'left:172px;top:880px;width:1600px;font-size:21px;letter-spacing:0.14em;color:var(--faint)')
+        cam.append(tag, h, say, card, list)
+        const ws = [...h.querySelectorAll('.w')]
+        const turns = [21.0, 21.95, 22.85, 23.75]
+        return t => {
+          rise(tag, t, 20.65, 0.6, 30)
+          ws.forEach((w, i) => land(w, t, 20.8 + i * 0.18, 0.7))
+          rise(say, t, 21.7, 0.8, 40)
+          rise(card, t, 20.95, 0.9, 90)
+          rise(list, t, 22.3, 0.9, 30)
+          const now = turns.findLastIndex(x => t >= x)
+          lines.forEach((e, i) => { e.style.display = i === now ? 'block' : 'none'; if (i === now) rise(e, t, turns[i], 0.5, 30, 10) })
+        }
+      })
+
+      // ── 7. the mood line ───────────────────────────────────────────────────────────────────────────────
+      scene(24.5, 27.3, cam => {
+        const tag = el('div', 'mono abs', '04 · The shape of it', 'left:170px;top:170px')
+        const h = el('div', 'h2 abs', `${words('A progress bar')}<br>${words('with feeling.')}`, 'left:166px;top:236px;font-size:132px')
+        const at = el('div', 'abs', '', 'left:170px;top:640px;width:1580px;height:230px')
+        const up = el('div', 'mono abs', '↑ brighter', 'left:170px;top:580px;font-size:22px;color:var(--faint)')
+        const down = el('div', 'mono abs', '↓ darker', 'left:170px;top:900px;font-size:22px;color:var(--faint)')
+        cam.append(tag, h, up, at, down)
+        const m = mood(at, 1580, 230)
+        const ws = [...h.querySelectorAll('.w')]
+        return t => {
+          rise(tag, t, 24.6, 0.5, 30)
+          ws.forEach((w, i) => land(w, t, 24.7 + i * 0.13, 0.6))
+          rise(at, t, 24.9, 0.7, 60)
+          rise(up, t, 25.2, 0.6, 20); rise(down, t, 25.2, 0.6, 20)
+          m.set(inOut(prog(t, 25.0, 2.1)) * 0.94 + 0.02)
+        }
+      })
+
+      // ── 8. the way in ──────────────────────────────────────────────────────────────────────────────────
+      const WHERE = new URLSearchParams(location.search).get('where') ?? 'noesisaudio.com'
+      scene(27.1, 30.6, cam => {
+        const mark = el('div', 'abs', `<svg width="620" viewBox="0 0 ${WORDMARK.w} ${WORDMARK.h}"><path fill-rule="evenodd" fill="#fff" d="${WORDMARK.d}"/></svg>`, 'left:650px;top:300px;width:620px')
+        const h = el('div', 'abs', '<span class="w" style="font-weight:800;letter-spacing:-0.05em">Hear your </span><span class="w serif" style="font-style:italic;font-weight:400;letter-spacing:-0.03em">first page.</span>', 'left:0;right:0;top:520px;text-align:center;font-size:140px;line-height:1')
+        const where = el('div', 'mono abs', eyebrow(WHERE), 'left:0;right:0;top:770px;text-align:center;font-size:30px;text-transform:none;letter-spacing:0.12em')
+        cam.append(mark, h, where)
+        const ws = [...h.querySelectorAll('.w')]
+        return t => {
+          rise(mark, t, 27.25, 0.9, 40)
+          ws.forEach((w, i) => land(w, t, 27.7 + i * 0.3, 0.8))
+          rise(where, t, 28.7, 0.8, 24, 6)
+          if (!WHERE) where.style.display = 'none'
+        }
+      })
+
+      window.DURATION = 30
+      window.render = t => { for (const s of scenes) s(t) }
+      await document.fonts.ready
+      await Promise.all(['800 100px "DM Sans"', '400 100px "DM Sans"', 'italic 400 100px Literata', '400 100px Literata', '500 30px "JetBrains Mono"'].map(f => document.fonts.load(f)))
+      window.render(0)
+      window.READY = true
+      // ?play: watch it in real time; ?at=12.5: stand at one moment
+      const q = new URLSearchParams(location.search)
+      if (q.has('at')) window.render(+q.get('at'))
+      if (q.has('play')) { const t0 = performance.now(); const tick = now => { const t = ((now - t0) / 1000) % window.DURATION; window.render(t); requestAnimationFrame(tick) }; requestAnimationFrame(tick) }
+    </script>
+  </body>
+</html>

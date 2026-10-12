@@ -72,7 +72,7 @@ async function fixtures() {
   if (src) await page.evaluate(async s => (await import(s)).ui.set({ filter: 'all', query: '' }), src)
   // and in the plain text view, with motion as the phone has it: the last walk may have left Focus or Less on
   const set = await page.evaluate(() => performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes('/src/lib/settings.js')))
-  if (set) await page.evaluate(async s => (await import(s)).settings.set({ readerView: 'text', motion: 'system' }), set)
+  if (set) await page.evaluate(async s => (await import(s)).settings.set({ readerView: 'text' }), set)
   await sleep(300)
   const have = await body()
   const add = async (text, wait) => {

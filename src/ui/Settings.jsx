@@ -21,9 +21,7 @@ import { CreditsCard } from './Credits.jsx'
 import { AmbientCard } from './AmbientCard.jsx'
 import { AwarenessCard } from './AwarenessCard.jsx'
 import { askAware } from '../lib/extras.js'
-import { REDUCE, phoneAsksForLess } from '../lib/motion.js'
 
-const MOTION_OPTIONS = [{ value: 'system', label: 'Follow my phone' }, { value: 'full', label: 'Full' }, { value: 'less', label: 'Less' }]
 const SOUND_NAMES = { off: 'Off', focus: 'Focus', calm: 'Calm', brown: 'Brown noise' }
 
 // The sections, in the order they are listed. `group` puts a gap between kinds of thing: you, how it sounds,
@@ -34,7 +32,6 @@ const SECTIONS = [
   { id: 'listening', group: 1, icon: 'play', title: 'Listening', now: s => `${s.speed}x` },
   { id: 'sound', group: 1, icon: 'waves', title: 'Sounds and haptics', now: s => SOUND_NAMES[s.ambientMode || 'off'] },
   { id: 'ai', group: 2, icon: 'sparkle', title: 'AI', now: s => (hasAiKey(s) ? providerName() : 'Not set up') },
-  { id: 'motion', group: 3, icon: 'sliders', title: 'Motion', now: s => MOTION_OPTIONS.find(o => o.value === (s.motion || 'system')).label },
   { id: 'storage', group: 3, icon: 'archive', title: 'Storage', now: () => null },
   { id: 'about', group: 3, icon: 'info', title: 'About', now: () => `v${__APP_VERSION__}` },
 ]
@@ -137,7 +134,6 @@ function SectionBody({ id, s }) {
   if (id === 'account') return <AccountCard Card={Bare} />
   if (id === 'voice') return <VoiceCard Card={Bare} />
   if (id === 'ai') return <AiCard Card={Bare} />
-  if (id === 'motion') return <MotionBody choice={s.motion || 'system'} />
   if (id === 'storage') return <StorageBody />
   if (id === 'sound') {
     return (
@@ -209,29 +205,6 @@ function Group({ title, children, right }) {
       <div style={{ display: 'flex', alignItems: 'center' }}><div style={{ ...label, flex: 1 }}>{title}</div>{right}</div>
       {children}
     </section>
-  )
-}
-
-// Motion: the phone's own setting is followed unless the customer says otherwise, and the page says plainly
-// what is happening. (A phone in battery saver asks every app for less motion: Noesis then looked dead, and
-// nothing told the owner why.)
-function MotionBody({ choice }) {
-  const [asks, setAsks] = useState(phoneAsksForLess)
-  useEffect(() => {
-    const q = matchMedia(REDUCE)
-    const on = () => setAsks(q.matches)
-    q.addEventListener('change', on)
-    return () => q.removeEventListener('change', on)
-  }, [])
-  const line = choice === 'full' ? 'Noesis moves in full, whatever your phone is set to.'
-    : choice === 'less' ? 'Noesis keeps to gentle fades.'
-    : asks ? 'Your phone is asking apps for less motion right now (battery saver and "Remove animations" both do this), so Noesis is keeping almost still. Choose Full to have its motion anyway.'
-    : 'Your phone allows motion, and Noesis moves in full.'
-  return (
-    <Bare>
-      <Segmented options={MOTION_OPTIONS} value={choice} onChange={v => settings.set({ motion: v })} />
-      <p style={{ fontSize: 14, lineHeight: 1.55, color: asks && choice === 'system' ? T.text : T.sub, margin: 0 }}>{line}</p>
-    </Bare>
   )
 }
 
