@@ -1,4 +1,3 @@
-import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, tab, openSearch, closeSearch } from '../lib/nav.js'
@@ -21,17 +20,20 @@ export function TabBar() {
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 32, display: 'flex', background: T.bg, borderTop: `1px solid ${T.border}`,
       height: `calc(${T.tabH}px + env(safe-area-inset-bottom))`, paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
+      {/* One bar that slides to the tab that was chosen (press.js, data-slide): its track is a tab wide. */}
+      <span aria-hidden data-slide="" style={{ position: 'absolute', top: -1, left: 0, width: `${100 / TABS.length}%`, display: 'flex', justifyContent: 'center', pointerEvents: 'none', transform: `translateX(${TABS.findIndex(t => t.id === current) * 100}%)` }}>
+        <span style={{ width: 28, height: 3, borderRadius: 3, background: T.accent }} />
+      </span>
       {TABS.map(t => {
         const on = t.id === current
         return (
-          <button key={t.id} type="button" onClick={t.run} aria-current={on ? 'page' : undefined} data-press=""
+          <button key={t.id} type="button" onClick={t.run} aria-current={on ? 'page' : undefined} data-press="" data-slide-ink=""
             style={{
               '--press': 1, // the tab itself stays put; its icon makes the movement (press.js)
               flex: 1, position: 'relative', border: 'none', background: 'transparent', color: on ? T.accent : T.sub, cursor: 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, fontFamily: T.font, fontSize: 11.5, fontWeight: 600,
               WebkitTapHighlightColor: 'transparent',
             }}>
-            {on && <motion.span layoutId="tab-indicator" layoutDependency={t.id} transition={T.spring} style={{ position: 'absolute', top: -1, width: 28, height: 3, borderRadius: 3, background: T.accent }} />}
             <Icon name={t.icon} size={22} />
             {t.label}
           </button>

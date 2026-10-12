@@ -12,3 +12,8 @@ export const reducedMotion = () => { const c = motionChoice(); return c === 'les
 
 // A glide for people who are fine with motion; an instant jump for those who asked for less.
 export const scrollBehavior = () => (reducedMotion() ? 'auto' : 'smooth')
+
+// Work that can wait for a quiet moment (fetching a screen the customer has not asked for yet). Safari has no
+// requestIdleCallback: there it waits a moment instead.
+const IDLE_FALLBACK_MS = 1500
+export const whenIdle = work => (typeof requestIdleCallback === 'function' ? requestIdleCallback(work) : setTimeout(work, IDLE_FALLBACK_MS))

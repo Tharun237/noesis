@@ -30,6 +30,14 @@ wherever it appears; Settings is eight sections that each say what they are set 
 tab. The library card's menu on a phone was being cut off after one row by its own card: menus are now drawn
 on the page itself, and the random customer checks for a covered menu.
 
+Then his screen recording of the reader (the white pill of Text | Pages | Focus flying in from the bottom
+of the screen, "everything is so inconsistent", "what is that raw PDF beside the text"): `e2e/film.mjs` now
+films every transition frame by frame, and what it showed is fixed at the source. The pill and the tab's bar
+are placed by arithmetic; a view replaces another at once and arrives at its place; Pages opens at the page
+being read; a part fetched ahead of time is drawn at once (`src/ui/later.jsx`); the flying cover lets go when
+its landing place moves. The page beside the text is off unless asked for and offered only when it can be
+exact. Rules in `.claude/skills/motion` ("A transition is judged by its film").
+
 ## How the work is done
 
 | Role | Who | Does |

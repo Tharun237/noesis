@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, Suspense } from 'react'
+import { later } from './later.jsx'
 import { motion, AnimatePresence, useIsPresent } from 'motion/react'
 import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go, goBack, openSheet } from '../lib/nav.js'
+import { ui, go, goBack, openSheet, tab as showTab } from '../lib/nav.js'
 import { library, loadDoc, docDuration, reprocess, readiness, kickVoice } from '../lib/library.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate } from '../lib/player.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
@@ -15,7 +16,7 @@ import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
 import { useRoute } from '../lib/route.js'
 import { pushPanel, popPanel } from '../lib/nav.js'
-import { scrollBehavior } from '../lib/motion.js'
+import { scrollBehavior, whenIdle } from '../lib/motion.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine } from '../lib/tts.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
@@ -32,23 +33,26 @@ import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts
 import { FocusView } from './FocusView.jsx'
 import { playerHeight } from './PlayerBar.jsx'
 
-// Ask is only needed once someone opens it: loaded on demand to keep the first screen light.
-const AskPanel = lazy(() => import('./Ask.jsx').then(m => ({ default: m.AskPanel })))
-const Insights = lazy(() => import('./Insights.jsx').then(m => ({ default: m.Insights })))
-const CitationSheet = lazy(() => import('./Citations.jsx').then(m => ({ default: m.CitationSheet })))
-const PagePane = lazy(() => import('./PagePane.jsx').then(m => ({ default: m.PagePane })))
-const BlockTool = lazy(() => import('./BlockTool.jsx').then(m => ({ default: m.BlockTool })))
-const FloatingReader = lazy(() => import('./FloatingReader.jsx').then(m => ({ default: m.FloatingReader })))
+// These are only needed once someone opens them: kept out of the first screen, fetched in a quiet moment
+// once a document is open (below), so that opening one shows it and not an empty sheet (later.jsx).
+const AskPanel = later(() => import('./Ask.jsx').then(m => m.AskPanel))
+const Insights = later(() => import('./Insights.jsx').then(m => m.Insights))
+const CitationSheet = later(() => import('./Citations.jsx').then(m => m.CitationSheet))
+const PagePane = later(() => import('./PagePane.jsx').then(m => m.PagePane))
+const BlockTool = later(() => import('./BlockTool.jsx').then(m => m.BlockTool))
+const FloatingReader = later(() => import('./FloatingReader.jsx').then(m => m.FloatingReader))
 function FloatingLazy() { return <Suspense fallback={null}><FloatingReader /></Suspense> }
 // Pages view (and its pdf.js engine) loads only when a PDF listener asks for it.
-const PageView = lazy(() => import('./PageView.jsx').then(m => ({ default: m.PageView })))
+const PageView = later(() => import('./PageView.jsx').then(m => m.PageView))
+// What stands where the pages will be while they are fetched and opened: the shape of a page, not nothing.
+const PAGE_SHAPE = 1.414 // tall over wide, A4: only until the real page says its own
+const pageGhost = <div aria-hidden style={{ width: '100%', aspectRatio: `1 / ${PAGE_SHAPE}`, borderRadius: T.r.sm, background: T.surface, border: `1px solid ${T.border}` }} />
 
 const VISUAL_LABEL = { fig: 'Figure', table: 'Table', math: 'Equation', code: 'Code' }
 const HEADER_H = 57
 // The app's name as a speech recogniser tends to write it.
 const WAKE = /^(?:hey\s+)?(?:noesis|no\s?esis|gnosis|no\s?thesis|know\s?esis|noises)[\s,.:!]*/i
 const SEEN_BELOW = 120 // px under the header where the reader's eye is taken to be, for the page beside the text
-const VIEW_SETTLE_MS = 320
 // Room under the last line. The app already keeps the page clear of the player; adding the player's height
 // here as well left more empty page than a sideways phone has screen: scroll to the end of a short document
 // and there was nothing on it (found by the random customer).
@@ -59,6 +63,10 @@ const SUBROW_H = 44 // second header row (Text | Pages) on documents that have p
 export function Reader({ wide }) {
   const id = useRoute().docId // the page's own document, also while it is animating out
   const d = useStore(library, s => s.docs.find(x => x.id === id))
+  // A document that is no longer there (deleted here or on another device, and then come back to with Back):
+  // its place in history becomes the library. It used to be an empty black page (found by the random customer).
+  const libraryLoaded = useStore(library, s => s.loaded)
+  useEffect(() => { if (libraryLoaded && !d) showTab('library') }, [libraryLoaded, d])
   const status = d?.status
   const total = d?.total
   const [doc, setDoc] = useState(null)
@@ -170,12 +178,13 @@ export function Reader({ wide }) {
 
   const pagesAvailable = d?.kind === 'pdf' && hasSource === true
   const view = readerView === 'focus' ? 'focus' : pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
+  // The Pages view is fetched while the customer reads, so choosing it never shows an empty frame first.
+  useEffect(() => { if (pagesAvailable) whenIdle(PageView.fetch) }, [pagesAvailable])
+  useEffect(() => { whenIdle(() => { AskPanel.fetch(); Insights.fetch(); BlockTool.fetch(); CitationSheet.fetch() }) }, [])
   // "Both": the flowing text with the original page beside it. A wide screen only; elsewhere it is the text.
   // The original page beside the text is a pane the reader opens and closes (wide screens), like Contents on
   // the other side. It is not a view of its own: the text is the same text with or without it.
-  const pagePane = useStore(settings, s => !!s.pagePane)
-  const sideBySide = wide && pagesAvailable && !pdfFail && view === 'text' && pagePane
-  useEffect(() => { if (readerView === 'both') settings.set({ readerView: 'text', pagePane: true }) }, [readerView]) // its old name, as a mode
+  useEffect(() => { if (readerView === 'both') settings.set({ readerView: 'text' }) }, [readerView]) // its old name, as a mode
   const [seenAt, setSeenAt] = useState(null) // the sentence at the top of the screen: what the reader is looking at
   // Sentence i belongs to block segs[i].b, so its page is blocks[segs[i].b].p (1-based; older
   // documents prepared before pages were linked have no p).
@@ -186,6 +195,12 @@ export function Reader({ wide }) {
     return m
   }, [doc])
   const linked = firstOfPage.size > 0
+  // Off until the reader asks for it, and offered only when each sentence's page is known: beside a document
+  // whose pages are not linked it could only guess the page, and a guess beside the text is noise. (Pages is
+  // the view for the original; this is for having a figure in sight while the text is read.)
+  const sidePage = useStore(settings, s => !!s.sidePage)
+  const canSide = wide && pagesAvailable && !pdfFail && linked
+  const sideBySide = canSide && view === 'text' && sidePage
   // Sentences per page, once per document: sentence i belongs to block segs[i].b.
   const pageSentenceMap = useMemo(() => {
     const m = new Map()
@@ -201,10 +216,15 @@ export function Reader({ wide }) {
   }, [doc])
   const pageSentences = useCallback(p => pageSentenceMap.get(p) ?? [], [pageSentenceMap])
 
+  // The page follows the voice. The first time in a document it is put there at once: the reader arrives AT
+  // the sentence, instead of arriving at the top and then travelling (and the cover that flies in from the
+  // library had its landing place scrolled away from under it).
+  const placed = useRef(false)
   useEffect(() => {
     if (view !== 'text') return
     if (active < 0 || Date.now() - userScroll.current < 4000) return
-    scrollToSentence(active)
+    scrollToSentence(active, !placed.current)
+    if (doc) placed.current = true
   }, [active, doc, view])
 
   useEffect(() => { if (hit >= 0) scrollToSentence(hit) }, [hit])
@@ -262,18 +282,17 @@ export function Reader({ wide }) {
   }, [sideBySide, doc])
 
   // A change of view keeps the reader's place. Focus is one screen: it starts at the top. Coming back to the
-  // text, the page goes to the sentence that was being read, not to the first line of the book.
+  // text, the page is already at the sentence that was being read when the text appears: placed before the
+  // first paint, not scrolled to afterwards (that was a second movement after the view had arrived).
   const lastView = useRef(view)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const from = lastView.current
     lastView.current = view
-    if (from === view) return undefined
-    if (view === 'focus') { window.scrollTo(0, 0); return undefined }
-    if (view !== 'text') return undefined
+    if (from === view) return
+    if (view === 'focus') { window.scrollTo(0, 0); return }
+    if (view !== 'text') return
     const place = active >= 0 ? active : d?.pos || 0
-    if (!(place > 0)) return undefined
-    const t = setTimeout(() => scrollToSentence(place), VIEW_SETTLE_MS) // after the views have cross-faded
-    return () => clearTimeout(t)
+    if (place > 0) document.querySelector(`[data-i="${place}"]`)?.scrollIntoView({ block: 'center', behavior: 'auto' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 
@@ -288,14 +307,7 @@ export function Reader({ wide }) {
   // is not found yet.
   const nowOnPage = () => document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"] > div') || document.querySelector(`[data-testid="page-view"] [data-page="${activePage}"]`)
   const showPane = sideBySide && !askDocked && !!doc // Ask takes the same side of the screen: one at a time
-  // Which page that is. A document whose pages are linked to its text knows exactly. One that is not (it was
-  // added before pages were linked, or read by AI narration) is placed by how far through the text it is, and
-  // the label says "about": a page that sat on the cover while the text moved on was a picture, not a feature.
-  const pageFor = i => {
-    if (i == null || i < 0 || !doc || i >= doc.segs.length) return null
-    if (linked) return doc.blocks[doc.segs[i].b].p ?? null
-    return numPages > 0 ? 1 + Math.round((i / Math.max(1, doc.segs.length - 1)) * (numPages - 1)) : null
-  }
+  const pageFor = i => (i == null || i < 0 || !doc || i >= doc.segs.length ? null : doc.blocks[doc.segs[i].b].p ?? null)
   const reading = isPlaying && playId === id
   const panePage = showPane ? (pageFor(reading ? active : seenAt ?? active) ?? pageFor(active) ?? pageFor(d.pos || 0) ?? 1) : null
   const dock = (showToc ? 1 : 0) + (askDocked ? 2 : 0) + (showPane ? 4 : 0)
@@ -315,7 +327,7 @@ export function Reader({ wide }) {
           {wide && <IconButton icon="search" label="Find in document" active={searching} onClick={() => setSearching(!searching)} />}
           {!wide && headings.length > 1 && <IconButton icon="toc" label="Contents" onClick={() => setPanel('toc')} />}
           <IconButton icon="type" label="Reading settings" onClick={() => setPanel('type')} />
-          {wide && pagesAvailable && view === 'text' && <IconButton icon="file" label={pagePane ? 'Hide the original page' : 'Show the original page'} active={pagePane} onClick={() => settings.set({ pagePane: !pagePane })} />}
+          {canSide && view === 'text' && <IconButton icon="file" label={sidePage ? 'Hide the original page' : 'Show the original page beside the text'} active={sidePage} onClick={() => settings.set({ sidePage: !sidePage })} />}
           {speechSupported() && <VoiceControl onState={st => { setVoiceState(st); if (st !== 'listening') { setSaying(''); setDone(null) } }} onHeard={onHeard} onInterim={setSaying} />}
           <IconButton icon="sparkle" label="Ask about this document" active={panel === 'ask'} onClick={() => setPanel(panel === 'ask' ? null : 'ask')} />
           <Menu trigger={t => <IconButton icon="more" label="Document menu" onClick={t} />}
@@ -332,10 +344,10 @@ export function Reader({ wide }) {
             <div style={{ width: pagesAvailable ? 240 : 164, flexShrink: 0 }}>
               <Segmented size="sm" value={view}
                 options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), { value: 'focus', label: 'Focus' }]}
-                onChange={v => { setPdfFail(false); settings.set({ readerView: v }) }} />
+                onChange={v => { setPdfFail(false); userScroll.current = 0; settings.set({ readerView: v }) }} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : showPane && numPages > 0 ? `${linked ? 'Page' : 'About page'} ${panePage} of ${numPages}` : ''}
+              {view === 'pages' && numPages > 0 ? `Page ${Math.min(visPage, numPages)} of ${numPages}` : showPane && numPages > 0 ? `Page ${panePage} of ${numPages}` : ''}
             </div>
             {/* The works cited in the paragraph being heard. It lives here, not floating over the page: the bottom
                 of the screen already holds the player, the status pill and toasts. */}
@@ -348,11 +360,6 @@ export function Reader({ wide }) {
                 </motion.button>
               )}
             </AnimatePresence>
-          </div>
-        )}
-        {view === 'pages' && numPages > 0 && doc && !linked && (
-          <div style={{ padding: `0 ${wide ? 20 : 14}px 10px`, fontSize: 12, lineHeight: 1.45, color: T.sub }}>
-            Pages aren't linked to the audio for this document. Add it again to link them.
           </div>
         )}
         <AnimatePresence initial={false}>
@@ -379,7 +386,9 @@ export function Reader({ wide }) {
         <article style={{ flex: 1, minWidth: 0, padding: view === 'focus' ? `${FOCUS_PAD}px 20px` : wide ? `48px 32px ${END_PAD}px` : `28px 20px ${END_PAD}px`, marginRight: askDocked ? T.askW : 0 }}>
           {/* When a side panel opens or closes, the text glides to its new place instead of jumping (measured only then). */}
           <motion.div layout={wide ? 'position' : false} layoutDependency={dock} transition={{ layout: T.settle }} style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
-            {view !== 'focus' && (
+            {/* The cover, the title and what is said about the document open the TEXT. Pages are the document
+                itself (its first page is its own cover) and Focus is one word: neither repeats them. */}
+            {view === 'text' && (
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-end', marginBottom: 36 }}>
               <motion.div initial={landing ? false : { scale: 0.86, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.settle} style={{ flexShrink: 0, transformOrigin: '0 100%' }}>
                 <div ref={coverRef} style={{ display: 'flex' }}><Cover d={d} w={wide ? 84 : 64} h={wide ? 112 : 86} /></div>
@@ -397,16 +406,18 @@ export function Reader({ wide }) {
             )}
 
             {d.status !== 'ready' && <Preparing d={d} doc={doc} pos={active >= 0 ? active : d.pos || 0} />}
-            <WelcomeBack key={d.id} d={d} onRecap={() => quick('recap')} />
-            {(d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
+            {view === 'text' && <WelcomeBack key={d.id} d={d} onRecap={() => quick('recap')} />}
+            {view === 'text' && (d.note || (d.scanned && !d.ai)) && <DocNote d={d} />}
             {pdfFail && (
               <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55, margin: '0 0 24px' }}>This file can't be shown as pages on this device.</div>
             )}
 
-            <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.09, ease: 'easeIn' } }} transition={{ duration: 0.18, ease: T.ease }}>
+            <div key={view} data-rise="view">
             {view === 'pages' ? (
-              <Suspense fallback={null}>
+              <Suspense fallback={pageGhost}>
+                {numPages > 0 && doc && !linked && (
+                  <div style={{ fontSize: 13, lineHeight: 1.5, color: T.sub, margin: '0 0 16px' }}>These pages are not linked to the voice, so they do not follow it. Add the file again to link them.</div>
+                )}
                 <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
                   onPages={setNumPages} onVisible={setVisPage}
                   pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek} spoken={spoken}
@@ -437,8 +448,7 @@ export function Reader({ wide }) {
                 })}
               </div>
             )}
-            </motion.div>
-            </AnimatePresence>
+            </div>
           </motion.div>
         </article>
 
@@ -467,7 +477,7 @@ export function Reader({ wide }) {
 
       {sheet('cites', 'Cited here', panel === 'cites' && citedOpen.length
         ? <Suspense fallback={null}><CitationSheet refs={citedOpen} d={d} onClose={() => setPanel(null)} /></Suspense> : null, 560)}
-      <JumpToNow active={active} top={headH} bottom={bottom} find={view === 'pages' ? nowOnPage : undefined}
+      <JumpToNow key={view} active={active} top={headH} bottom={bottom} find={view === 'pages' ? nowOnPage : undefined}
         onJump={() => { userScroll.current = 0; view === 'pages' ? nowOnPage()?.scrollIntoView({ block: 'center', behavior: scrollBehavior() }) : scrollToSentence(active) }} />
 
       {sheet('toc', 'Contents', <div style={{ padding: '20px 10px 24px' }}><div style={{ ...label, padding: '0 12px 12px' }}>Contents</div>
@@ -562,12 +572,12 @@ function useNearChunks() {
 
 // Far jumps (a chapter away) cut straight there; near ones glide. Gliding across a whole book would build
 // and discard every chunk on the way.
-function scrollToSentence(i) {
+function scrollToSentence(i, cut = false) {
   const el = document.querySelector(`[data-i="${i}"]`)
   if (!el) return
   const top = el.getBoundingClientRect().top
   const far = top < -innerHeight * 2 || top > innerHeight * 3
-  el.scrollIntoView({ block: 'center', behavior: far ? 'auto' : scrollBehavior() })
+  el.scrollIntoView({ block: 'center', behavior: far || cut ? 'auto' : scrollBehavior() })
 }
 
 const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight, watch }) {

@@ -25,8 +25,8 @@ async function tour(size) {
   await page.addInitScript(() => { try { localStorage.setItem('noesis.install.dismissed', String(Date.now())) } catch { /* no storage */ } })
   await page.goto('http://localhost:5180/'); await page.waitForLoadState('networkidle'); await sleep(700)
   const mod = (path, expr) => page.evaluate(async ([path, expr]) => { const f = performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes(path)) || path; const m = await import(f); return eval(expr) }, [path, expr])
-  const before = await mod('/src/lib/settings.js', 'JSON.stringify({ readerView: m.settings.get().readerView, pagePane: m.settings.get().pagePane })')
-  await mod('/src/lib/settings.js', "m.settings.set({ readerView: 'text', pagePane: true })")
+  const before = await mod('/src/lib/settings.js', 'JSON.stringify({ readerView: m.settings.get().readerView, sidePage: m.settings.get().sidePage })')
+  await mod('/src/lib/settings.js', "m.settings.set({ readerView: 'text', sidePage: true })")
   await mod('/src/lib/nav.js', "m.ui.set({ filter: 'all' })")
   let n = 0
   const missed = []

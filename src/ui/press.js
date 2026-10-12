@@ -31,6 +31,10 @@ const MENU_STEP = 28 // ms between them
 export const menuRow = i => `m${Math.min(i, MENU_HELD)}`
 const SPRING = 'cubic-bezier(0.2, 0.9, 0.3, 1.35)' // lets go with a little overshoot
 const EASE = `cubic-bezier(${T.enter.ease.join(', ')})`
+const SLIDE = 'cubic-bezier(0.25, 1.18, 0.35, 1)' // a marker landing on what was chosen: arrives, with a little give
+const SLIDE_MS = 380
+const VIEW_MS = 320
+const VIEW_Y = 12 // px a whole view rises as it arrives: less than a row (T.enter.y), it is a bigger thing
 
 const rules = [
   `[data-press]{transition:transform 220ms ${SPRING};-webkit-tap-highlight-color:transparent;touch-action:manipulation}`,
@@ -68,6 +72,16 @@ const rules = [
   '@keyframes noesis-readline{to{transform:scaleX(1)}}',
   '@keyframes noesis-bartitle{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
   '@supports (animation-timeline: scroll()){[data-readline]{animation:noesis-readline linear both;animation-timeline:scroll(root)}[data-bartitle]{animation:noesis-bartitle linear both;animation-timeline:scroll(root);animation-range:84px 124px}}',
+  // The marker of a choice (the white pill of a segmented control, the bar over a tab) is ONE object that
+  // slides to what was chosen. It is placed by a transform worked out from which choice it is, never by
+  // measuring the page: measured, it flew in from the bottom of the screen whenever the page's scroll
+  // changed with the choice (Tharun's recording of Text, Pages, Focus, 2026-10-12).
+  `[data-slide]{transition:transform ${SLIDE_MS}ms ${SLIDE};will-change:transform}`,
+  '[data-slide-ink]{transition:color 200ms linear}',
+  // a whole view that replaces another in the same place (Text, Pages, Focus): the old one goes at once, the
+  // new one rises in. No waiting, no empty frame between them.
+  `@keyframes noesis-view{from{opacity:0;transform:translateY(${VIEW_Y}px)}}`,
+  `[data-rise="view"]{animation:noesis-view ${VIEW_MS}ms ${EASE} backwards}`,
   // a line that has just replaced another (a status) fades up
   '@keyframes noesis-fade{from{transform:translateY(5px);opacity:0}to{transform:none;opacity:1}}',
   `[data-fade]{animation:noesis-fade 240ms ${EASE} both}`,

@@ -238,7 +238,11 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
   }, [near, visible, numPages])
 
   // Follow the audio: a page change scrolls into view — a far jump cuts, a near
-  // one glides — but never within 4 s of the listener scrolling by hand.
+  // one glides — but never within 4 s of the listener scrolling by hand. The first
+  // placement after the view opens is a cut too: the view arrives AT the page being
+  // read (it used to open on page 1 of a book that was on page 80). It runs again
+  // when the pages are first laid out, which is when there is a page to go to.
+  const fresh = useRef(true)
   useEffect(() => {
     if (typeof activePage !== 'number') return
     if (activePage === visibleRef.current) return
@@ -248,9 +252,10 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
     if (!el) return
     const top = el.getBoundingClientRect().top
     const far = top < -window.innerHeight * 2 || top > window.innerHeight * 3
-    el.scrollIntoView({ block: 'start', behavior: far ? 'auto' : scrollBehavior() })
+    el.scrollIntoView({ block: 'start', behavior: far || fresh.current ? 'auto' : scrollBehavior() })
+    fresh.current = false
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePage, userScroll])
+  }, [activePage, userScroll, numPages])
 
   // The page holding the sentence being spoken, and its mark rects.
   let activeRects = null
@@ -301,7 +306,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
 
   return (
     <div ref={boxRef} data-testid="page-view" style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
-      {Array.from({ length: numPages }, (_, k) => {
+      {Array.from({ length: numPages || 1 }, (_, k) => { // one page's shape while the file is being opened
         const p = k + 1
         const ratio = ratios.current.get(p) ?? fallback.current
         const isDrawn = drawn.current.has(p)

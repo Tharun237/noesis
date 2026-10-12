@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { ui, go, openSheet, closeSearch } from '../lib/nav.js'
+import { ui, go, openSheet, closeSearch, tab } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addDocument, addCollection, removeCollection } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
@@ -103,7 +103,8 @@ function SidebarItem({ id, icon, name, onRemove, filter, count }) {
         background: 'transparent', color: filter === id ? T.text : T.sub, fontFamily: T.font, fontSize: 14,
         fontWeight: filter === id ? 600 : 500, cursor: 'pointer', textAlign: 'left',
       }}>
-      {/* The marker is one object: it slides to the shelf that was chosen. */}
+      {/* The marker is one object: it slides to the shelf that was chosen. The sidebar is its root (layoutRoot):
+          measured against the page, it would fly whenever the list's scroll changed with the shelf. */}
       {filter === id && <motion.span layoutId="side-pill" layoutDependency={filter} transition={T.spring} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: T.r.sm, background: T.surfaceHi }} />}
       <Icon name={icon} size={17} />
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
@@ -124,7 +125,7 @@ function Sidebar() {
   const [naming, setNaming] = useState(false)
   const count = f => docs.filter(d => (f === 'all' ? true : f === 'archived' ? d.archived : f === 'queue' ? !d.archived : d.collections.includes(f))).length
   return (
-    <aside style={{ width: T.sidebarW, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '24px 14px', position: 'sticky', top: 0, height: 'calc(100dvh - var(--dock, 0px))', display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <motion.aside layoutRoot style={{ width: T.sidebarW, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '24px 14px', position: 'sticky', top: 0, height: 'calc(100dvh - var(--dock, 0px))', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <Wordmark reveal={docs.length === 0} />
       <div style={{ ...label, padding: '28px 12px 8px' }}>Library</div>
       <SidebarItem id="queue" icon="list" name="Queue" filter={filter} count={count('queue')} />
@@ -156,7 +157,7 @@ function Sidebar() {
         style={{ display: 'flex', alignItems: 'center', gap: 12, height: 40, padding: '0 12px', border: 'none', borderRadius: T.r.sm, background: 'transparent', color: T.sub, fontFamily: T.font, fontSize: 14, cursor: 'pointer' }}>
         <Icon name="settings" size={17} /> Settings
       </button>
-    </aside>
+    </motion.aside>
   )
 }
 
@@ -303,20 +304,18 @@ function MobileHeader({ summary }) {
 const HUES = ['#AAFF00', '#00E5FF', '#00D4A8', '#2288FF', '#6EE7B7']
 const hueOf = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) >>> 0; return HUES[h % HUES.length] }
 
-// `layoutId` makes the cover a shared element: the same cover moving and growing between two places.
 const COVER_W = 56 // a card's cover; its progress line is the same width
-export function Cover({ d, w = COVER_W, h = 74, layoutId }) {
-  const Img = layoutId ? motion.img : 'img'
-  const Box = layoutId ? motion.div : 'div'
-  // layoutDependency: measured when it appears or goes (the two players swap), never on the player's own ticks.
-  const shared = layoutId ? { layoutId, layoutDependency: layoutId, transition: T.settle } : {}
+// A plain picture. (The two players used to share theirs as one moving object: it travelled two pixels, and
+// to do it the whole new page was measured on every change of page. At a slow phone's speed that measuring
+// was the largest single cost of opening a book: e2e/feel.mjs, 2026-10-12.)
+export function Cover({ d, w = COVER_W, h = 74 }) {
   const box = { width: w, height: h, borderRadius: Math.max(T.r.xs, w * 0.06), flexShrink: 0, border: `1px solid ${T.border}` }
-  if (d.cover) return <Img {...shared} src={d.cover} alt="" width={w} height={h} style={{ ...box, objectFit: 'cover', display: 'block' }} />
+  if (d.cover) return <img src={d.cover} alt="" width={w} height={h} style={{ ...box, objectFit: 'cover', display: 'block' }} />
   const hue = hueOf(d.title)
   const big = w >= 80 // room to set the title; smaller covers carry the initial, like a monogram
   const initial = (d.title.match(/[\p{L}\d]/u) || ['N'])[0].toUpperCase()
   return (
-    <Box {...shared} aria-hidden style={{
+    <div aria-hidden style={{
       ...box, position: 'relative', overflow: 'hidden',
       background: `radial-gradient(130% 95% at 15% 0%, ${hue}B3 0%, ${hue}33 42%, transparent 72%), radial-gradient(80% 60% at 100% 100%, ${hue}2E 0%, transparent 70%), #000`,
     }}>
@@ -329,7 +328,7 @@ export function Cover({ d, w = COVER_W, h = 74, layoutId }) {
       ) : (
         <span style={{ position: 'absolute', left: w * 0.1, bottom: h * 0.02, fontFamily: T.serif, fontWeight: 600, fontSize: h * (w >= 48 ? 0.5 : 0.56), lineHeight: 1, color: T.text }}>{initial}</span>
       )}
-    </Box>
+    </div>
   )
 }
 
@@ -427,7 +426,7 @@ export function docMenu(d) {
     { label: 'Save audio', icon: 'download', disabled: d.status !== 'ready', right: d.status === 'ready' ? (typeof AudioEncoder === 'undefined' ? '.wav' : '.opus') : 'not yet', onClick: () => exportAudio(d.id) },
     d.status === 'error' && { label: 'Try again', icon: 'refresh', onClick: () => reprocess(d.id) },
     '-',
-    { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) go('library') } } },
+    { label: 'Delete', icon: 'trash', danger: true, onClick: () => { if (confirm(`Delete "${d.title}" and its audio?`)) { stopIf(d.id); deleteDoc(d.id); if (ui.get().docId === d.id) tab('library') } } },
   ]
 }
 

@@ -236,6 +236,14 @@ const inspect = () => page.evaluate(async () => {
     const hit = (x, y) => { const e = document.elementFromPoint(x, y); return e && m.contains(e) }
     if (b.bottom <= innerHeight && b.top >= 0 && !(hit(b.left + b.width / 2, b.top + 8) && hit(b.left + b.width / 2, b.bottom - 8))) problems.push('a menu is open but part of it is covered or cut off')
   }
+  // The marker of a choice sits ON the choice. (It once left its control and flew in from the bottom of the
+  // screen: Tharun's recording, 2026-10-12. It is now placed by arithmetic, and this checks the arithmetic.)
+  for (const list of document.querySelectorAll('[role=tablist]')) {
+    const pill = list.querySelector('[data-slide]'), on = list.querySelector('[role=tab][aria-selected="true"]')
+    if (!pill || !on) continue
+    const p = pill.getBoundingClientRect(), o = on.getBoundingClientRect()
+    if (Math.abs(p.left - o.left) > 3 || Math.abs(p.right - o.right) > 3 || Math.abs(p.top - o.top) > 3) problems.push(`the marker of "${on.innerText.trim()}" is not on it (${Math.round(p.left - o.left)}px across, ${Math.round(p.top - o.top)}px down)`)
+  }
   // one meaning for one symbol, one "more" for one screen: two "..." buttons visible at once is a design fault
   const mores = [...document.querySelectorAll('[data-ico="more"]')].filter(e => { const b = e.getBoundingClientRect(); const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return b.width > 0 && top && (top === e || e.contains(top) || top.contains(e)) && !e.closest('[role=button]') })
   if (st.view === 'reader' && mores.length > 1) problems.push(`${mores.length} "more" (...) buttons are on screen at once in the reader`)

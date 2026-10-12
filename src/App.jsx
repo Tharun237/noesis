@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { later } from './ui/later.jsx'
 import { motion, AnimatePresence, MotionConfig } from 'motion/react'
 import { T } from './theme.js'
 import { useStore, useWidth } from './lib/store.js'
 import { ui } from './lib/nav.js'
 import { settings } from './lib/settings.js'
-import { reducedMotion } from './lib/motion.js'
+import { reducedMotion, whenIdle } from './lib/motion.js'
 import { Route } from './lib/route.js'
 import { boot } from './lib/library.js'
 import { startHistory } from './lib/history.js'
@@ -19,7 +20,7 @@ import { ActivityStrip, useActivity, ACTIVITY_H } from './ui/Activity.jsx'
 
 // The sheets (Add a document, voices, languages and the rest) load just after the first screen, in their own file.
 const Sheets = lazy(() => import('./ui/Sheets.jsx').then(m => ({ default: m.Sheets })))
-const Settings = lazy(() => import('./ui/Settings.jsx').then(m => ({ default: m.Settings })))
+const Settings = later(() => import('./ui/Settings.jsx').then(m => m.Settings))
 
 // A page moves the way the customer is going. Going deeper, the new page arrives from the right and the old
 // one leaves to the left; going back (the Back button, Android's back gesture) it is the mirror image, so
@@ -52,6 +53,9 @@ export default function App() {
 
   useEffect(() => { boot() }, [])
   useEffect(() => { startHistory(); startExtras() }, [])
+  // Settings is fetched in a quiet moment after the app has started: the first tap on its tab then shows
+  // Settings, not an empty screen while it loads (filmed by e2e/film.mjs: a third of a second of black).
+  useEffect(() => { whenIdle(Settings.fetch) }, [])
 
   useEffect(() => {
     const onKey = e => {

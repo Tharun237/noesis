@@ -338,8 +338,10 @@ await step('pages view shows the original PDF', async () => {
   await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
   await click('tab', 'Pages')
   await until(() => page.evaluate(() => {
-    const drawn = [...document.querySelectorAll('[data-testid="page-view"] canvas')].some(c => c.width > 100)
-    return drawn && document.body.innerText.includes('Page 1 of')
+    // drawn: wider than a canvas nobody has drawn on (300); the label: whichever page is being read (Pages
+    // opens there, not on page 1)
+    const drawn = [...document.querySelectorAll('[data-testid="page-view"] canvas')].some(c => c.width > 300)
+    return drawn && /Page \d+ of \d+/.test(document.body.innerText)
   }), 30000, 'a drawn page and the page label')
   await click('tab', 'Text')
   await click('button', 'Back to library')

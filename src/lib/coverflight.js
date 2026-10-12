@@ -8,6 +8,7 @@ import { reducedMotion } from './motion.js'
 
 const WAIT_MS = 700 // a copy nobody claims (the arriving page never showed this cover) fades away
 const Z = 40 // above the page and its header, below sheets
+const LET_GO_S = 0.12 // a copy whose landing place moved away fades in this time
 let flight = null // { id, ghost, from, timer }: the copy in the air
 
 const drop = f => { clearTimeout(f.timer); f.ghost.remove() }
@@ -54,7 +55,21 @@ export function arriveCover(id, el) {
   const to = restingRect(el)
   if (!to.width || !to.height) { f.ghost.remove(); return false }
   el.style.opacity = '0'
+  let over = false
+  const end = fade => {
+    if (over) return
+    over = true
+    removeEventListener('scroll', moved)
+    el.style.opacity = ''
+    if (fade) animate(f.ghost, { opacity: 0 }, { duration: LET_GO_S }).then(() => f.ghost.remove())
+    else f.ghost.remove()
+  }
+  // The copy is fixed to the screen and its landing place is on the page: if the page scrolls while it is in
+  // the air (the reader going to the sentence being read), the place is no longer there. The copy lets go at
+  // once instead of landing on top of the text (filmed: it sat over a heading for most of a second).
+  const moved = () => end(true)
+  addEventListener('scroll', moved, { passive: true })
   animate(f.ghost, { transform: ['translate(0px, 0px) scale(1, 1)', `translate(${to.left - f.from.left}px, ${to.top - f.from.top}px) scale(${to.width / f.from.width}, ${to.height / f.from.height})`] }, T.settle)
-    .then(() => { el.style.opacity = ''; f.ghost.remove() })
+    .then(() => end(false))
   return true
 }

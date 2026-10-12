@@ -49,6 +49,7 @@ accessible label."
 npx vite --port 5180 --strictPort --host        # fresh dev server
 node e2e/tour.mjs                               # photographs every screen, sheet and menu: .qa-out/tour-*.png
 ```
+Then `node e2e/film.mjs` (every transition, frame by frame: `.qa-out/film-*.png`).
 Open every picture. For each, answer the nine questions in writing, list the faults, fix them at the source
 (a shared component, not one screen), then run the tour again and look again. Then `e2e/chaos.mjs` and
 `e2e/feel.mjs` (`.claude/skills/customer`): a design that breaks under a fast customer, or stutters on a
@@ -58,7 +59,7 @@ phone, is not finished.
 
 - The reader's views are Text, Pages and Focus. The original page beside the text is a side pane with its own
   toolbar button (wide screens), not a mode. It follows the voice while playing and the reader's scrolling
-  while not; when a document's pages are not linked to its text it says the page is approximate.
+  while not.
 - One More menu per screen. In the reader it is the document's (top right). The player has no "…": its extra
   is the sleep timer, shown as what it is (a moon).
 - A bookmark icon adds or removes a bookmark on the sentence being read. The list of bookmarks is in the
@@ -78,3 +79,9 @@ phone, is not finished.
   the sidebar keeps it because it also says whether the library is synced.
 - On a phone the reader's bar holds what is used most; Find is in the document's menu there.
 - Two rows of one menu never share a symbol, and a symbol means one thing on a screen.
+- The title block (cover, title, notes about the document) opens the Text view only. Pages are the document
+  itself (page 1 is its own cover) and Focus is one word: neither repeats it.
+- The original page beside the text (wide screens) is off until asked for, and offered only for a document
+  whose pages are linked to its sentences. Beside an unlinked document it could only guess the page: Tharun
+  asked what "that raw PDF beside the text" was for, and for his book it was for nothing.
+- Transitions are part of the design: see "A transition is judged by its film" in `.claude/skills/motion`.

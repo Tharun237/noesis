@@ -98,3 +98,34 @@ processor was inside the Motion library and opening a book ran at 24 frames a se
   ACS pages. The first values were a fifth of a second and 8 px: Tharun could not feel them at all.
 - **The customer can turn motion up or down** (Settings, Motion). A phone in battery saver asks for less motion;
   the card says so, and Full overrides it.
+
+## A transition is judged by its film, not by its two ends (2026-10-12, e2e/film.mjs)
+
+Tharun's recording of Text | Pages | Focus: the white pill left its control and flew in from the bottom of the
+screen for 0.7 s, an empty grey frame sat between two views, and the page moved a second time after it had
+arrived. Both ends of every one of those were correct; no photograph of a screen at rest could show them.
+`node e2e/film.mjs [phone|wide]` films each transition frame by frame into `.qa-out/film-*.png`. Open every
+picture after any change to motion, navigation, a view, a sheet or a lazy-loaded part, and follow each moving
+thing from where it was to where it lands.
+
+- **A marker is placed by arithmetic, never by measuring the page.** The pill of a segmented control and the
+  bar over a tab are ONE element with `data-slide`, moved by `translateX(place * 100%)` (kit.jsx `Segmented`,
+  `TabBar.jsx`). A `layoutId` marker inside a pinned bar (sticky or fixed) is measured against the page, and
+  when the page's scroll changes with the choice it flies across the screen. Where sizes are not equal and a
+  shared layout is the only way (the sidebar's shelf marker), its pinned holder is a `motion` element with
+  `layoutRoot`.
+- **One view replaces another at once, and the new one rises in** (`data-rise="view"`). Not "the old one
+  fades, wait, the new one fades in": the wait is an empty frame, and everything outside the waiting part
+  (the title block, the bar) has already changed.
+- **The new view arrives AT its place.** Scroll is set in a layout effect before the first paint, or with
+  `behavior: 'auto'` the first time (`placed` in Reader, `fresh` in PageView). Arrive-then-scroll is a second
+  movement. Gliding is for following the voice afterwards.
+- **A bar keeps its height in every view.** A note about one view goes in that view's content, not in the bar:
+  a bar that grows moves everything pinned under it.
+- **A lazy-loaded part is `later()` (src/ui/later.jsx), not `React.lazy`, and is fetched in a quiet moment**
+  (`whenIdle(Part.fetch)`). React shows the empty fallback first even for a part already fetched, then holds
+  the real thing back about 300 ms: that was a third of a second of black on the first tap on Settings.
+- **While something is being fetched or opened, its shape stands in its place** (a page-shaped box for Pages),
+  never nothing.
+- **A copy that flies between pages lets go if its landing place moves** (`coverflight.js`): it is fixed to the
+  screen, its landing place is on the page.

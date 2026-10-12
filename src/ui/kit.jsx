@@ -67,24 +67,32 @@ export function IconButton({ icon, onClick, label: aria, size = 40, iconSize = 2
   )
 }
 
+const SEG_GAP = 4 // px between the segments, and between them and the rim
+
 export function Segmented({ options, value, onChange, disabled = [], size = 'md' }) {
+  const n = options.length
+  const at = options.findIndex(o => o.value === value)
   return (
-    <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: T.r.pill, background: T.surface, border: `1px solid ${T.border}` }}>
+    <div role="tablist" style={{ position: 'relative', display: 'flex', gap: SEG_GAP, padding: SEG_GAP, borderRadius: T.r.pill, background: T.surface, border: `1px solid ${T.border}` }}>
+      {/* The white pill is one object. Every segment is the same width, so where it sits is arithmetic: its
+          own width plus a gap, times the place of the choice (press.js, data-slide). */}
+      {at >= 0 && (
+        <span aria-hidden data-slide="" style={{
+          position: 'absolute', top: SEG_GAP, bottom: SEG_GAP, left: SEG_GAP, width: `calc((100% - ${SEG_GAP * (n + 1)}px) / ${n})`,
+          borderRadius: T.r.pill, background: T.text, transform: `translateX(calc(${at} * (100% + ${SEG_GAP}px)))`,
+        }} />
+      )}
       {options.map(o => {
         const on = o.value === value
         const off = disabled.includes(o.value)
         return (
-          <button key={o.value} role="tab" aria-selected={on} disabled={off} onClick={() => onChange(o.value)} type="button"
+          <button key={o.value} role="tab" aria-selected={on} disabled={off} onClick={() => onChange(o.value)} type="button" data-slide-ink=""
             style={{
-              position: 'relative', flex: 1, height: size === 'sm' ? 30 : 36, border: 'none', borderRadius: T.r.pill, background: 'transparent',
+              position: 'relative', flex: 1, minWidth: 0, height: size === 'sm' ? 30 : 36, border: 'none', borderRadius: T.r.pill, background: 'transparent',
               color: on ? T.bg : off ? T.faint : T.sub, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: off ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 10px', whiteSpace: 'nowrap',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 4px', whiteSpace: 'nowrap',
             }}>
-            {on && <motion.span layoutId={'seg-' + options.map(x => x.value).join()} layoutDependency={value} transition={T.spring}
-              style={{ position: 'absolute', inset: 0, borderRadius: T.r.pill, background: T.text }} />}
-            <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {o.icon && <Icon name={o.icon} size={15} />}{o.label}
-            </span>
+            {o.icon && <Icon name={o.icon} size={15} />}{o.label}
           </button>
         )
       })}
