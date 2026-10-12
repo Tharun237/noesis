@@ -9,6 +9,8 @@
     <!-- What a search engine and a shared link are told. One address is the real one (canonical): the same
          page is also reachable at the hosting address, and a library belongs to the address it was made on. -->
     <link rel="canonical" href="https://www.noesisaudio.com/" />
+    <!-- proves to Google Search Console that this site is Tharun's; removing it un-verifies the site -->
+    <meta name="google-site-verification" content="HZ4h-B1sCjp8eMKHCxIQWj38lDpoiYn0dh8A9c-HbLo" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Noesis" />
     <meta property="og:url" content="https://www.noesisaudio.com/" />
@@ -44,5 +46,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <!-- Counts visits, and nothing else (Cloudflare Web Analytics): no cookie, nothing kept in the browser, no
+         way to tell one visitor from another, and nothing of what is in the library: a document is never part
+         of an address here. "spa": false: moving about inside the app is not counted as opening a page, so a
+         page view means someone really opened the site. What it does is written on /privacy; if this changes,
+         that page changes first. -->
+    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "42ae1636ca594588a3e90d9a07a7209d", "spa": false}'></script>
   </body>
 </html>
