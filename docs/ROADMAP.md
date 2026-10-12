@@ -10,7 +10,7 @@ Every numbered item below is built and live. What is left is not building:
   whether the clarity switch keeps playing with the screen locked on Android; the table tones, the focus
   sounds and the new Hindi voice (Rohan) by ear; an iPhone for anything Safari.
 - **Parked by Tharun, not started:** the "Goods and services" skill (market and pricing), highlights with
-  notes, a choice per document of how figures and tables are read, Google sign-in set-up.
+  notes, a choice per document of how figures and tables are read.
 - **Cannot be done in a web app:** watch apps, earbud sensors (see "Limits of a web app").
 
 After Tharun's test on his phone the same night ("every UI element is breaking", "lagging and not
@@ -44,6 +44,15 @@ examples were read and two of their ideas rebuilt in this app's own stack (a par
 scrolling, serif-italic accent words). `src/ui/Landing.jsx` is what an empty library shows, without the
 app's bars. The domain noesisaudio.com is bought and not connected: it goes live when Tharun says the
 pages.dev site is right.
+
+Google sign-in (2026-10-12): set up in a Google Cloud project of its own, "Noesis" (noesis-511413), not the
+ACS one. Sign-in screen: app name Noesis, external, published (in production; it asks only for name, email
+and picture, which needs no review), home page and /privacy on noesis-777.pages.dev, authorised domains
+noesis-777.pages.dev and noesisaudio.com. Client "Noesis web" (web application) with the return address
+/api/auth/callback on noesis-777.pages.dev, noesisaudio.com and www.noesisaudio.com. `GOOGLE_CLIENT_ID` is
+set on the Pages project; `GOOGLE_CLIENT_SECRET` is Tharun's to paste (`npx wrangler pages secret put
+GOOGLE_CLIENT_SECRET --project-name noesis`), then one deploy makes it live. Still to build: deleting an
+account from inside the app (the privacy page promises deletion on request, by email for now).
 
 ## How the work is done
 
