@@ -384,7 +384,7 @@ export function pause() {
 // A document is never read again while it is being heard (library.js rereadOld). One that is open here but
 // silent is: the player then holds sentences that no longer exist, so it takes the new ones, at the same words.
 setSounding(id => { const p = player.get(); return p.id === id && (p.playing || p.waiting) })
-onReread((id, pos) => { if (player.get().id === id) load(pos, { autoplay: false }) })
+onReread((id, pos) => { if (player.get().id === id) load(pos) }) // silent stays silent; begun in that very moment, it goes on
 
 // Another device moved ahead. Never yank audio that is playing here: offer a jump instead.
 onRemotePos((id, v) => {

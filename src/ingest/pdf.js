@@ -15,6 +15,9 @@ export const openPdf = data => pdfjs.getDocument({
   standardFontDataUrl: CDN + 'standard_fonts/',
   wasmUrl: CDN + 'wasm/',
   iccUrl: CDN + 'iccs/',
+  // In a worker (reread.worker.js) text is read and nothing is drawn: no fonts, and pdf.js is told where its
+  // own files are fetched from instead of asking a page it does not have.
+  ...(typeof document === 'undefined' ? { disableFontFace: true, useSystemFonts: false, useWorkerFetch: true } : {}),
 }).promise
 
 export async function renderPage(pdf, n, width, quality = 0.72) {

@@ -8,7 +8,8 @@ import { pause } from '../lib/text.js'
 // in ocrfix.js makes the same file come out as different text.
 //   2 (October 2026): crooked scans no longer lose words; paragraphs by their first-line indent and across
 //     pages; chapter titles in the body's size; drop capitals; note numbers; footnotes after their paragraph.
-export const READER = 2
+//   3: a paper's block of authors' e-mail addresses is not read out.
+export const READER = 3
 
 // pdf.js text items → visual lines {text, y, size, x}
 // A line goes on while the words keep to its baseline and keep moving right. The baseline followed is the last
@@ -83,6 +84,11 @@ const isResidue = t => {
   if (letters / t.length >= 0.4 && /^["“‘'—–-]\s?\p{L}|\p{L}[.!?…]["”’')]*$/u.test(t)) return false
   return sym / t.length > 0.3 || t.length < 40
 }
+
+// Under a paper's title: names, employers and e-mail addresses, set in columns. Read out it is a minute of
+// "at google dot com". The title says what the paper is; who wrote it is on the document's card.
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/g
+const isContacts = b => { const n = (b.text.match(EMAIL) || []).length; return b.page <= 1 && (n >= 2 || (n === 1 && b.text.split(' ').length < 20)) }
 
 // Chapter openings set in the body's own size: "PROLOGUE", "Chapter 8", "Acknowledgements".
 const HEAD_WORD = /^(?:chapter|part|book|prologue|epilogue|introduction|preface|foreword|afterword|acknowledge?ments?|appendix|conclusions?|glossary|about the author)\b/i
@@ -259,6 +265,6 @@ export async function blocksFromPages(pages) {
   }
   flush()
 
-  const kept = blocks.filter(b => b.k !== 'p' || !isResidue(b.text))
+  const kept = blocks.filter(b => b.k !== 'p' || !(isResidue(b.text) || isContacts(b)))
   return { blocks: kept, refLines, pageText }
 }

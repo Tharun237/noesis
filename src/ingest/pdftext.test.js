@@ -98,3 +98,14 @@ test('a footnote is heard after the paragraph it belongs to, not inside the one 
   assert.ok(text[0].includes('is not finished until here'), text[0])
   assert.equal(text[1], 'To be fair, Job had good reason not to be an optimist.')
 })
+
+test('a paper: the authors’ addresses under the title are not read out', async () => {
+  const page = [
+    line('Attention Is All You Need', 720, 150, { size: 17, width: 250 }),
+    line('Ashish Vaswani Google Brain avaswani@google.com Noam Shazeer Google Brain noam@google.com', 680), line('Illia Polosukhin illia.polosukhin@gmail.com', 650, 200, { width: 120 }),
+    line(`The dominant sequence transduction models ${LONG}`, 600), line(`${LONG}.`, 588), line(`Write to the first author at a@b.org if ${LONG} and so on and on for more than twenty words in all.`, 560),
+  ]
+  const text = await read([page])
+  assert.ok(!text.join(' ').includes('google.com') && !text.join(' ').includes('gmail.com'), text.join(' | '))
+  assert.ok(text.join(' ').includes('a@b.org')) // a sentence that mentions an address is still a sentence
+})

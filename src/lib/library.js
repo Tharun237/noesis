@@ -1,5 +1,5 @@
 import { createStore, uid } from './store.js'
-import { db, persistStorage, canStore } from './db.js'
+import { db, persistStorage, canStore, storeNames } from './db.js'
 import { onShelf } from './shelf.js'
 import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
@@ -262,7 +262,7 @@ const AGAIN_MS = 5000
 
 async function nextVoiceJob() {
   const p = priority()
-  const docs = library.get().docs.filter(d => d.status === 'voicing')
+  const docs = library.get().docs.filter(d => d.status === 'voicing' && !rewriting.has(d.id))
     .sort((a, b) => (b.id === p?.id) - (a.id === p?.id) || a.createdAt - b.createdAt)
   for (const d of docs) {
     if (d.voice == null) continue // no natural voice for this language: the built-in voice speaks it, no generation
@@ -336,7 +336,7 @@ async function voiceOne(id, i) {
     rec = { codec: 'none', dur: 0, tail: 0 }
   }
   const now = getDoc(id)
-  if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c) return // deleted / voice changed / re-processed meanwhile
+  if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c || rewriting.has(id)) return // deleted / voice changed / re-processed meanwhile
   rec.v = tone === 'natural' ? voice : voice + '|' + tone
   // No room left on this device: the audio just made cannot be kept. That used to stop the line without a
   // word, and start it again on every nudge to make the same sentence and fail the same way. Now it is
@@ -552,15 +552,59 @@ export const setSounding = f => { sounding = f }
 const reread = new Set()
 export const onReread = f => { reread.add(f); return () => reread.delete(f) }
 const REREAD_AFTER_MS = 5000 // opening the app comes first
+// While a document's text is being replaced, nothing voices it: a sentence made from the old text must not be
+// kept under the new text's numbers.
+const rewriting = new Set()
+const mayChange = (id, d) => { const cur = getDoc(id); return !!cur && cur.contentVer === d.contentVer && (cur.status === 'ready' || cur.status === 'voicing') && !sounding(id) }
 
+// The reading is done in a worker (reread.worker.js): on a phone it would otherwise hold the screen. Where a
+// worker cannot do it (it failed once), the page's own thread does, in slices.
 async function rereadOld() {
+  let worker = null, noWorker = false, asked = 0
+  const ask = msg => new Promise((done, fail) => {
+    const n = ++asked // the answer carries it back: nothing else said on this line is taken for an answer
+    worker.onmessage = e => { if (e.data?.re === n) e.data.error ? fail(new Error(e.data.error)) : done(e.data) }
+    worker.onerror = e => fail(new Error(e.message || 'the worker stopped'))
+    worker.postMessage({ ...msg, n })
+  })
   for (const { id } of [...library.get().docs]) {
     const d = getDoc(id)
     if (!d || d.kind !== 'pdf' || !d.total || (d.readVer || 1) >= READER || (d.status !== 'ready' && d.status !== 'voicing')) continue
     if (d.mode !== 'full' || d.target || (d.ai && hasAiKey()) || sounding(id) || library.get().docs.some(x => x.from === id)) continue
-    await readAgain(id).catch(e => console.warn('Could not read again:', d.title, e?.message || e))
+    try {
+      if (noWorker) throw new Error('no worker')
+      if (!worker) { worker = new Worker(new URL('./reread.worker.js', import.meta.url), { type: 'module' }); worker.postMessage({ stores: storeNames }) }
+      const r = await ask({ read: true, id, lang: d.lang || 'en' })
+      if (r.same) patch(id, { readVer: READER }, true)
+      else if (r.ask && !mayChange(id, d)) worker.postMessage({ drop: true, id }) // it is looked at again the next time the app opens
+      else if (r.ask) {
+        const cur = getDoc(id)
+        rewriting.add(id)
+        try { takeNewText(id, cur, await ask({ write: true, id, pos: cur.pos || 0, marks: cur.marks || [] })) } finally { rewriting.delete(id) }
+      }
+    } catch (e) {
+      if (!noWorker) console.warn('Reading again in a worker failed, doing it here:', e?.message || e)
+      noWorker = true
+      worker?.terminate()
+      worker = null
+      await readAgain(id).catch(e => console.warn('Could not read again:', d.title, e?.message || e))
+    }
     await pause()
   }
+  worker?.terminate()
+}
+
+// The new text is in storage: the page lets go of the old one and says so.
+function takeNewText(id, cur, n) {
+  cache.delete(id)
+  voiced.set(id, new Set())
+  patch(id, {
+    status: cur.voice == null ? 'ready' : 'voicing', stage: cur.voice == null ? '' : 'Generating audio',
+    total: n.total, chars: n.chars, done: 0, vChars: 0, vSec: 0, pos: n.pos, posF: 0, marks: n.marks, note: n.note ?? cur.note, scanned: n.scanned,
+    contentVer: Date.now(), readVer: READER,
+  })
+  reread.forEach(f => f(id, n.pos))
+  kickVoice()
 }
 
 async function readAgain(id) {
@@ -585,27 +629,21 @@ async function readAgain(id) {
     const listening = await toListeningAsync(blocks, d.lang || 'en')
     const old = await db.getDoc(id)
     const was = (old?.blocks || []).flatMap(b => b.s), now = listening.flatMap(b => b.s)
-    const cur = getDoc(id)
     // deleted, re-processed, or begun to play while this was read: leave it, it is looked at again next time
-    if (!cur || cur.contentVer !== d.contentVer || (cur.status !== 'ready' && cur.status !== 'voicing') || sounding(id)) return
+    if (!mayChange(id, d)) return
     if (!now.length || (was.length === now.length && was.every((t, i) => t === now[i]))) return patch(id, { readVer: READER }, true)
+    const cur = getDoc(id)
     const to = carrier(was, now)
     const pos = cur.pos ? to(cur.pos) : listening.slice(0, bookStart(listening)).reduce((a, b) => a + b.s.length, 0)
     const seen = new Set()
     const marks = (cur.marks || []).map(m => ({ ...m, i: to(m.i) })).filter(m => !seen.has(m.i) && seen.add(m.i))
-    await db.delAudio(id)
-    await db.putDoc(id, refs.length ? { blocks: listening, refs } : { blocks: listening })
-    await db.putDurs(id, { durs: new Array(now.length).fill(0), tails: new Array(now.length).fill(0) })
-    cache.delete(id)
-    voiced.set(id, new Set())
-    const chars = now.reduce((a, t) => a + t.length, 0)
-    patch(id, {
-      status: cur.voice == null ? 'ready' : 'voicing', stage: cur.voice == null ? '' : 'Generating audio',
-      total: now.length, chars, done: 0, vChars: 0, vSec: 0, pos, posF: 0, marks, note, scanned: !!parsed.scanned,
-      contentVer: Date.now(), readVer: READER,
-    })
-    reread.forEach(f => f(id, pos))
-    kickVoice()
+    rewriting.add(id)
+    try {
+      await db.delAudio(id)
+      await db.putDoc(id, refs.length ? { blocks: listening, refs } : { blocks: listening })
+      await db.putDurs(id, { durs: new Array(now.length).fill(0), tails: new Array(now.length).fill(0) })
+      takeNewText(id, cur, { total: now.length, chars: now.reduce((a, t) => a + t.length, 0), pos, marks, note, scanned: !!parsed.scanned })
+    } finally { rewriting.delete(id) }
   } finally {
     parsed?.pdf?.loadingTask.destroy()
   }

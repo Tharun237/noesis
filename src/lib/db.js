@@ -17,6 +17,8 @@ export const openStore = (name, table) => (canStore ? idbStore(onShelf(name), ta
 const meta = openStore('noesis-meta', 'meta')
 const content = openStore('noesis-content', 'content')
 const audio = openStore('noesis-audio', 'audio')
+// For a worker that reads and writes a document itself (reread.worker.js): whose library this is is known here.
+export const storeNames = { content: onShelf('noesis-content'), audio: onShelf('noesis-audio') }
 
 export const db = {
   allMeta: () => values(meta),
