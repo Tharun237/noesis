@@ -119,7 +119,11 @@ These are mine, offered for Tharun to accept, change or throw out:
 Tharun chose it from the options above: a voluntary payment of any amount, once, that changes nothing in the
 app. It passes the seven questions (no entitlement, so no record of who paid is needed).
 
-- **Built and switched off:** a "Support Noesis" card in Settings, About (the only place the app mentions it:
+- **Switched on, 2026-10-13:** the Razorpay Payment Page "Support Noesis" (`https://rzp.io/rzp/support-noesis`,
+  the customer decides the amount, which is required; it asks for email and phone; it shows his Gmail and his
+  phone number as contact, his choice). The privacy page has a section "If you choose to pay" that says who
+  receives what. Not yet done: one small real payment to see the name shown, and his check with Razorpay below.
+- **What is built:** a "Support Noesis" card in Settings, About (the only place the app mentions it:
   no banner, no reminder) and the page `/support`, which says before any money moves what the payment is, that
   it is not a charity gift, who takes it and that Noesis never sees card details. Both appear only when
   `src/lib/support.json` has a `url`.
