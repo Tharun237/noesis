@@ -5,7 +5,7 @@ import { useStore } from '../lib/store.js'
 import { go, openSheet, toast } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { library, loadDoc, toggleMark } from '../lib/library.js'
-import { player, toggle, nextSentence, prevSentence, setRate, setSleep, seekTime, timeline } from '../lib/player.js'
+import { player, toggle, nextSentence, prevSentence, setRate, hearRate, setSleep, seekTime, timeline } from '../lib/player.js'
 import { speedLabel } from '../lib/speed.js'
 import { SpeedSlider } from './SpeedSlider.jsx'
 import { voiceName } from '../lib/voices.js'
@@ -137,19 +137,23 @@ function PlayButton({ playing, waiting, size }) {
 // what is set here is how every document is heard, on every device they sign in on.
 function SpeedMenu() {
   const rate = useStore(player, s => s.rate)
+  // The speed under the finger: heard and shown here at once, and told to the rest of the app when let go.
+  const [dragged, setDragged] = useState(null)
+  const now = dragged ?? rate
   return (
     <Menu up align="left" label="Listening speed" trigger={t => (
       <button type="button" onClick={t} aria-label="Playback speed"
         style={{ height: 36, minWidth: 54, padding: '0 10px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: 'transparent', color: T.text, fontFamily: T.mono, fontSize: 13, cursor: 'pointer' }}>
-        <Swap>{speedLabel(rate)}</Swap>
+        {speedLabel(now) /* said plainly: an animated change would be started again at every step of a drag */}
       </button>
     )}>
       <div style={{ width: 'min(300px, calc(100vw - 60px))', padding: '12px 12px 8px', display: 'grid', gap: 12, fontFamily: T.font }}>
         <div style={{ display: 'grid', gap: 2 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: T.faint }}>Speed</span>
-          <span data-testid="speed-now" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{speedLabel(rate)}</span>
+          <span data-testid="speed-now" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{speedLabel(now)}</span>
         </div>
-        <SpeedSlider value={rate} onChange={setRate} onSettle={speed => settings.set({ speed })} />
+        <SpeedSlider value={now} onChange={speed => { setDragged(speed); hearRate(speed) }}
+          onSettle={speed => { setRate(speed); settings.set({ speed }); setDragged(null) }} />
       </div>
     </Menu>
   )

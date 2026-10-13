@@ -490,6 +490,13 @@ export async function setClarity(on) {
 }
 export const clarityState = () => (clarity ? { routed: true, lift: clarity.shelf.gain.value, clock: clarity.ctx.state } : { routed: false })
 
+// While the speed is being dragged it is HEARD at once, and nothing else is told: every part of the screen that
+// shows a time is worked out from the speed, and telling them twenty times a second made frames late on a
+// phone (measured: 23 of 332). They are told once, when the finger lets go (setRate).
+export function hearRate(r) {
+  audio.playbackRate = Math.max(MIN_SPEED, Math.min(4, Math.max(0.5, r)) * ease)
+}
+
 export function setRate(r) {
   const rate = Math.round(Math.min(4, Math.max(0.5, r)) * 100) / 100
   player.set({ rate })
