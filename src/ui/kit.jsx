@@ -321,7 +321,7 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
               boxShadow: '0 24px 60px rgba(0,0,0,0.85)', transformOrigin: `${place.side} ${place.up ? 'bottom' : 'top'}`,
             }}>
             {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : it.heading ? (
-              <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{it.heading}</div>
+              <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.font, fontSize: 12.5, fontWeight: 600, color: T.faint }}>{it.heading}</div>
             ) : (
               <button key={i} role="menuitem" type="button" disabled={it.disabled} data-press="" data-rise={menuRow(i)}
                 onClick={() => { setOpen(false); const work = it.onClick(); if (typeof work?.then === 'function') during(it.doing || `${it.label}…`, work) }}

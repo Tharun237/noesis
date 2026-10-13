@@ -34,6 +34,7 @@ import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur } fro
 
 const CHART_H = 132 // px: the tallest a bar stands
 const QUIET_S = 20 * 60 // a stretch of short listens is drawn against this, not blown up to full height
+const SLICES = 4 // documents drawn in a bar by their own colour; the rest of that day are one grey slice
 const DOCS_SHOWN = 5 // documents listed before "Show all"
 const WEEKS = 17 // the calendar: about four months, and as many columns as a phone has room for
 const HOURS_MIN_S = 10 * 60 // less than this by the hour says nothing about when
@@ -66,12 +67,16 @@ function Section({ title, children, aside }) {
   )
 }
 
+// One fact: what it is and a word about it on the left, the figure on the right. A line of a list, like every
+// other list in the app (they were four boxes of a big number over a small label).
 function Fact({ name, value, note }) {
   return (
-    <div style={{ padding: '14px 14px 13px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, minWidth: 0 }}>
-      <div style={label}>{name}</div>
-      <div style={{ marginTop: 8, fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: T.text }}>{value}</div>
-      <div style={{ marginTop: 5, fontSize: 12, color: T.sub, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{note}</div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: `1px solid ${T.border}`, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{name}</div>
+        <div style={{ marginTop: 2, fontSize: 12.5, color: T.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</div>
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', color: T.text, whiteSpace: 'nowrap' }}>{value}</div>
     </div>
   )
 }
@@ -152,7 +157,10 @@ export function Listening({ wide }) {
                 style={{ height: '100%', display: 'flex', alignItems: 'flex-end', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', minWidth: 0, opacity: picked && picked !== b.key ? 0.32 : 1 }}>
                 {b.seconds > 0 ? (
                   <span style={{ width: '100%', height: `${Math.max(3, (b.seconds / tallest) * 100)}%`, display: 'flex', flexDirection: 'column-reverse', gap: 1.5, borderRadius: st.bars.length > 14 ? 3 : 5, overflow: 'hidden' }}>
-                    {b.docs.map(([id, s]) => <span key={id} style={{ flex: `${s} 1 0`, minHeight: 2, background: colourFor(id) }} />)}
+                    {/* the few most listened to, and the rest as one: a day with a hundred short listens drew a bar
+                        a hundred slivers tall, out of the top of its chart */}
+                    {b.docs.slice(0, SLICES).map(([id, s]) => <span key={id} style={{ flex: `${s} 1 0`, minHeight: 0, background: colourFor(id) }} />)}
+                    {b.docs.length > SLICES && <span style={{ flex: `${b.docs.slice(SLICES).reduce((a, [, s]) => a + s, 0)} 1 0`, minHeight: 0, background: T.faint }} />}
                   </span>
                 ) : <span style={{ width: '100%', height: 3, borderRadius: 3, background: T.surfaceTop }} />}
               </button>
@@ -206,7 +214,7 @@ const Steadily = memo(function Steadily({ log, now, whole, span, kind }) {
   const run = useMemo(() => streaks(log, now), [log, now])
   const within = `in ${SPAN[kind].toLowerCase()}`
   return (
-    <div data-fade="" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+    <div data-fade="" style={{ display: 'grid', borderTop: `1px solid ${T.border}` }}>
       <Fact name="Streak" value={days(run.current)} note={run.longest > run.current ? `longest ${days(run.longest)}, to ${shortDay(run.ended)}` : run.current ? 'your longest yet' : 'a minute a day keeps one going'} />
       <Fact name="Best day" value={whole.best ? fmtDur(whole.best.seconds) : '0m'} note={whole.best ? `${shortDay(whole.best.key)}, ${within}` : within} />
       <Fact name="Days listened" value={`${whole.listened} of ${span}`} note="a minute or more counts" />

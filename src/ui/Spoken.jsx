@@ -4,7 +4,7 @@
 // of letter to letter", Tharun, 2026-10-13.)
 //
 // The lime is a second copy of the word laid exactly over the first and uncovered by two transforms (press.js,
-// [data-lit]): nothing is laid out again and nothing is repainted while it moves, and the browser moves it
+// [data-fill]): nothing is laid out again and nothing is repainted while it moves, and the browser moves it
 // without the thread that builds the page (measured; press.js says which way of writing it does not).
 // The copy is drawn by the style sheet from an attribute, so the page's text is still each word once: copying,
 // finding and a screen reader meet nothing new.
@@ -23,10 +23,10 @@ export function Spoken({ ws, lit, ms, ahead, wipe = true }) {
     const moves = wipe && ONE_LINE(x)
     if (k === lit) {
       return moves
-        ? <span key={k} style={{ color: ahead }}><span style={HELD}><span key="lit" aria-hidden="true" data-lit={x} style={{ '--ms': `${ms}ms` }}><span><i data-w={x} /></span></span>{x}</span>{gap}</span>
+        ? <span key={k} style={{ color: ahead }}><span style={HELD}><span key="lit" aria-hidden="true" data-fill={x} style={{ '--ms': `${ms}ms` }}><span><i data-w={x} /></span></span>{x}</span>{gap}</span>
         : <span key={k} style={{ color: T.lime }}>{x}{gap}</span>
     }
-    if (k === lit - 1 && moves) return <span key={k}><span style={HELD}><span key="said" aria-hidden="true" data-said={x}><i data-w={x} /></span>{x}</span>{gap}</span>
+    if (k === lit - 1 && moves) return <span key={k}><span style={HELD}><span key="said" aria-hidden="true" data-filled={x}><i data-w={x} /></span>{x}</span>{gap}</span>
     return <span key={k} style={{ color: k > lit ? ahead : undefined }}>{x}{gap}</span>
   })
 }

@@ -36,7 +36,7 @@ function LibraryAi({ hasBriefing }) {
     <Menu trigger={t => <IconButton icon="sparkle" label="Ask your library" onClick={t} />}
       items={[
         { label: 'Ask your library', icon: 'sparkle', onClick: () => openSheet('libraryask') },
-        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'text', onClick: () => openSheet('briefing') }, { label: 'Concept map', icon: 'grid', onClick: () => openSheet('conceptmap') }] : []),
+        ...(hasBriefing ? [{ label: 'Make a briefing', icon: 'text', onClick: () => openSheet('briefing') }] : []),
         { label: 'Your listening', icon: 'waves', onClick: () => openSheet('listening') },
       ]} />
   )
@@ -81,7 +81,7 @@ export function Library({ wide }) {
   const playingId = useStore(player, s => s.id)
   const query = useStore(ui, s => s.query)
   const hours = docs.reduce((a, d) => a + docDuration(d), 0)
-  const summary = total > 0 && `Your library · ${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
+  const summary = total > 0 && `${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
 
   const order = useMemo(() => docs.map(d => d.id).join(), [docs])
   // the landing page: for an empty library, or asked for by its own address
@@ -210,8 +210,8 @@ function DesktopHeader({ summary }) {
   return (
     <header style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
       <div style={{ flex: 1, minWidth: 0, visibility: summary ? 'visible' : 'hidden' }}>
-        <div style={eyebrow}>{summary}</div>
-        <h1 style={{ margin: '12px 0 0', fontSize: 44, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}><Swap>{name}</Swap></h1>
+        <h1 style={{ margin: 0, fontSize: 44, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}><Swap>{name}</Swap></h1>
+        <div style={{ ...eyebrow, marginTop: 10 }}>{summary}</div>
       </div>
       <SearchBox value={query} width={220} />
       <SortMenu />
@@ -285,8 +285,8 @@ function MobileHeader({ summary }) {
       </div>
       {summary && (
         <div style={{ padding: '10px 20px 16px' }}>
-          <div style={eyebrow}>{summary}</div>
-          <h1 style={{ margin: '10px 0 0', fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: T.text }}><Swap>{name}</Swap></h1>
+          <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.05, color: T.text }}><Swap>{name}</Swap></h1>
+          <div style={{ ...eyebrow, marginTop: 6 }}>{summary}</div>
         </div>
       )}
       <AnimatePresence initial={false}>
@@ -335,9 +335,9 @@ export function Cover({ d, w = COVER_W, h = 74 }) {
   return (
     <div aria-hidden style={{
       ...box, position: 'relative', overflow: 'hidden',
-      background: `radial-gradient(130% 95% at 15% 0%, ${hue}B3 0%, ${hue}33 42%, transparent 72%), radial-gradient(80% 60% at 100% 100%, ${hue}2E 0%, transparent 70%), #000`,
+      // one flat colour, the document's own, deep enough for white type: a cloth cover, not a glow
+      background: `color-mix(in srgb, ${hue} 30%, #0b0b0b)`,
     }}>
-      {w >= 48 && <span style={{ position: 'absolute', top: w * 0.09, left: w * 0.1, fontFamily: T.mono, fontSize: Math.max(7.5, w * 0.1), letterSpacing: '0.14em', color: 'rgba(255,255,255,0.72)' }}>{KIND[d.kind] || 'DOC'}</span>}
       {big ? (
         <span style={{
           position: 'absolute', left: w * 0.1, right: w * 0.08, bottom: w * 0.1, fontFamily: T.serif, fontWeight: 600, fontSize: w * 0.13, lineHeight: 1.15,

@@ -57,7 +57,13 @@ const rules = [
   // their place (data-rise="3") and follow one another; a menu's rows ("m3") do the same, quicker.
   `@keyframes noesis-rise{from{opacity:0;transform:translateY(${T.enter.y}px)}}`,
   `[data-rise]{animation:noesis-rise ${T.enter.duration * 1000}ms ${EASE} backwards}`,
-  ...Array.from({ length: T.enter.held + 1 }, (_, i) => `[data-rise="${i}"]{animation-delay:${Math.round(40 + i * T.enter.step * 1000)}ms}`),
+  // The rows of a list do not rise one after another. (They did, on every screen, every time: the same
+  // entrance on everything is a habit, not a design. A page or a sheet arrives; what is on it is simply there,
+  // coming up out of nothing in a moment so that it is not a flash.)
+  '@keyframes noesis-appear{from{opacity:0}}',
+  ...Array.from({ length: T.enter.held + 1 }, (_, i) => `[data-rise="${i}"]{animation:noesis-appear 180ms ease-out backwards}`),
+  // (the welcome page keeps its own entrance: its opening lines rise one after another, once)
+  ...Array.from({ length: T.enter.held + 1 }, (_, i) => `[data-landing] [data-rise="${i}"]{animation:noesis-rise ${T.enter.duration * 1000}ms ${EASE} backwards;animation-delay:${Math.round(40 + i * T.enter.step * 1000)}ms}`),
   '[data-rise="sheet"]{animation-delay:90ms}',
   '@keyframes noesis-drop{from{opacity:0;transform:translateY(-8px)}}',
   `[data-rise^="m"]{animation:noesis-drop 280ms ${EASE} backwards}`,
@@ -83,7 +89,7 @@ const rules = [
   // new one rises in. No waiting, no empty frame between them.
   `@keyframes noesis-view{from{opacity:0;transform:translateY(${VIEW_Y}px)}}`,
   `[data-rise="view"]{animation:noesis-view ${VIEW_MS}ms ${EASE} backwards}`,
-  // The word being said fills with lime from its first letter to its last (Spoken.jsx). A copy of the word,
+  // The word being said fills with lime from its first letter to its last (Spoken.jsx: data-fill, data-filled). A copy of the word,
   // drawn from the attribute, lies exactly over it: a holder with no width in the line of text, with the
   // word once unseen (so its line sits at the same height as the real one) and once in lime inside a window.
   // The window slides in from the left while the lime slides the other way inside it, so the lime stands
@@ -94,14 +100,14 @@ const rules = [
   '@keyframes noesis-wipe{from{transform:translateX(-100%)}}',
   '@keyframes noesis-wipe-in{from{transform:translateX(100%)}}',
   '@keyframes noesis-said{to{opacity:0}}',
-  '[data-lit],[data-said]{display:inline-block;width:0;position:relative;z-index:1;white-space:pre;user-select:none;pointer-events:none}',
-  '[data-lit]::before{content:attr(data-lit);visibility:hidden}',
-  '[data-said]::before{content:attr(data-said);visibility:hidden}',
-  `[data-lit] i,[data-said] i{font-style:normal;color:${T.lime}}`,
-  '[data-lit] i::before,[data-said] i::before{content:attr(data-w)}',
-  '[data-lit]>span{position:absolute;left:0;top:0;overflow:hidden;animation:noesis-wipe var(--ms) linear both}',
-  '[data-lit]>span>i{display:block;animation:noesis-wipe-in var(--ms) linear both}',
-  `[data-said]>i{position:absolute;left:0;top:0;animation:noesis-said ${SAID_MS}ms ease-out both}`,
+  '[data-fill],[data-filled]{display:inline-block;width:0;position:relative;z-index:1;white-space:pre;user-select:none;pointer-events:none}',
+  '[data-fill]::before{content:attr(data-fill);visibility:hidden}',
+  '[data-filled]::before{content:attr(data-filled);visibility:hidden}',
+  `[data-fill] i,[data-filled] i{font-style:normal;color:${T.lime}}`,
+  '[data-fill] i::before,[data-filled] i::before{content:attr(data-w)}',
+  '[data-fill]>span{position:absolute;left:0;top:0;overflow:hidden;animation:noesis-wipe var(--ms) linear both}',
+  '[data-fill]>span>i{display:block;animation:noesis-wipe-in var(--ms) linear both}',
+  `[data-filled]>i{position:absolute;left:0;top:0;animation:noesis-said ${SAID_MS}ms ease-out both}`,
   // a chart's bars rise together, as their holder: one movement, however many bars (Listening.jsx)
   '@keyframes noesis-grow{from{transform:scaleY(0)}}',
   `[data-grow]{transform-origin:50% 100%;animation:noesis-grow 520ms ${EASE} backwards}`,

@@ -133,23 +133,22 @@ export function ArcScrubber({ d, value, max, disabled, onChange, onCommit }) {
         {/* what is to come: the whole book's weather, dim */}
         {felt && <path d={body} fill={paint} opacity="0.1" />}
         <path d={path} stroke={paint || T.faint} opacity={felt ? 0.4 : 1} {...stroke} />
-        {/* what has been heard: lit, with a soft halo (a wider, fainter stroke: no blur for a phone to pay for) */}
+        {/* what has been heard: lit */}
         <g clipPath={`url(#${id}-heard)`}>
           {felt && <path d={body} fill={paint} opacity="0.3" />}
-          {felt && <path d={path} stroke={paint} opacity="0.22" {...stroke} strokeWidth={8} />}
           <path d={path} stroke={paint || T.text} {...stroke} strokeWidth={felt ? 2.5 : 2} />
         </g>
       </svg>
       <div aria-hidden="true" style={{
         position: 'absolute', left: `${share * 100}%`, top: yOf(mood), width: 12, height: 12, margin: '-6px 0 0 -6px', borderRadius: 12, background: colour,
-        boxShadow: `0 0 0 3px ${T.bg}${felt ? `, 0 0 14px 3px ${colour}` : ''}`, transform: held ? 'scale(1.35)' : 'none', transition: 'transform 160ms cubic-bezier(0.22,1,0.36,1)', pointerEvents: 'none',
+        boxShadow: `0 0 0 3px ${T.bg}`, transform: held ? 'scale(1.35)' : 'none', transition: 'transform 160ms cubic-bezier(0.22,1,0.36,1)', pointerEvents: 'none',
       }} />
       {felt && held && (
         // beside the dot, on the side with room, and inside the line's own height: above it is the page
         <div aria-hidden="true" style={{
           position: 'absolute', top: MID - 9, height: 18, padding: '0 7px', borderRadius: 9, background: T.bg, display: 'flex', alignItems: 'center',
           ...(share > 0.5 ? { right: `calc(${(1 - share) * 100}% + 16px)` } : { left: `calc(${share * 100}% + 16px)` }),
-          fontFamily: T.mono, fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: colour, whiteSpace: 'nowrap', pointerEvents: 'none',
+          fontFamily: T.font, fontSize: 12.5, fontWeight: 600, color: colour, whiteSpace: 'nowrap', pointerEvents: 'none',
         }}>
           {moodWord(mood)}
         </div>

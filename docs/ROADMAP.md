@@ -280,3 +280,6 @@ key it still lists matching passages. Page numbers and a spoken answer came late
 - **iPhone:** none available. Replicate with the WebKit engine in automated tests; this approximates Safari
   but is not an iPhone (install flow, audio policies and background behaviour still need a real device).
 - **Open:** keep the code public under MIT, or make the repository private.
+
+
+Removed 2026-10-13: the concept map (item 18), at Tharun's word: "it's useless at Noesis". Its screen, its menu entry and `lib/concepts.js` are gone.

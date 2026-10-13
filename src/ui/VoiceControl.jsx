@@ -82,7 +82,7 @@ export function VoiceHud({ state, words, done, bottom, playing }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <motion.span animate={{ scale: [1, 1.35, 1], opacity: [1, 0.5, 1] }} transition={{ duration: 1.3, repeat: Infinity, ease: 'easeInOut' }}
                   style={{ width: 10, height: 10, borderRadius: 10, background: T.lime, flexShrink: 0 }} />
-                <span style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.18em', textTransform: 'uppercase', color: T.sub }}>Listening</span>
+                <span style={{ fontFamily: T.font, fontSize: 12.5, fontWeight: 600, color: T.sub }}>Listening</span>
               </div>
               <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.35, color: words ? T.text : T.faint, minHeight: 25, wordBreak: 'break-word' }}>
                 {words ? `“${words}”` : 'Say what you want: pause, go back, next page'}

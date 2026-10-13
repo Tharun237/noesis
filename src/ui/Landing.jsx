@@ -14,7 +14,7 @@
 // github.com/pulkitxm/claude-directory (landing-pages/mindloop-mono-landing), rebuilt in this app's own
 // stack: there it is a Motion value per word, here it is one style rule and no script.
 import { useState } from 'react'
-import { T, eyebrow, label } from '../theme.js'
+import { T } from '../theme.js'
 import { go, openSheet, closeWelcome, pushPanel, toast } from '../lib/nav.js'
 import { useStore } from '../lib/store.js'
 import { account } from '../lib/sync.js'
@@ -86,6 +86,11 @@ const VIEW_SAYS = {
   focus: 'One word at a time, in one place, at the speed you set. It needs no sound, so it works for readers who are deaf or hard of hearing too.',
 }
 
+// This page's own small type: capitals in the monospace face. The app's labels are plain words now (theme.js);
+// the welcome page keeps the look it was approved with.
+const label = { fontFamily: T.code, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }
+const eyebrow = { fontFamily: T.code, fontSize: 11, letterSpacing: '0.24em', textTransform: 'uppercase', color: T.sub }
+
 export function Landing({ wide, hasLibrary }) {
   // someone coming back (a new device, or after signing out) looks for this here, not three taps into Settings
   const canSignIn = useStore(account, a => a.checked && (a.google || a.dev) && !a.user)
@@ -98,7 +103,7 @@ export function Landing({ wide, hasLibrary }) {
   const h2 = { margin: 0, fontSize: wide ? 60 : 36, lineHeight: 1.02, letterSpacing: '-0.045em', fontWeight: 800, color: T.text }
   const say = { margin: '18px 0 0', maxWidth: 520, fontSize: wide ? 19 : 16.5, lineHeight: 1.6, color: T.sub }
   return (
-    <div style={{ minHeight: '100dvh', background: T.bg }}>
+    <div data-landing="" style={{ minHeight: '100dvh', background: T.bg }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 20, background: T.bg, paddingTop: 'env(safe-area-inset-top)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: NAV_H, maxWidth: PAGE_W, margin: '0 auto', padding: `0 ${wide ? pad : 12}px` }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex' }}><Wordmark size={24} reveal /></div>
@@ -161,7 +166,7 @@ export function Landing({ wide, hasLibrary }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', borderRadius: T.r.xl, border: `1px solid ${T.border}`, background: T.surface }}>
             {[['Everyone', 'Has access'], ['Offline', 'Audio'], [String(VOICES.length), 'Natural voices']].map(([value, name], i) => (
               <div key={name} style={{ minWidth: 0, padding: wide ? '36px 22px' : '26px 14px', borderLeft: i ? `1px solid ${T.border}` : 'none', display: 'grid', gap: 10, alignContent: 'center' }}>
-                <div style={{ fontFamily: T.mono, fontSize: wide ? 26 : 17, fontWeight: 600, color: T.text, whiteSpace: 'nowrap' }}>{value}</div>
+                <div style={{ fontFamily: T.code, fontSize: wide ? 26 : 17, fontWeight: 600, color: T.text, whiteSpace: 'nowrap' }}>{value}</div>
                 <div style={{ ...eyebrow, fontSize: 10, letterSpacing: '0.16em' }}>{name}</div>
               </div>
             ))}
@@ -191,7 +196,7 @@ export function Landing({ wide, hasLibrary }) {
             <div style={label}>04 · Your language</div>
             <h2 style={{ ...h2, marginTop: 16 }}>Hear it in<br />your language.</h2>
             <p style={say}>A paper written in English, heard in Telugu. Noesis translates the whole document on your own device, free, and reads the translation to you. With your own AI key the translation is more natural still.</p>
-            <p style={{ margin: '18px 0 0', maxWidth: 520, fontFamily: T.mono, fontSize: 11.5, lineHeight: 1.8, letterSpacing: '0.04em', color: T.faint }}>{Object.values(LANGS).map(l => l.name).join(' · ')}</p>
+            <p style={{ margin: '18px 0 0', maxWidth: 520, fontFamily: T.code, fontSize: 11.5, lineHeight: 1.8, letterSpacing: '0.04em', color: T.faint }}>{Object.values(LANGS).map(l => l.name).join(' · ')}</p>
           </div>
           <Tongues wide={wide} />
         </section>
@@ -224,7 +229,7 @@ export function Landing({ wide, hasLibrary }) {
               Add a document <Icon name="next" size={16} />
             </Button>
           </div>
-          <div style={{ marginTop: 56, fontFamily: T.mono, fontSize: 11.5, lineHeight: 1.7, color: T.faint }}>
+          <div style={{ marginTop: 56, fontFamily: T.code, fontSize: 11.5, lineHeight: 1.7, color: T.faint }}>
             Your documents stay on this device. Sign in, and a copy is kept in your own Google Drive for your other devices.<br />The audio never leaves it. <a href="/listen-to-pdf" style={{ color: T.sub, textUnderlineOffset: 3 }}>Listen to a PDF</a> · <a href="/alternatives" style={{ color: T.sub, textUnderlineOffset: 3 }}>Noesis next to other reader apps</a> · <a href="/privacy" style={{ color: T.sub, textUnderlineOffset: 3 }}>Privacy</a> · Noesis {__APP_VERSION__}
           </div>
         </section>
@@ -250,7 +255,7 @@ function NowReading({ wide }) {
           <path d="M0 12 C 30 4, 55 4, 80 11 S 130 20, 160 13 S 215 3, 245 10 S 285 16, 300 12" fill="none" stroke={T.borderHi} strokeWidth="2" vectorEffect="non-scaling-stroke" />
           <path d="M0 12 C 30 4, 55 4, 80 11 S 110 17, 118 16.5" fill="none" stroke={T.text} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
-        <div style={{ fontFamily: T.mono, fontSize: 12, color: T.faint, flexShrink: 0 }}>1x</div>
+        <div style={{ fontFamily: T.code, fontSize: 12, color: T.faint, flexShrink: 0 }}>1x</div>
       </div>
     </div>
   )

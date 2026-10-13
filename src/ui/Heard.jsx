@@ -142,7 +142,8 @@ export function LibraryGlance({ docs, wide }) {
                 {day.seconds > 0 ? (
                   <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: T.dur.slow, ease: T.ease, delay: i * 0.04 }}
                     style={{ width: '100%', height: `${Math.max(8, (day.seconds / tallest) * 100)}%`, display: 'flex', flexDirection: 'column-reverse', gap: 1.5, borderRadius: 4, overflow: 'hidden', transformOrigin: '50% 100%', opacity: day.today ? 1 : OTHER_DAY }}>
-                    {day.docs.map(([id, s]) => <div key={id} style={{ flex: `${s} 1 0`, minHeight: 2, background: colourFor(id) }} />)}
+                    {day.docs.slice(0, 4).map(([id, s]) => <div key={id} style={{ flex: `${s} 1 0`, minHeight: 0, background: colourFor(id) }} />)}
+                    {day.docs.length > 4 && <div style={{ flex: `${day.docs.slice(4).reduce((a, [, s]) => a + s, 0)} 1 0`, minHeight: 0, background: T.faint }} />}
                   </motion.div>
                 ) : <div style={{ width: '100%', height: 3, borderRadius: 3, background: T.surfaceTop }} />}
               </div>

@@ -89,7 +89,7 @@ export function LibraryAsk({ wide }) {
       )}
       {passages.length > 0 && (
         <Appear style={{ display: 'grid', gap: 8 }}>
-          <div style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>{keyed ? 'Passages' : 'Passages that match'}</div>
+          <div style={{ fontFamily: T.font, fontSize: 12.5, fontWeight: 600, color: T.faint }}>{keyed ? 'Passages' : 'Passages that match'}</div>
           {passages.map((p, i) => (
             <motion.button key={`${p.doc}:${p.block}`} {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => openPassage(p)}
               style={{ textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font, display: 'grid', gap: 4 }}>

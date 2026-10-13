@@ -162,3 +162,25 @@ controls stay black, white and lime. Colour is allowed where it IS the informati
   tested); a part with nothing true to say yet is not shown; nothing is estimated.
 - Listening is the customer's, on all their devices: each device sends only its own record and every device
   shows the sum (`heard:<device>:<year>` in their Drive). Never merge two devices' records by overwriting.
+
+## The habits of a generated interface (2026-10-13: "remove all AI basic slop designs")
+
+Checked against two open lists of what marks an interface as generated (pixelslop's pattern catalogue and
+Impeccable's craft floor). What Noesis had, and what it has instead:
+
+- **Monospace as a costume.** Labels, small print and figures were in JetBrains Mono, in capitals with wide
+  tracking. They are plain words in the page's own face now (`label`, `eyebrow`, `T.mono` in theme.js; figures
+  line up because the page sets tabular numerals). `T.code` is the real monospace: for code and readouts only.
+- **A kicker above a heading.** The library said "YOUR LIBRARY · 7 DOCUMENTS" over its title. The title comes
+  first; what it holds is said under it.
+- **Big number over small label, in a row of boxes.** The four facts on "Your listening" are lines of a list.
+- **A gradient with a glow as a cover.** A document without a cover has one flat colour, its own.
+- **Glow as decoration.** The mood line keeps its colour and loses its halo.
+- **The same entrance on everything.** Rows of a list no longer rise one after another: a page or a sheet
+  arrives, and what is on it is simply there.
+- **Bounce.** Springs settle; they do not wobble (`T.spring` bounce 0.1, `T.settle` 0).
+
+Kept on purpose, though the lists flag them: the pure black page and the lime accent (the brand, Tharun's own
+rule), and the welcome page exactly as it is ("Landing Page is fine", Tharun, same day): it has its OWN small
+type and entrances, written in Landing.jsx, so the app can change without changing it.
+The concept map was removed the same day ("it's useless at Noesis").

@@ -11,7 +11,7 @@ import { Icon } from './icons.jsx'
 const note = { fontSize: 14, color: T.sub, lineHeight: 1.55 }
 const equationBox = {
   padding: '14px 16px', border: `1px solid ${T.border}`, borderRadius: T.r.md, background: T.surface,
-  color: T.text, fontFamily: T.mono, fontSize: 16, lineHeight: 1.6, overflowWrap: 'anywhere',
+  color: T.text, fontFamily: T.code, fontSize: 16, lineHeight: 1.6, overflowWrap: 'anywhere',
 }
 const partButton = {
   display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 14px', border: 'none', borderRadius: T.r.sm,
@@ -82,7 +82,7 @@ function Explanation({ data, onSpeak }) {
           <motion.button key={i} type="button" variants={rowIn} whileTap={{ scale: 0.96 }} transition={T.press}
             onClick={() => onSpeak(p.term + ': ' + p.meaning)} style={partButton}>
             <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 4 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 15, color: T.lime }}>{p.term}</span>
+              <span style={{ fontFamily: T.code, fontSize: 15, color: T.lime }}>{p.term}</span>
               <span style={{ fontSize: 14, color: T.sub, lineHeight: 1.5 }}>{p.meaning}</span>
             </span>
             <Icon name="speaker" size={16} style={{ color: T.faint, flexShrink: 0 }} />

@@ -86,7 +86,7 @@ export function DiagnosticsCard({ Card }) {
             {rows.map(([k, v]) => (
               <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.5 }}>
                 <span style={{ color: T.sub, flexShrink: 0 }}>{k}:</span>
-                <span style={{ color: T.text, fontFamily: T.mono, wordBreak: 'break-word' }}>{String(v)}</span>
+                <span style={{ color: T.text, fontFamily: T.code, wordBreak: 'break-word' }}>{String(v)}</span>
               </div>
             ))}
           </div>

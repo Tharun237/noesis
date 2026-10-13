@@ -62,7 +62,6 @@ async function tour(size) {
   await see('add-text', () => page.getByRole('tab', { name: 'Text', exact: true }).click(), async () => {})
   await see('add-link', () => page.getByRole('tab', { name: 'Link', exact: true }).click(), close)
   await see('ask-your-library', async () => { await btn('Ask your library').click(); await sleep(300); await item('Ask your library').click() }, close)
-  await see('concept-map', async () => { await btn('Ask your library').click(); await sleep(300); await item('Concept map').click(); await sleep(2500) }, close)
   await see('your-listening', async () => { await btn('Ask your library').click(); await sleep(300); await item('Your listening').click() }, close)
   await see('briefing', async () => { await btn('Ask your library').click(); await sleep(300); await item('Make a briefing').click() }, close)
 

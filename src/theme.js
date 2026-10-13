@@ -30,13 +30,17 @@ export const T = {
   mood: { bright: '#FFB23E', calm: '#F2F2F7', dark: '#6C7BFF' },
 
   font: "'DM Sans Variable', 'DM Sans', system-ui, -apple-system, sans-serif",
-  mono: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",
+  // Labels, numbers and small print are set in the same face as everything else (figures line up: the page
+  // sets tabular numerals). They were in a monospace face, in capitals with wide tracking: the costume of
+  // "technical", on a product about reading. `code` is the real monospace, for what IS code or a readout.
+  mono: "'DM Sans Variable', 'DM Sans', system-ui, -apple-system, sans-serif",
+  code: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",
   serif: "'Literata Variable', 'Literata', Georgia, serif",
 
   r: { xs: 6, sm: 10, md: 14, lg: 20, xl: 28, pill: 999 },
   ease: [0.22, 1, 0.36, 1],
   // Timed springs (motion.dev: visualDuration + bounce): they arrive when they say they will.
-  spring: { type: 'spring', visualDuration: 0.42, bounce: 0.24 }, // sheets, pills, things that land: they land, with a little give
+  spring: { type: 'spring', visualDuration: 0.42, bounce: 0.1 }, // sheets, pills, things that land: they land, with a little give
   // How a thing arrives: it rises this far, over this long, on the ACS pages' easing (fast out of the gate,
   // a long soft stop). Rows of a list follow one another by `step`, the first `held` of them only.
   enter: { y: 24, duration: 0.5, ease: [0.05, 0.7, 0.1, 1], step: 0.06, held: 8 },
@@ -45,7 +49,7 @@ export const T = {
   // moves clearly). Same scale as the ACS shop: cards 0.985, pills 0.92 to 0.93 (docs/research/acs-motion-study.md).
   paneW: 'min(46vw, 640px)', // the original page beside the text ("Both", wide screens)
   tap: { card: 0.97, row: 0.965, control: 0.93, icon: 0.84 },
-  settle: { type: 'spring', visualDuration: 0.45, bounce: 0.16 }, // things moving to a new place in a list
+  settle: { type: 'spring', visualDuration: 0.45, bounce: 0 }, // things moving to a new place in a list
   dur: { fast: 0.16, base: 0.28, slow: 0.5 },
 
   playerH: 132,
@@ -59,6 +63,7 @@ export const T = {
   split: 900,
 }
 
-export const label = { fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }
+// The name of a group of things: plain words in the page's own face, quieter than what they name.
+export const label = { fontFamily: T.font, fontSize: 13, fontWeight: 600, letterSpacing: 0, color: T.sub }
 // ACS eyebrow: wide-tracked mono caps above a headline ("COASTAL HARVEST · CATALOG").
-export const eyebrow = { fontFamily: T.mono, fontSize: 11, letterSpacing: '0.24em', textTransform: 'uppercase', color: T.sub }
+export const eyebrow = { fontFamily: T.font, fontSize: 14, fontWeight: 500, letterSpacing: 0, color: T.sub }
