@@ -143,18 +143,25 @@ function fraction() {
 let doc = null // loaded content of the current document (for synchronous lookups)
 const segText = i => doc?.segs[i]?.t || ''
 
+// The place of a book is where it was last listened to, or moved to by hand, on whichever device that was.
+// So this device writes the place only once the customer has listened or moved HERE (`here`). Opening a
+// book, being handed the place by another device, or the text being read again is not a move: writing then
+// stamped this device's older place as the newest, and the real one was lost on every device.
+let here = false
 function savePosition(now = false) {
   clearTimeout(posTimer)
   const save = () => {
     const { id, i } = player.get()
-    if (id) patch(id, { pos: i, posF: Math.round(fraction() * 1000) / 1000, lastPlayed: Date.now() })
+    if (id && here) patch(id, { pos: i, posF: Math.round(fraction() * 1000) / 1000, lastPlayed: Date.now() })
   }
   now ? save() : (posTimer = setTimeout(save, 1200))
 }
 addEventListener('pagehide', () => savePosition(true))
 document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && savePosition(true))
 
-async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, dir = 1 } = {}) {
+// given: the place was handed to this device (the book was opened, another device moved it, its text was read
+// again), not reached here by the customer.
+async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, dir = 1, given = false } = {}) {
   const { id } = player.get()
   const c = await loadDoc(id)
   if (!c) return
@@ -165,6 +172,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   cancelSpeech()
   player.set({ i, t: offset, waiting: false, word: from })
   refreshMedia()
+  if (!given) here = true
   savePosition()
   if (system()) { audio.pause(); return speak(c, i, autoplay, from) }
 
@@ -177,7 +185,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   }
   const st = await stretchAt(id, c, i)
   if (my !== token) return void (st?.url && URL.revokeObjectURL(st.url))
-  if (st === 'skip') return load(i + dir, { autoplay, dir })
+  if (st === 'skip') return load(i + dir, { autoplay, dir, given })
   if (!st) {
     // Not generated yet: generation follows the playhead, so this sentence is made next.
     audio.pause()
@@ -323,6 +331,7 @@ export async function open(id, { at, autoplay = true } = {}) {
   revoke(next); next = null
   pendingStart = false
   const same = player.get().id === id
+  if (!same) here = false // another book: its place is what its record says until the customer moves it here
   player.set({ id, playing: false, gate: null })
   heard = { id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine() }
   setSession(d)
@@ -335,6 +344,8 @@ export async function open(id, { at, autoplay = true } = {}) {
   const resume = at == null && !same && !d.finished && start === d.pos && d.posF
   await load(start, {
     autoplay: false,
+    given: at == null, // opened where it was left; a tap on a sentence (at) is a move
+
     offset: resume && c.durs[start] ? d.posF * c.durs[start] : 0,
     from: resume && system() ? wordStart(c.segs[start].t, d.posF) : 0,
   })
@@ -347,6 +358,7 @@ const wordStart = (t, f) => { const at = Math.floor(t.length * f); const k = t.l
 export async function play() {
   const p = player.get()
   if (!p.id) return
+  here = true // listening here: from now on the place is this device's to write
   // Resuming audio that is already loaded starts inside the tap itself: Safari refuses a play() that
   // comes after an await, and nothing here needs to wait.
   if (!system() && !p.waiting && p.gate == null && audio.src && covers(current, p.id, p.i)) audio.play().catch(playFailed)
@@ -384,14 +396,14 @@ export function pause() {
 // A document is never read again while it is being heard (library.js rereadOld). One that is open here but
 // silent is: the player then holds sentences that no longer exist, so it takes the new ones, at the same words.
 setSounding(id => { const p = player.get(); return p.id === id && (p.playing || p.waiting) })
-onReread((id, pos) => { if (player.get().id === id) load(pos) }) // silent stays silent; begun in that very moment, it goes on
+onReread((id, pos) => { if (player.get().id === id) load(pos, { given: true }) }) // silent stays silent; begun in that very moment, it goes on
 
 // Another device moved ahead. Never yank audio that is playing here: offer a jump instead.
 onRemotePos((id, v) => {
   const p = player.get()
   if (p.id !== id || v.pos === p.i) return
   const from = v.dev ? `from your ${v.dev}` : 'from your other device'
-  const jump = autoplay => loadDoc(id).then(c => load(v.pos, { autoplay, offset: (v.posF || 0) * (c.durs[v.pos] || 0), from: wordStart(c.segs[v.pos].t, v.posF || 0) }))
+  const jump = autoplay => loadDoc(id).then(c => load(v.pos, { autoplay, given: !autoplay, offset: (v.posF || 0) * (c.durs[v.pos] || 0), from: wordStart(c.segs[v.pos].t, v.posF || 0) }))
   if (p.playing) toast(`Further along ${from}`, { label: 'Jump there', run: () => jump(true) })
   else { jump(false); toast(`Synced ${from}`) }
 })

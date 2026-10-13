@@ -26,7 +26,7 @@ async function device(name) {
   await page.goto(HOME); await page.waitForLoadState('networkidle'); await sleep(800)
   const lib = expr => page.evaluate(async expr => {
     const at = path => performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes(path)) || path
-    const m = { library: await import(at('/src/lib/library.js')), sync: await import(at('/src/lib/sync.js')) }
+    const m = { library: await import(at('/src/lib/library.js')), sync: await import(at('/src/lib/sync.js')), player: await import(at('/src/lib/player.js')) }
     return eval(expr)
   }, expr)
   const titles = () => lib('m.library.library.get().docs.map(d => d.title).sort()')
@@ -149,6 +149,29 @@ try {
   await b.page.reload(); await b.page.waitForLoadState('domcontentloaded'); await sleep(2000)
   const found = await b.until('the passed-over document to appear on device B', async () => (await b.titles()).includes('The one that was passed over'), 25000).then(() => true, () => false)
   check('a device that had lost its place still gets what it missed, when it is opened again', found)
+
+  // (d) The place of a book is where it was last LISTENED to, or moved to by hand. A device that only opens the
+  // book has not moved it. (It used to write its own, older place as the newest: Tharun's phone opened a book
+  // at the start before the laptop's place had reached it, and the place was then lost on both.)
+  await b.until('the long document to be whole on device B', () => b.lib(`m.library.getDoc(${JSON.stringify(slow)})?.total > 100`))
+  await a.lib(`m.player.open(${JSON.stringify(slow)}, { autoplay: false }).then(() => m.player.seekTo(40))`)
+  await sleep(1800); await a.lib('m.sync.flushNow()'); await sleep(1500)
+  const stale = await b.lib(`m.library.getDoc(${JSON.stringify(slow)}).pos`) // B has not looked yet: it still has the old place
+  await b.lib(`m.player.open(${JSON.stringify(slow)}, { autoplay: false })`)
+  await sleep(1800) // the time after which a place is written
+  await b.sync(); await sleep(1200); await b.sync(); await a.sync(); await sleep(800); await a.sync()
+  const places = { a: await a.lib(`m.library.getDoc(${JSON.stringify(slow)}).pos`), b: await b.lib(`m.library.getDoc(${JSON.stringify(slow)}).pos`), bPlayer: await b.lib('m.player.player.get().i') }
+  check('opening a book does not claim its place: the place listened to on A is the place on both', places.a === 40 && places.b === 40 && places.bPlayer === 40, `A ${places.a}, B ${places.b}, B's player ${places.bPlayer} (B had ${stale} when it opened the book)`)
+
+  // (e) A bookmark made on one device, and the note written on it, is on the other.
+  await b.lib(`(m.library.toggleMark(${JSON.stringify(slow)}, 55), m.library.setMarkNote(${JSON.stringify(slow)}, 55, 'come back to this'))`)
+  await sleep(2000); await b.sync()
+  const mark = await a.until('the bookmark to reach device A', async () => { await a.sync(); return a.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.find(x => x.i === 55)?.note`) }).catch(() => null)
+  check('a bookmark and its note made on B are on A', mark === 'come back to this', String(mark))
+  await a.lib(`m.library.toggleMark(${JSON.stringify(slow)}, 55)`)
+  await sleep(2000); await a.sync()
+  const gone = await b.until('the bookmark to be removed on device B', async () => { await b.sync(); return b.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.length === 0`) }).catch(() => false)
+  check('removed on A, it is removed on B', gone === true)
   check('no errors were thrown on either device', a.errors.length + b.errors.length === 0, [...a.errors, ...b.errors].join(' | '))
 } catch (e) {
   check(String(e.message).split('\n')[0], false)
