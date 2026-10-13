@@ -102,6 +102,9 @@ const rules = [
   '[data-lit]>span{position:absolute;left:0;top:0;overflow:hidden;animation:noesis-wipe var(--ms) linear both}',
   '[data-lit]>span>i{display:block;animation:noesis-wipe-in var(--ms) linear both}',
   `[data-said]>i{position:absolute;left:0;top:0;animation:noesis-said ${SAID_MS}ms ease-out both}`,
+  // a chart's bars rise together, as their holder: one movement, however many bars (Listening.jsx)
+  '@keyframes noesis-grow{from{transform:scaleY(0)}}',
+  `[data-grow]{transform-origin:50% 100%;animation:noesis-grow 520ms ${EASE} backwards}`,
   // the light behind Focus's word breathes while something is being read: one animation, started once
   '@keyframes noesis-breathe{from{opacity:0.62;transform:scale(1)}to{opacity:1;transform:scale(1.07)}}',
   '[data-breathe]{animation:noesis-breathe 2.4s ease-in-out infinite alternate}',

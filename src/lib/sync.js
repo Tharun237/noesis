@@ -76,6 +76,8 @@ function schedule(ms) {
 // See what changed in the folder and take what is newer than ours.
 async function pull() {
   let changed
+  const from = cursor // where this round started looking: gone back to if anything could not be taken
+  let missed = null
   if (cursor) {
     try { ({ changes: changed, cursor } = await drive.changesSince(cursor)) } catch (e) {
       if (!GONE.has(e.status)) throw e
@@ -113,18 +115,27 @@ async function pull() {
     ids[k] = seen
     if (k.startsWith(TEXT)) continue
     if (seen.at > (clock[k] || 0)) {
-      const res = await drive.read(seen.id).catch(e => { if (!GONE.has(e.status)) throw e; delete ids[k]; return null }) // gone between the list and the reading
-      if (res) await receive(k, seen.at, await res.json())
+      // One record that cannot be read or taken in must not stop the rest (it stopped everything after it,
+      // every round, for as long as it stayed bad). It is left as not taken, and looked at again next round.
+      try {
+        const res = await drive.read(seen.id).catch(e => { if (!GONE.has(e.status)) throw e; delete ids[k]; return null }) // gone between the list and the reading
+        if (res) await receive(k, seen.at, await res.json())
+      } catch (e) {
+        if (e.signedOut || !navigator.onLine) throw e
+        console.warn('Sync: could not take', k, e)
+        missed = e
+      }
     }
     else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
   }
+  if (missed) { cursor = from; throw missed } // after everything else was taken: the round says it failed and comes back
 }
 
 async function receive(k, at, v) {
   if (v == null || at <= (clock[k] || 0)) return
+  await hooks.apply(k, v) // first: if this fails the record is still "not seen", and is taken again next round
   clock[k] = at
   if (dirty[k] && dirty[k] < at) delete dirty[k] // a newer edit from another device beats our queued one
-  await hooks.apply(k, v)
 }
 
 // Write a record over the file it already has, or as a new file. If the file it had is gone (the folder was
@@ -142,21 +153,36 @@ async function put(k, at, body, quick) {
 
 // Send what of ours is newer than what the folder holds.
 async function push(quick) {
+  let failed = null
   for (const [k, at] of Object.entries(dirty)) {
     if (!uid) return
-    if (!(ids[k]?.at >= at)) {
-      const v = await hooks.snapshot(k)
-      if (v !== undefined) {
-        if (k.startsWith('meta:') && v.contentVer && !v.deleted) v.parts = await uploadContent(k.slice(5), v.contentVer)
-        const body = JSON.stringify(v)
-        ids[k] = { id: await put(k, at, body, quick && body.length < QUICK_MAX), at }
-        if (k.startsWith('meta:') && v.deleted) await dropText(k.slice(5)) // a deleted document leaves nothing behind in their Drive
-        if (k.startsWith('pos:')) lastPosPush = Date.now()
+    // One record that cannot be sent must not stop the ones after it: it stays queued and is sent next round.
+    try {
+      if (!(ids[k]?.at >= at)) {
+        const v = await hooks.snapshot(k)
+        if (v !== undefined) {
+          if (k.startsWith('meta:') && v.contentVer && !v.deleted) {
+            // The text goes first, and the record says how many parts it is in. A device that does not HAVE
+            // the text (it is still downloading it) keeps the count it was given: it used to write 0, after
+            // which no device could ever fetch the document.
+            const parts = await uploadContent(k.slice(5), v.contentVer)
+            if (parts) v.parts = parts
+          }
+          const body = JSON.stringify(v)
+          ids[k] = { id: await put(k, at, body, quick && body.length < QUICK_MAX), at }
+          if (k.startsWith('meta:') && v.deleted) await dropText(k.slice(5)) // a deleted document leaves nothing behind in their Drive
+          if (k.startsWith('pos:')) lastPosPush = Date.now()
+        }
       }
+      if (dirty[k] === at) delete dirty[k]
+    } catch (e) {
+      if (e.signedOut || !navigator.onLine) throw e
+      console.warn('Sync: could not send', k, e)
+      failed = e
     }
-    if (dirty[k] === at) delete dirty[k]
     await persist()
   }
+  if (failed) throw failed // after everything else was sent
 }
 
 // One round. Leaving the app (the page is hidden) sends first and does not wait to look: it may be frozen

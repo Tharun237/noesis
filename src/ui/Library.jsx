@@ -359,7 +359,7 @@ export function StatusLine({ d }) {
   const gate = useStore(player, s => s.gate)
   const engStatus = useStore(engine, s => s.status)
   // Queue order as a stable string: re-renders only when the queue's membership changes, not on progress ticks.
-  const qkey = useStore(library, s => s.docs.filter(x => x.status === 'queued' || x.status === 'reading' || x.status === 'narrating' || x.status === 'syncing').sort((a, b) => a.createdAt - b.createdAt).map(x => x.id).join(','))
+  const qkey = useStore(library, s => s.docs.filter(x => x.status === 'queued' || x.status === 'reading' || x.status === 'narrating' || (x.status === 'syncing' && x.contentVer)).sort((a, b) => a.createdAt - b.createdAt).map(x => x.id).join(','))
   if (d.status === 'error') return <span style={{ color: T.danger }}>Could not read this file. Try again from the menu (⋯).{d.error ? <span style={{ color: T.faint }}> · {d.error}</span> : null}</span>
   if (d.status === 'ready') return null
   if (d.status === 'paused') return <span style={{ color: T.sub }}>{d.stage || 'Paused'}{d.prep >= 0.01 ? ` · ${Math.floor(d.prep * 100)}%` : ''}</span>

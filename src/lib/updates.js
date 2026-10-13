@@ -22,7 +22,9 @@ function maybeApply() {
   if (!apply) return
   const ok = shouldSwitch({
     playing: player.get().playing,
-    preparing: library.get().docs.some(d => ['reading', 'narrating', 'syncing'].includes(d.status)),
+    // 'syncing' (a document coming from another device) is not counted: it picks up again when the app opens,
+    // and one that waits for hours on the other device would keep this one on an old version all that time.
+    preparing: library.get().docs.some(d => ['reading', 'narrating'].includes(d.status)),
     sheetOpen: !!ui.get().sheet,
     interacted,
     sinceLaunch: Date.now() - startedAt,

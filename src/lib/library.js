@@ -4,7 +4,7 @@ import { onShelf } from './shelf.js'
 import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf } from './ai.js'
-import { synthesize, engine } from './tts.js'
+import { synthesize, engine, loadEngine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -23,6 +23,7 @@ import { touch, configureSync, startSync, downloadContent, deviceName } from './
 // so a long book can be prepared while you already listen to something else.
 
 const COLLECTIONS_KEY = onShelf('noesis.collections.v1')
+const RESENT_KEY = onShelf('noesis.sync.resent')
 const loadCollections = () => { try { return JSON.parse(localStorage.getItem(COLLECTIONS_KEY) || '[]') } catch { return [] } }
 
 export const library = createStore({ docs: [], loaded: false, collections: loadCollections(), voicingNow: null })
@@ -229,6 +230,10 @@ export async function ensureFresh(id) {
   const rec = await db.getAudio(id, first)
   if (rec && rec.codec !== 'none' && !audioMatches(d, rec)) { await resetAudio(id); kickVoice() }
 }
+
+// A voice that could not be loaded because the device was offline is loaded when it is online again. (Nothing
+// did: the message said "downloads when you're back online", and it never did until the app was restarted.)
+if (typeof addEventListener === 'function') addEventListener('online', () => { const e = engine.get(); if (e.status === 'error' && e.voice) loadEngine(e.voice).then(() => kickVoice()).catch(() => {}) })
 
 export const kickVoice = makeLoop(async () => {
   if (activeEngine() === 'system') return false // built-in voice speaks directly; no generation, no CPU load
@@ -541,7 +546,18 @@ export async function boot() {
   // NVIDIA voices, if the customer saved a key: refresh the list at most once a day.
   void loadCloudVoices().catch(e => console.warn('NVIDIA voice list not loaded:', e?.message || e))
   configureSync(syncHooks)
+  // Once, on the version that mended them: every document this device HOLDS THE TEXT OF is sent again, with
+  // its text. A device that was told about a document before the text was sent, or was handed a record
+  // saying the text had no parts, is waiting for exactly this. (A device that is itself still waiting for a
+  // text sends nothing: it has nothing true to say about it.)
+  try {
+    if (!localStorage.getItem(RESENT_KEY)) {
+      for (const d of metas) if (d.contentVer && d.total > 0 && d.status !== 'syncing') touch('meta:' + d.id)
+      localStorage.setItem(RESENT_KEY, '1')
+    }
+  } catch { /* no storage */ }
   for (const d of metas) {
+    if (d.status === 'syncing' && !d.contentVer && d.stage !== NOT_SENT) patch(d.id, { stage: NOT_SENT }, true) // said in older words
     if (d.status === 'syncing') fetchSynced(d.id) // resume interrupted downloads
     // Documents prepared before text versioning existed: give them a stable version so their text can sync.
     else if (d.total && !d.contentVer) patch(d.id, { contentVer: d.createdAt })
@@ -595,7 +611,10 @@ const syncHooks = {
     if (k.startsWith('heard:')) return heard?.snapshot(k)
     const [type, id] = k.split(':')
     const d = getDoc(id)
-    if (type === 'meta') return d ? pick(d, META_FIELDS) : { deleted: true } // deleted → tombstone
+    // A document is told to the other devices once its text exists (contentVer): told earlier, it stood on
+    // them as "waiting for your other device" for as long as this one took, and for ever if this one was
+    // closed or the file failed. Every change to it marks it to be sent again, so nothing is lost by waiting.
+    if (type === 'meta') return !d ? { deleted: true } : d.contentVer ? pick(d, META_FIELDS) : undefined // deleted → tombstone
     if (!d) return undefined
     if (type === 'pos') return { ...pick(d, POS_FIELDS), dev: deviceName() }
     if (type === 'marks') return { marks: d.marks || [] }
@@ -619,10 +638,14 @@ const syncHooks = {
   },
 }
 
+// A document another device told this one about before it had sent the text (devices no longer do: see
+// snapshot above). It is not work this device can do, so it says where the work is.
+export const NOT_SENT = 'Not sent yet by the device it was added on'
+
 async function createSynced(id, v) {
   const meta = {
     id, title: 'Untitled', author: '', kind: 'text', url: null, createdAt: Date.now(), lastPlayed: 0, mode: 'full', ai: false,
-    voice: settings.get().voice, status: 'syncing', stage: 'Waiting for your other device to finish preparing', prep: 0, total: 0, chars: 0,
+    voice: settings.get().voice, status: 'syncing', stage: NOT_SENT, prep: 0, total: 0, chars: 0,
     done: 0, vChars: 0, vSec: 0, pos: 0, posF: 0, finished: false, archived: false, collections: [], marks: [], cover: null,
     error: null, note: null, ...pick(v, META_FIELDS), ...pending.get(id),
   }
@@ -647,7 +670,8 @@ async function fetchSynced(id) {
     await db.putDurs(id, { durs: new Array(total).fill(0), tails: new Array(total).fill(0) })
     cache.delete(id)
     voiced.set(id, new Set())
-    patch(id, { status: 'voicing', stage: 'Making the audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
+    const spoken = getDoc(id)?.voice != null // no natural voice for its language: the device's own voice reads it, nothing is made
+    patch(id, { status: spoken ? 'voicing' : 'ready', stage: spoken ? 'Making the audio' : '', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
     kickVoice()
   } catch (e) {
     patch(id, { status: 'syncing', stage: 'Waiting to download from your other device', error: e.message }, true)

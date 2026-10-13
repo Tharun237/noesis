@@ -105,6 +105,24 @@ try {
   check('signing in again brings the library back, without what was added while signed out', had.every(t => again.includes(t)) && !again.includes('Added while signed out'), again.join(', '))
   const audioKept = await b.page.evaluate(async () => (await indexedDB.databases()).map(d => d.name).filter(n => n.startsWith('noesis-audio')).length)
   check('each library has its own storage on the device', audioKept === 2, `${audioKept} audio stores`)
+  // A document is told to the other device only when its text exists: B must never hold one it cannot get.
+  // (It used to appear at once and stand there as "waiting for your other device" until A had finished: for
+  // ever, if A was closed or the file failed.)
+  // (a) one that can never be prepared (a link that cannot be fetched): it must not appear on B at all
+  const bad = await a.lib(`m.library.addDocument({ kind: 'url', url: 'http://localhost:5180/there-is-no-such-page-${who}', title: 'A link that fails' })`)
+  await a.until('the bad link to fail on device A', () => a.lib(`m.library.getDoc(${JSON.stringify(bad)})?.status === 'error'`), 60000)
+  // renaming it is a change to its record: that is what used to send it out, text or no text
+  await a.lib(`(m.library.patch(${JSON.stringify(bad)}, { title: 'A link that fails, renamed', renamed: true }), 0)`)
+  await sleep(2500); await a.sync(); await b.sync(); await sleep(800); await b.sync()
+  check('a document that could not be read is not shown on the other device', !(await b.lib(`!!m.library.getDoc(${JSON.stringify(bad)})`)), await a.lib(`m.library.getDoc(${JSON.stringify(bad)})?.error || 'failed'`))
+  // (b) one that is prepared arrives whole, and nothing on B is left waiting
+  const big = Array.from({ length: 800 }, (_, k) => `Sentence number ${k + 1} of a long document that takes a moment to prepare.`).join(' ')
+  const slow = await addText(a, 'A long one', big)
+  await a.until('the long document to be prepared', () => a.lib(`m.library.getDoc(${JSON.stringify(slow)})?.total > 0`), 60000)
+  await sleep(2500); await a.sync()
+  await b.until('the long document to reach device B with its text', async () => { await b.sync(); return b.lib(`m.library.loadDoc(${JSON.stringify(slow)}).then(c => c?.segs?.length > 100)`) }, 60000)
+  const stuck = await b.lib("m.library.library.get().docs.filter(d => d.status === 'syncing' && !d.contentVer).length")
+  check('once prepared it arrives, text and all, and nothing is left waiting', stuck === 0, `${stuck} waiting`)
   check('no errors were thrown on either device', a.errors.length + b.errors.length === 0, [...a.errors, ...b.errors].join(' | '))
 } catch (e) {
   check(String(e.message).split('\n')[0], false)

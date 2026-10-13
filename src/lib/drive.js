@@ -27,7 +27,7 @@ export const clockNow = () => Date.now() - ahead
 
 async function getPass() {
   if (pass && Date.now() < pass.until) return pass
-  const res = await fetch('/api/auth/token', { method: 'POST' })
+  const res = await fetch('/api/auth/token', { method: 'POST', signal: AbortSignal.timeout(30_000) })
   if (res.status === 401) throw Object.assign(new Error('Signed out'), { signedOut: true })
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Could not renew sign-in (${res.status})`)
   const got = await res.json()
@@ -48,9 +48,16 @@ async function why(res) {
   return `Google Drive: ${e.message || res.status}`
 }
 
+// How long a request may go unanswered. One that never answers used to leave the round unfinished, and with
+// it every later round, sign-out and download, until the app was closed. A part of a book's text is up to
+// 1.5 MB on what may be a slow phone connection, so it is given longer.
+const ANSWER_MS = 30_000
+const UPLOAD_MS = 180_000
+const unanswered = e => (e?.name === 'TimeoutError' || e?.name === 'AbortError' ? new Error('Google Drive did not answer. Noesis will try again.') : e)
+
 async function call(path, init = {}, again = true) {
   const p = await getPass()
-  const res = await fetch(p.api + path, { ...init, headers: { ...init.headers, authorization: `Bearer ${p.value}` } })
+  const res = await fetch(p.api + path, { ...init, signal: AbortSignal.timeout(init.body ? UPLOAD_MS : ANSWER_MS), headers: { ...init.headers, authorization: `Bearer ${p.value}` } }).catch(e => { throw unanswered(e) })
   if (res.status === 401 && again) { forgetPass(); return call(path, init, false) } // the pass ran out early: one fresh one
   if (!res.ok) throw Object.assign(new Error(await why(res)), { status: res.status })
   return res

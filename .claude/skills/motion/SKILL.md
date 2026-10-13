@@ -149,3 +149,8 @@ counters (style recalculations a second, main-thread work a second) while the vo
   first three measurements of this change were of a paused page.
 - Reading aloud, on a phone four times slower than the laptop: Text 191 ms of work a second (was 246), Focus
   157 (was 213), no frame over 34 ms in either. A change to either view is measured against the build before it.
+- **A sheet builds only what is seen first.** "Your listening" built its whole page (a chart, a calendar of
+  119 days, four cards) in the frame the sheet opened: 0.26 s frozen on a slow phone, 0.13 s on every change of
+  stretch. Now what is further down is built after the sheet has landed, in two pieces; what does not depend
+  on the control at the top is its own memo component; many bars grow as ONE holder (`[data-grow]`). Opening
+  it costs what the lightest sheet costs (76 ms worst frame against 264; the Add sheet is 83).

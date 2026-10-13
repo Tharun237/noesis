@@ -39,7 +39,10 @@ export function useActivity() {
   // The document actually being processed now: reading or narrating first; a queued one only if
   // nothing is being processed. Within a stage the oldest work runs first.
   const prep = useStore(library, s => {
-    const docs = s.docs.filter(d => PREP.has(d.status))
+    // A document waiting for ANOTHER device to send it is not work being done here: it says so on its own
+    // card, and does not sit in this pill for hours (it did: "showing waiting for other devices from the
+    // past 3hrs", Tharun, 2026-10-13).
+    const docs = s.docs.filter(d => PREP.has(d.status) && !(d.status === 'syncing' && !d.contentVer))
     return docs.find(d => d.status === 'reading' || d.status === 'narrating')
       || docs.find(d => d.status === 'syncing')
       || docs.find(d => d.status === 'queued')
@@ -74,9 +77,6 @@ export function useActivity() {
   }
   // (4) the document actually being processed now.
   if (prep && !onReaderOf(prep.id)) {
-    if (prep.status === 'syncing' && !prep.contentVer) {
-      return { key: 'prep-' + prep.id, text: 'Waiting for your other device to finish preparing', detail: prep.title, open: prep.id }
-    }
     return { key: 'prep-' + prep.id, text: prep.stage || 'Reading the document', detail: prep.title, progress: prep.prep >= 0.01 ? prep.prep : undefined, open: prep.id }
   }
   // (5) offline, only while an action that needs the network is actually pending.
