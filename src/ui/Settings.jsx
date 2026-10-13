@@ -23,6 +23,8 @@ import { AmbientCard } from './AmbientCard.jsx'
 import { AwarenessCard } from './AwarenessCard.jsx'
 import { askAware } from '../lib/extras.js'
 import SUPPORT from '../lib/support.json'
+import { speedLabel } from '../lib/speed.js'
+import { SpeedSlider } from './SpeedSlider.jsx'
 import { updateState, updateNow } from '../lib/updates.js'
 
 const SOUND_NAMES = { off: 'Off', focus: 'Focus', calm: 'Calm', brown: 'Brown noise' }
@@ -148,8 +150,8 @@ function SectionBody({ id, s }) {
     return (
       <>
         <Group title="Playback">
-          <Field title={`Default speed · ${s.speed}x`}>
-            <input type="range" min={0.5} max={3} step={0.05} value={s.speed} aria-label="Default speed" onChange={e => settings.set({ speed: +e.target.value })} style={{ accentColor: T.accent, width: '100%' }} />
+          <Field title={`Speed · ${speedLabel(s.speed)}`}>
+            <SpeedSlider value={s.speed} onChange={speed => settings.set({ speed })} />
           </Field>
           <Toggle checked={s.autoplayNext} onChange={v => settings.set({ autoplayNext: v })} labelText="Play the next document automatically"
             hint="When a document ends, the next unfinished one in your queue starts." />

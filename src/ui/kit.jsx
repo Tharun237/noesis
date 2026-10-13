@@ -285,7 +285,8 @@ const MENU_Z = 55 // over a sheet (50), whose buttons can open one; under the to
 
 // Popover menu anchored to its trigger. On open it measures the room around the trigger and
 // opens toward whichever side fits, so it never spills off-screen (e.g. the speed menu at the right edge).
-export function Menu({ trigger, items, align = 'right', up = false }) {
+// children: something other than rows to hang there (the speed slider), named by `label` for a screen reader.
+export function Menu({ trigger, items = [], align = 'right', up = false, children, label }) {
   const [open, setOpen] = useState(false)
   const [place, setPlace] = useState({ side: align, up, maxH: 480, x: 0, y: 0 })
   const ref = useRef(null)
@@ -323,7 +324,7 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
       {trigger(toggle, open)}
       {createPortal(<AnimatePresence>
         {open && (
-          <motion.div ref={menu} role="menu" initial={{ opacity: 0, y: place.up ? 12 : -12, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1, transition: T.spring }}
+          <motion.div ref={menu} role={children ? 'dialog' : 'menu'} aria-label={children ? label : undefined} initial={{ opacity: 0, y: place.up ? 12 : -12, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1, transition: T.spring }}
             exit={{ opacity: 0, y: place.up ? 8 : -8, scale: 0.94, transition: { duration: 0.12, ease: 'easeIn' } }}
             style={{
               position: 'fixed', [place.side]: place.x, [place.up ? 'bottom' : 'top']: place.y, minWidth: 230, maxWidth: `min(${MENU_W + 60}px, calc(100vw - ${EDGE * 2}px))`,
@@ -331,6 +332,7 @@ export function Menu({ trigger, items, align = 'right', up = false }) {
               background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: T.r.lg, padding: 6,
               boxShadow: '0 24px 60px rgba(0,0,0,0.85)', transformOrigin: `${place.side} ${place.up ? 'bottom' : 'top'}`,
             }}>
+            {children}
             {items.filter(Boolean).map((it, i) => it === '-' ? <div key={i} style={{ height: 1, background: T.border, margin: '6px 4px' }} /> : it.heading ? (
               <div key={i} style={{ padding: '8px 12px 4px', fontFamily: T.font, fontSize: 12.5, fontWeight: 600, color: T.faint }}>{it.heading}</div>
             ) : (

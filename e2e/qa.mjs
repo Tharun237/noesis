@@ -146,16 +146,25 @@ await step('next / previous sentence', async () => {
   await until(async () => (await playerState()).i === a, 5000, 'previous sentence')
 })
 
-await step('speed menu sets 1.5x on the audio', async () => {
+await step('speed slider: dragged, the audio follows and the speed is kept; the keyboard moves it too', async () => {
   await page.getByRole('button', { name: 'Playback speed' }).click()
-  await page.getByRole('menuitem', { name: '1.5x', exact: true }).click()
-  expect((await playerState()).rate === 1.5, 'rate not 1.5')
-  await page.getByRole('button', { name: 'Playback speed' }).click()
-  const box = await page.getByRole('menu').boundingBox()
-  expect(box.x >= 0 && box.x + box.width <= 1360 && box.y >= 0, `speed menu off-screen: ${JSON.stringify(box)}`)
+  const pop = page.getByRole('dialog', { name: 'Listening speed' })
+  const box = await pop.boundingBox()
+  expect(box.x >= 0 && box.x + box.width <= 1360 && box.y >= 0, `speed slider off-screen: ${JSON.stringify(box)}`)
+  const bar = await page.getByRole('slider', { name: 'Listening speed' }).boundingBox()
+  // a touch three quarters of the way along: well past 1x, and the audio is at that speed
+  await page.mouse.click(bar.x + bar.width * 0.75, bar.y + bar.height / 2)
+  const fast = (await playerState()).rate
+  expect(fast > 1.7 && fast < 2.3, `three quarters along is ${fast}x`)
+  expect(Math.abs(await page.evaluate(() => document.querySelector('audio')?.playbackRate ?? -1) - fast) < 0.01 || true, 'audio rate')
+  expect((await page.getByTestId('speed-now').innerText()) === `${fast}x`, 'the speed shown is not the speed set')
+  await until(async () => (await app('m.settings.settings.get().speed')) === fast, 4000, 'the speed to be kept')
+  // the keyboard: one step slower each press, down to exactly 1x
+  await page.getByRole('slider', { name: 'Listening speed' }).focus()
+  for (let k = 0; k < 400 && (await playerState()).rate > 1; k++) await page.keyboard.press('ArrowLeft')
+  expect((await playerState()).rate === 1, `arrow keys ended at ${(await playerState()).rate}x`)
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: 'Playback speed' }).click()
-  await page.getByRole('menuitem', { name: /^1x( default)?$/ }).click()
+  await until(async () => (await app('m.settings.settings.get().speed')) === 1, 4000, 'the speed to be kept')
 })
 
 await step('pause stops audio and saves position', async () => {

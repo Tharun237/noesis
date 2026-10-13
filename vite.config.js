@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { execSync } from 'node:child_process'
 import { PLAIN_PAGES } from './tools/pages.mjs' // writes the plain search pages into public/ as it is read, and names them
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -10,9 +11,14 @@ import pkg from './package.json' with { type: 'json' }
 // This build's stamp: shown in Settings, and written to /version.json so a running app can ask what the newest
 // build is without asking its own service worker (src/lib/updates.js).
 const BUILD = new Date().toISOString()
+// The version: the first two numbers are set by hand in package.json (1.0: launched, October 2026); the third is
+// how many changes have been made to Noesis in all, counted by git, so every release has a number of its own
+// without anybody remembering to raise it. (It stood at 0.1.0 from the first day to the launch.)
+const changes = (() => { try { return execSync('git rev-list --count HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return '' } })()
+const VERSION = /^\d+$/.test(changes) ? `${pkg.version.split('.').slice(0, 2).join('.')}.${changes}` : pkg.version
 const versionFile = {
   name: 'noesis-version',
-  generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD, version: pkg.version }) }) },
+  generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD, version: VERSION }) }) },
 }
 
 // Cross-origin isolation unlocks SharedArrayBuffer → multithreaded WASM inference.
@@ -111,7 +117,7 @@ export default defineConfig({
       },
     }),
   ],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version), __APP_BUILD__: JSON.stringify(BUILD) },
+  define: { __APP_VERSION__: JSON.stringify(VERSION), __APP_BUILD__: JSON.stringify(BUILD) },
   worker: { format: 'es' },
   server: { headers: isolation },
   preview: { headers: isolation },

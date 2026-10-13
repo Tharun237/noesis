@@ -438,6 +438,9 @@ function voiceChanged() {
 }
 library.sub(voiceChanged)
 settings.sub(voiceChanged)
+// One speed, the customer's: set in Settings or arriving from another device, it is the speed being heard.
+let usual = settings.get().speed
+settings.sub(() => { const s = settings.get().speed; if (s !== usual) { usual = s; if (player.get().rate !== s) setRate(s) } })
 
 export const toggle = () => (player.get().playing || pendingStart ? pause() : play())
 export const nextSentence = () => load(player.get().i + 1, { dir: 1 })

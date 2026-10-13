@@ -1,5 +1,6 @@
 import { onShelf } from './shelf.js'
 import { createStore } from './store.js'
+import { SPEED_USUAL } from './speed.js'
 
 // Per-device preferences. The AI keys live only here (localStorage on this device). The
 // Gemini key is sent only to generativelanguage.googleapis.com; the NVIDIA key and the text
@@ -24,7 +25,8 @@ export const DEFAULTS = {
   voiceNames: '', // comma-separated voice names for that service, e.g. alloy, nova
   voice: 'en_GB-alba-medium', // default voice for new documents (voices.js)
   voiceTone: 'natural', // natural | clear | warm | bright — generation-time equalizer (tone.js)
-  speed: 1,
+  speed: SPEED_USUAL, // 0.9x: about the pace a person talks at (lib/speed.js)
+  paced: 1, // this device knows 0.9x is the usual speed (see load)
   voiceEngine: 'natural', // natural (Piper, generated on the device) | system (built-in TTS) — see engine.js
   systemVoice: '', // voiceURI of the built-in voice ('' = device default)
   voiceSpeed: 0, // measured on this device: seconds of audio generated per second (0 = not measured yet)
@@ -58,7 +60,13 @@ export const DEFAULTS = {
 }
 
 function load() {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') } } catch { return { ...DEFAULTS } }
+  try {
+    const kept = JSON.parse(localStorage.getItem(KEY) || '{}')
+    // The usual speed was 1x until 13 October 2026, and every device wrote it down whether its owner had
+    // chosen it or not. Once, a device still at 1x moves to the new usual. (One whose owner then sets 1x keeps it.)
+    if (!kept.paced && kept.speed === 1) kept.speed = SPEED_USUAL
+    return { ...DEFAULTS, ...kept, paced: 1 }
+  } catch { return { ...DEFAULTS } }
 }
 
 export const settings = createStore(load())

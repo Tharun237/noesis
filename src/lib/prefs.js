@@ -21,9 +21,10 @@ settings.sub(() => {
   if (changed && !quiet) touch('prefs')
 })
 
-export const prefsSnapshot = () => only(settings.get())
+export const prefsSnapshot = () => ({ ...only(settings.get()), paced: 1 })
 export const quietly = fn => { quiet = true; try { return fn() } finally { quiet = false } }
-export const applyPrefs = v => quietly(() => settings.set(only(v || {})))
+// From a device that still has the old usual speed written down (no `paced`): 1x there means "never chosen".
+export const applyPrefs = v => quietly(() => settings.set(only(v && !v.paced && v.speed === 1 ? { ...v, speed: DEFAULTS.speed } : v || {})))
 
 // The first time on a device: what it is already set to is offered to the others, as something worked out
 // (sync.js touchAfter), so it never beats a setting really changed somewhere.

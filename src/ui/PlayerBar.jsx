@@ -6,6 +6,8 @@ import { go, openSheet, toast } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { library, loadDoc, toggleMark } from '../lib/library.js'
 import { player, toggle, nextSentence, prevSentence, setRate, setSleep, seekTime, timeline } from '../lib/player.js'
+import { speedLabel } from '../lib/speed.js'
+import { SpeedSlider } from './SpeedSlider.jsx'
 import { voiceName } from '../lib/voices.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel, systemVoices } from '../lib/engine.js'
 
@@ -25,7 +27,6 @@ import { usePace } from './usePace.js'
 import { atPace } from '../lib/pace.js'
 import { ArcScrubber } from './ArcScrubber.jsx'
 
-const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
 const SLEEP = [[10, '10 minutes'], [20, '20 minutes'], [30, '30 minutes'], [45, '45 minutes'], [60, '1 hour'], [90, '1½ hours'], [120, '2 hours']]
 
 function useTimeline(id) {
@@ -131,22 +132,26 @@ function PlayButton({ playing, waiting, size }) {
   )
 }
 
+// How fast it is heard: the speed, large, over one bar to drag (SpeedSlider.jsx). It was eight fixed speeds, two
+// rows to nudge by a tenth and one to "make it the default". There is one speed now and it is the customer's:
+// what is set here is how every document is heard, on every device they sign in on.
 function SpeedMenu() {
   const rate = useStore(player, s => s.rate)
-  const def = useStore(settings, s => s.speed)
   return (
-    <Menu up align="left" trigger={t => (
+    <Menu up align="left" label="Listening speed" trigger={t => (
       <button type="button" onClick={t} aria-label="Playback speed"
         style={{ height: 36, minWidth: 54, padding: '0 10px', borderRadius: T.r.pill, border: `1px solid ${T.border}`, background: 'transparent', color: T.text, fontFamily: T.mono, fontSize: 13, cursor: 'pointer' }}>
-        <Swap>{`${rate}x`}</Swap>
+        <Swap>{speedLabel(rate)}</Swap>
       </button>
-    )} items={[
-      ...SPEEDS.map(s => ({ label: `${s}x`, icon: s === rate ? 'check' : undefined, right: s === def ? 'default' : undefined, onClick: () => setRate(s) })),
-      '-',
-      { label: 'Slower (−0.1x)', onClick: () => setRate(rate - 0.1) },
-      { label: 'Faster (+0.1x)', onClick: () => setRate(rate + 0.1) },
-      { label: `Make ${rate}x the default`, disabled: rate === def, onClick: () => settings.set({ speed: rate }) },
-    ]} />
+    )}>
+      <div style={{ width: 'min(300px, calc(100vw - 60px))', padding: '12px 12px 8px', display: 'grid', gap: 12, fontFamily: T.font }}>
+        <div style={{ display: 'grid', gap: 2 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: T.faint }}>Speed</span>
+          <span data-testid="speed-now" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{speedLabel(rate)}</span>
+        </div>
+        <SpeedSlider value={rate} onChange={setRate} onSettle={speed => settings.set({ speed })} />
+      </div>
+    </Menu>
   )
 }
 
