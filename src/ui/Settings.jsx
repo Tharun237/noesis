@@ -22,6 +22,7 @@ import { CreditsCard } from './Credits.jsx'
 import { AmbientCard } from './AmbientCard.jsx'
 import { AwarenessCard } from './AwarenessCard.jsx'
 import { askAware } from '../lib/extras.js'
+import SUPPORT from '../lib/support.json'
 
 const SOUND_NAMES = { off: 'Off', focus: 'Focus', calm: 'Calm', brown: 'Brown noise' }
 
@@ -179,6 +180,14 @@ function SectionBody({ id, s }) {
   return (
     <>
       <InstallBody />
+      {/* Paying is voluntary and changes nothing in the app (.claude/skills/goods-and-services). It is offered here,
+          once, and nowhere else: no banner, no reminder. Shown only when there is somewhere to pay (support.json). */}
+      {SUPPORT.url && (
+        <Group title="Support Noesis">
+          <div style={{ fontSize: 14, lineHeight: 1.55, color: T.sub }}>Noesis is free to use, whether you pay or not. If it is worth something to you, you can pay any amount, once. Nothing in the app changes.</div>
+          <div><Button kind="primary" onClick={() => { location.href = '/support' }}>Support Noesis</Button></div>
+        </Group>
+      )}
       <CreditsCard Card={Group} />
       <DiagnosticsCard Card={Group} />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>

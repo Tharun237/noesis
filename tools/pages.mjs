@@ -6,7 +6,7 @@
 // Rules for every line (the same as /listen-to-pdf and /privacy): a fact about the app as it is today, nothing
 // about other products, no promise the app does not keep. When the app changes, the page changes with it.
 // /listen-to-pdf, /alternatives and /privacy are written by hand and are only listed here (HAND).
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const SITE = 'https://www.noesisaudio.com'
@@ -224,6 +224,40 @@ ${BEACON}
 `
 }
 
+// Paying for Noesis (.claude/skills/goods-and-services): written only when there is somewhere to pay
+// (src/lib/support.json has a link). It says what the payment is, who takes it and what it does not do, before
+// the customer is sent to the payment page.
+const SUPPORT = JSON.parse(readFileSync(fileURLToPath(new URL('../src/lib/support.json', import.meta.url)), 'utf8'))
+function support() {
+  return `${HEAD('Support Noesis', 'Noesis is free to use. If it is worth something to you, you can support it with a payment of any amount. Nothing in the app changes.', 'support')}
+  </head>
+  <body>
+    <main>
+      <a class="mark" href="/">Noesis</a>
+      <h1>Support Noesis</h1>
+      <p class="short">Noesis is free to use, and stays as it is whether you pay or not. If it is worth something to you, you can support it with a payment of any amount, once.</p>
+      <a class="go" href="${esc(SUPPORT.url)}" rel="noopener">Support Noesis</a>
+
+      <h2>What this payment is</h2>
+      <ul>
+        <li><strong>It is voluntary.</strong> Nothing in the app is unlocked by paying, and nothing is held back if you do not.</li>
+        <li><strong>It is a payment to the maker, not a gift to a charity.</strong> There is no tax receipt for giving.</li>
+        <li><strong>It is taken on Razorpay's payment page, in the name of ${esc(SUPPORT.receiver)}</strong>, the maker's company. That is the name you will see on the payment page and on your statement.</li>
+        <li><strong>Noesis never sees your card or bank details.</strong> They are entered on Razorpay's page, not here, and nothing about your library goes with them.</li>
+        <li><strong>What it pays for:</strong> the address you are on, and the time to keep building.</li>
+      </ul>
+
+      <h2>A question about a payment</h2>
+      <p>Write to <a href="mailto:${esc(SUPPORT.email)}">${esc(SUPPORT.email)}</a>.</p>
+
+      <p class="foot"><a href="/guides">All guides</a> · <a href="/privacy">Privacy</a> · <a href="/">noesisaudio.com</a></p>
+    </main>
+${BEACON}
+  </body>
+</html>
+`
+}
+
 function hub() {
   const all = [...HAND, ...PAGES]
   return `${HEAD('What you can listen to with Noesis', 'Everything Noesis reads aloud, one page for each: PDFs, EPUB books, Word documents, research papers, web articles and pasted text, in nine languages.', 'guides')}
@@ -247,7 +281,8 @@ ${BEACON}
 
 for (const p of PAGES) writeFileSync(out(`${p.slug}.html`), page(p))
 writeFileSync(out('guides.html'), hub())
-const urls = ['', ...HAND.map(p => p.slug), ...PAGES.map(p => p.slug), 'guides', 'privacy']
+if (SUPPORT.url) writeFileSync(out('support.html'), support()); else rmSync(out('support.html'), { force: true })
+const urls = ['', ...HAND.map(p => p.slug), ...PAGES.map(p => p.slug), 'guides', ...(SUPPORT.url ? ['support'] : []), 'privacy']
 writeFileSync(out('sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
 <!-- The pages of Noesis that are for everyone (written by tools/pages.mjs). The app itself (a library, a document
      being read) is each person's own and lives on their device: it has no public pages to list. -->
@@ -256,5 +291,5 @@ ${urls.map(u => `  <url><loc>${SITE}/${u}</loc></url>`).join('\n')}
 </urlset>
 `)
 // the addresses the app's service worker must leave alone (vite.config.js reads this)
-export const PLAIN_PAGES = [...PAGES.map(p => p.slug), 'guides']
+export const PLAIN_PAGES = [...PAGES.map(p => p.slug), 'guides', 'support']
 console.log(`${PAGES.length + 1} pages and the sitemap written:`, PLAIN_PAGES.join(', '))

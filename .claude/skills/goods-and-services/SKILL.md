@@ -114,6 +114,27 @@ These are mine, offered for Tharun to accept, change or throw out:
 5. Be the customer (`.claude/skills/customer`): find the price where a customer would look, pay with a test
    payment, cancel, and check the free app is untouched.
 
+## Decided, 2026-10-13: the first thing offered is a supporter payment
+
+Tharun chose it from the options above: a voluntary payment of any amount, once, that changes nothing in the
+app. It passes the seven questions (no entitlement, so no record of who paid is needed).
+
+- **Built and switched off:** a "Support Noesis" card in Settings, About (the only place the app mentions it:
+  no banner, no reminder) and the page `/support`, which says before any money moves what the payment is, that
+  it is not a charity gift, who takes it and that Noesis never sees card details. Both appear only when
+  `src/lib/support.json` has a `url`.
+- **Where the money goes:** a payment link from the Razorpay account of Aetheral Catch Seafoods, Tharun's
+  company ("setting up separate Noesis Razorpay is hectic and not possible"). The page names that company,
+  because that is the name the customer sees on the payment page and their statement.
+- **To switch it on:** Tharun creates the payment link or page in Razorpay (the customer chooses the amount) and
+  gives the address. Put it in `support.json`, add to the privacy page that a payment is made on Razorpay's
+  page and what Razorpay keeps, build, deploy, then pay once with a small real amount and check the name shown.
+- **Before switching on, Tharun checks with Razorpay** (not verified here: do not state their rules from
+  memory): that this account may take payments for a second product and website, and how such a payment must
+  be described. It is worded as a payment to the maker, never as a "donation", on purpose.
+- Questions about a payment go to the address in `support.json` (his choice: his Gmail, shown publicly).
+- No refund promise is made on the page: that is his to decide and add.
+
 ## Questions only Tharun can answer
 
 - Who pays first: one person, or an organisation?
