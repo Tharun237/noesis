@@ -274,11 +274,23 @@ audio.addEventListener('timeupdate', () => {
     loadDoc(current.id).then(c => c && prefetch(current.id, c, current.to))
   }
 })
-// timeupdate only fires ~4 times a second; follow sentence changes every frame while the screen is on.
-let raf = 0
-const follow = () => { track(false); raf = requestAnimationFrame(follow) }
-audio.addEventListener('playing', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(follow) })
-for (const e of ['pause', 'ended', 'emptied']) audio.addEventListener(e, () => cancelAnimationFrame(raf))
+// timeupdate only fires ~4 times a second: the sentence being spoken is also looked for at the moment the
+// current one ends. (It was looked for on every frame, which made the phone build a frame sixty times a second
+// for something that happens every few seconds.) Never left longer than FOLLOW_MS, so a change of speed or a
+// jump is noticed as soon as timeupdate would have noticed it.
+const FOLLOW_MS = 250
+const FOLLOW_MIN_MS = 10
+let following = 0
+const follow = () => {
+  clearTimeout(following)
+  track(false)
+  if (!current || audio.paused) return
+  const next = current.k + 1 < current.n ? current.starts[current.k + 1] : audio.duration
+  const left = ((next - audio.currentTime) * 1000) / (audio.playbackRate || 1)
+  following = setTimeout(follow, Math.max(FOLLOW_MIN_MS, Math.min(FOLLOW_MS, left + 1)))
+}
+audio.addEventListener('playing', follow)
+for (const e of ['pause', 'ended', 'emptied']) audio.addEventListener(e, () => clearTimeout(following))
 audio.addEventListener('pause', () => { if (!audio.ended && !player.get().waiting && player.get().playing && audio.src && !system()) player.set({ playing: false }) })
 audio.addEventListener('play', () => player.set({ playing: true }))
 

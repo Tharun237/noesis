@@ -129,3 +129,23 @@ thing from where it was to where it lands.
   never nothing.
 - **A copy that flies between pages lets go if its landing place moves** (`coverflight.js`): it is fixed to the
   screen, its landing place is on the page.
+
+## What the browser will and will not move by itself (measured 2026-10-13, on an idle page and in the app)
+
+"Only transform and opacity" is necessary, not sufficient. These were each measured with the browser's own
+counters (style recalculations a second, main-thread work a second) while the voice read:
+
+- **A moving `::before` / `::after` inside a moving element is worked out on every frame** by the thread that
+  builds the page (145 recalculations a second against none). Put what moves in a real element; a pseudo-element
+  may draw the content (`content: attr(...)`) as long as it is not the thing animated. (`[data-lit]`, press.js.)
+- **An animation started several times a second spends most of its short life on that thread.** A landing for
+  every spoken word (three a second) doubled the work of reading. Per word: nothing moves but the lime's own
+  wipe. Something continuous is ONE animation, started once (`[data-breathe]`).
+- **A clock is read when what it waits for is due, never on every frame.** A `requestAnimationFrame` loop makes
+  the page build a frame sixty times a second, and every running animation is worked out again on each. The
+  word clock (litword.js) wakes when the word ends; the player's sentence follower when the sentence ends.
+- **The frame counter is itself a frame loop.** To measure the page's own work, measure without it
+  (`QUIET=1`), then count late frames in a separate run. And check the voice's clock moved during the run: the
+  first three measurements of this change were of a paused page.
+- Reading aloud, on a phone four times slower than the laptop: Text 191 ms of work a second (was 246), Focus
+  157 (was 213), no frame over 34 ms in either. A change to either view is measured against the build before it.

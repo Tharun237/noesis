@@ -23,6 +23,7 @@ import { waitWords } from '../lib/readiness-math.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { useLitWord } from './litword.js'
+import { Spoken } from './Spoken.jsx'
 import { numbersIn, columnsIn } from '../lib/sonify.js'
 import { findRef } from '../lib/citations.js'
 import { voiceName } from '../lib/voices.js'
@@ -741,11 +742,12 @@ function Preparing({ d, doc, pos }) {
 }
 
 // Word timing lives in src/lib/words.js so the lock screen can reuse it; the clock is useLitWord (litword.js).
-function ActiveSentence({ i, text, dur, tail, words, plain }) {
-  const { ws, lit, shown: showWords } = useLitWord(text, dur, tail, words)
+// `wipe` false (justified text, where the page may hyphenate any word): the word lights whole.
+function ActiveSentence({ i, text, dur, tail, words, plain, wipe }) {
+  const { ws, lit, ms, shown: showWords } = useLitWord(text, dur, tail, words)
   return (
     <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: plain ? 'transparent' : T.accentSoft, color: T.text, boxShadow: plain ? 'none' : `0 0 0 2px ${T.accentSoft}` }}>
-      {showWords ? ws.map((x, k) => <span key={k} style={{ color: k === lit ? T.lime : undefined }}>{x}{k < ws.length - 1 ? ' ' : ''}</span>) : text}{' '}
+      {showWords ? <Spoken ws={ws} lit={lit} ms={ms} ahead={T.body} wipe={wipe} /> : text}{' '}
     </span>
   )
 }
@@ -807,7 +809,7 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
   const tool = useMemo(() => (VISUAL_KINDS.has(b.k) ? toolFor(b) : null), [b])
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const sentences = b.s.map((t, k) => k === active
-    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} plain={!!boxes} />
+    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} plain={!!boxes} wipe={!typo.justify} />
     : (
       <span key={k} data-i={start + k}
         style={{

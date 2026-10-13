@@ -139,3 +139,19 @@ controls stay black, white and lime. Colour is allowed where it IS the informati
 - The reader's menu is about reading the document (find, bookmarks, hard words, float, voice, language,
   export). Keeping it (rename, collection, archive, delete) is the library card's menu.
 - A spoken command is plain speech, anywhere in a short sentence, with no name to say first.
+- Focus is one word as large as the screen carries it (its size comes from the screen's width), the pivot
+  letter in lime on a spot marked by two ticks, on a light whose colour is the mood of the writing at that
+  point: the same count as the player's line, so it means the same thing (amber brighter, blue darker, white
+  even, and stronger the stronger the feeling). Under it the sentence, at a size that can be read. The word
+  itself does not move: the eye rests on it.
+- The word being said fills with lime from its first letter to its last, in the time the voice takes to say
+  it, then lets the lime fade; said words are bright and words to come wait (`src/ui/Spoken.jsx`: Text and
+  Focus use the one component). Never a whole-word switch of colour.
+- A number says what it is. A place in a document is "done", not "heard" (a place can be jumped to); "heard"
+  and "today" are only ever time sound really played. Seven days back from today is "7 days", not "this
+  week". Under half a minute is "<1m", never "1m". Listening is measured from when sound starts to when it
+  stops, to the second, and written down the moment it stops.
+- Sign language is not drawn by Noesis. A sign language has its own grammar and word order; hand shapes drawn
+  for each English word would be finger-spelt English, slower than reading, and wrong to a Deaf reader. What
+  Noesis can truthfully give a reader who does not hear is in Focus and Text: the rhythm of the speech (the
+  fill), its force (a word said with force is larger) and its mood (the light).

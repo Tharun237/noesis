@@ -24,7 +24,8 @@ const FEELS_AT = 0.3 // nearer the middle than this, the writing is neither: "ev
 const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
 const BRIGHT = rgb(T.mood.bright), CALM = rgb(T.mood.calm), DARK = rgb(T.mood.dark)
 // the colour of a feeling, from -1 (dark) to 1 (bright): it leaves white quickly, so a mild mood still shows
-const moodColour = v => { const to = v >= 0 ? BRIGHT : DARK, f = Math.min(1, Math.abs(v)) ** 0.6; return `rgb(${CALM.map((c, i) => Math.round(c + (to[i] - c) * f)).join(' ')})` }
+// (`alpha` for a light of that colour rather than a line of it: Focus)
+export const moodColour = (v, alpha = 1) => { const to = v >= 0 ? BRIGHT : DARK, f = Math.min(1, Math.abs(v)) ** 0.6; return `rgb(${CALM.map((c, i) => Math.round(c + (to[i] - c) * f)).join(' ')} / ${alpha})` }
 const moodWord = v => (v > FEELS_AT ? 'Brighter' : v < -FEELS_AT ? 'Darker' : 'Even')
 const ARC_MIN_SENTENCES = 120
 const ARC_POINTS_MIN = 16
@@ -48,7 +49,7 @@ function fit(line, width) {
 
 const lines = new Map() // document -> its line, worked out once
 
-function useArc(d) {
+export function useArc(d) {
   const english = (d.lang || 'en') === 'en' && !d.foreign
   const key = english ? `${d.id}:${d.contentVer || 0}:${d.total || 0}` : null
   const [line, setLine] = useState(() => (key && lines.get(key)) || null)
@@ -87,7 +88,7 @@ function pathOf(line) {
   return `${d} L${last[0].toFixed(1)} ${last[1].toFixed(1)} L${VIEW_W} ${last[1].toFixed(1)}`
 }
 // the feeling (-1..1) at a share of the way through: where the dot sits and what colour it is
-function moodAt(line, share) {
+export function moodAt(line, share) {
   if (!line?.length) return 0
   const at = share * line.length - 0.5
   const i = Math.max(0, Math.min(line.length - 1, Math.floor(at)))

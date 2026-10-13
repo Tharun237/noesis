@@ -1,7 +1,7 @@
 // The numbers behind the listening bars (heard.js).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dayKey, weekOf, docListening, docBar } from './heard.js'
+import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS } from './heard.js'
 
 const now = new Date(2026, 9, 12, 15) // Monday 12 October 2026
 const day = n => dayKey(new Date(2026, 9, 12 - n))
@@ -41,4 +41,17 @@ test('nothing is promised without a pace, or when it is too far off', () => {
   assert.equal(docBar({ duration: 360000, share: 0 }, { today: 60, perDay: 60 }).days, null)
   assert.equal(docBar({ duration: 600, share: 1 }, { today: 600, perDay: 600 }).days, null) // finished
   assert.equal(docBar({ duration: 600, share: 0.2 }, { today: 99999, perDay: 600 }).today, 0.2) // today never exceeds heard
+})
+
+test('listening is the time that really passed while sound played, to the second', () => {
+  // 27.4 s of sound: 27 whole seconds now, the rest carried into the next stretch
+  assert.deepEqual(listenedBetween({ at: 1000, id: 'a', carry: 0 }, 28400), { seconds: 27, carry: 400 })
+  assert.deepEqual(listenedBetween({ at: 28400, id: 'a', carry: 400 }, 29000), { seconds: 1, carry: 0 })
+  // nothing was sounding: nothing is counted, and no fraction is kept from before
+  assert.deepEqual(listenedBetween({ at: 1000, id: null, carry: 700 }, 60000), { seconds: 0, carry: 0 })
+  // a slowed timer: a whole minute between two looks is still a minute of listening
+  assert.equal(listenedBetween({ at: 0, id: 'a' }, 60000).seconds, 60)
+  // the page was asleep, or the clock went backwards: not known, so not counted
+  assert.equal(listenedBetween({ at: 0, id: 'a' }, ASLEEP_MS + 1).seconds, 0)
+  assert.equal(listenedBetween({ at: 5000, id: 'a' }, 1000).seconds, 0)
 })

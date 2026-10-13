@@ -333,7 +333,10 @@ export const fmtTime = s => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60)
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`
 }
+// A length of time, to the minute. Under half a minute is said as that ("<1m"), never rounded up to a minute
+// it was not (five seconds into a document read "1m heard"), and nothing at all is "0m".
 export const fmtDur = s => {
-  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60)
-  return h ? `${h}h ${m}m` : `${Math.max(1, m)}m`
+  const mins = Math.round(s / 60)
+  if (mins < 1) return s >= 1 ? '<1m' : '0m'
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
 }

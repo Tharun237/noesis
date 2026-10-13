@@ -56,7 +56,7 @@ const DAY_MIN_SHARE = 0.025 // days thinner than this (of what is left) would be
 function Bar({ bar, colour, h }) {
   const perDay = bar.left > 0 ? bar.dayShare / bar.left : 0 // one day's listening, as a share of what is left
   const cut = perDay >= DAY_MIN_SHARE && perDay < 1
-  const said = `${Math.round(bar.heard * 100)}% heard, ${fmtDur(bar.leftSeconds)} left${bar.days != null ? `, about ${bar.days} more day${bar.days === 1 ? '' : 's'} at your pace` : ''}`
+  const said = `${Math.round(bar.heard * 100)}% done, ${fmtDur(bar.leftSeconds)} left${bar.days != null ? `, about ${bar.days} more day${bar.days === 1 ? '' : 's'} at your pace` : ''}`
   return (
     <div role="img" aria-label={said} style={{ display: 'flex', height: h, gap: bar.heard > 0 && bar.left > 0 ? Math.max(2, h / 3) : 0 }}>
       <div style={{ position: 'relative', flex: `${bar.heard} 1 0`, minWidth: bar.heard > 0 ? h * 1.5 : 0, borderRadius: h / 2, overflow: 'hidden', background: T.surfaceTop }}>
@@ -92,7 +92,9 @@ export function DocInsight({ d }) {
       <Bar bar={bar} colour={colour} h={8} />
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 16px', ...mono }}>
         <span>
-          <span style={{ color: T.sub }}>{fmtDur(bar.heardSeconds)} heard</span>
+          {/* how far through the document the place is: a place can be jumped to, so it is not called "heard";
+              what WAS listened to, today, is the number beside it */}
+          <span style={{ color: T.sub }}>{fmtDur(bar.heardSeconds)} done</span>
           {heardToday >= 60 && <span style={{ color: colour }}> · {fmtDur(heardToday)} today</span>}
         </span>
         <span>
@@ -127,11 +129,11 @@ export function LibraryGlance({ docs, wide }) {
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20 }}>
         <div style={{ flexShrink: 0, minWidth: 92 }}>
           <div style={label}>Today</div>
-          <div style={{ marginTop: 6, fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: T.text }}>{today >= 60 ? fmtDur(today) : '0m'}</div>
-          <div style={{ marginTop: 7, fontSize: 12.5, color: T.sub, whiteSpace: 'nowrap' }}>{fmtDur(weekSeconds)} this week</div>
+          <div style={{ marginTop: 6, fontSize: 30, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: T.text }}>{fmtDur(today)}</div>
+          <div style={{ marginTop: 7, fontSize: 12.5, color: T.sub, whiteSpace: 'nowrap' }}>{fmtDur(weekSeconds)} in 7 days</div>
         </div>
         {/* the week: a column a day, split by what was listened to */}
-        <div role="img" aria-label={`This week: ${week.map(d => `${d.letter} ${Math.round(d.seconds / 60)} minutes`).join(', ')}`} style={{ flex: wide ? '0 0 210px' : 1, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 7 }}>
+        <div role="img" aria-label={`The last seven days: ${week.map(d => `${d.letter} ${Math.round(d.seconds / 60)} minutes`).join(', ')}`} style={{ flex: wide ? '0 0 210px' : 1, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 7 }}>
           {week.map((day, i) => (
             <div key={day.key} style={{ display: 'grid', gap: 6, justifyItems: 'stretch' }}>
               <div style={{ height: COL_H, display: 'flex', alignItems: 'flex-end' }}>
@@ -150,7 +152,7 @@ export function LibraryGlance({ docs, wide }) {
       {/* the shelf: every document a block as wide as it is long, lit as far as it has been heard */}
       {all > 0 && (
         <div style={{ display: 'grid', gap: 8, minWidth: 0, paddingBottom: wide ? 16 : 0 }}>
-          <div role="img" aria-label={`${fmtDur(heard)} heard of ${fmtDur(all)} in these documents`} style={{ display: 'flex', gap: 2, height: 10 }}>
+          <div role="img" aria-label={`${fmtDur(heard)} done of ${fmtDur(all)} in these documents`} style={{ display: 'flex', gap: 2, height: 10 }}>
             {shelf.map(({ d, seconds, share }) => (
               <div key={d.id} title={`${d.title} · ${Math.round(share * 100)}%`} style={{ position: 'relative', flex: `${seconds} 1 0`, minWidth: 3, borderRadius: 3, overflow: 'hidden', background: T.surfaceTop }}>
                 <motion.div {...grow} style={{ position: 'absolute', inset: 0, transformOrigin: '0 50%' }}>
@@ -160,7 +162,7 @@ export function LibraryGlance({ docs, wide }) {
             ))}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, ...mono }}>
-            <span style={{ color: T.sub }}>{heard >= 60 ? fmtDur(heard) : '0m'} heard</span>
+            <span style={{ color: T.sub }}>{fmtDur(heard)} done</span>
             <span>{fmtDur(all - heard)} left</span>
           </div>
         </div>

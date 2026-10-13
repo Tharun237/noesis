@@ -9,6 +9,19 @@ export function dayKey(date) {
   return `${y}-${m}-${d}`
 }
 
+// How much listening lies between two looks at the player. `id` is the document that was sounding at the
+// first look (null: nothing was); every change of that is itself a look, so it held for the whole stretch.
+// A stretch longer than ASLEEP_MS means the page was not running (the phone slept, the tab was frozen):
+// what happened in it is not known, so it is not counted. A clock that went backwards counts nothing.
+// → whole seconds to add, and the milliseconds left over to carry into the next stretch.
+export const ASLEEP_MS = 90000
+export function listenedBetween({ at, id, carry = 0 }, now) {
+  const ms = now - at
+  if (!id || !(ms > 0) || ms > ASLEEP_MS) return { seconds: 0, carry: id ? carry : 0 }
+  const all = carry + ms
+  return { seconds: Math.floor(all / 1000), carry: all % 1000 }
+}
+
 const LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const back = (now, days) => { const d = new Date(now); d.setDate(now.getDate() - days); return d }
 

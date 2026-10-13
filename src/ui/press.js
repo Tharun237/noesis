@@ -34,6 +34,7 @@ const EASE = `cubic-bezier(${T.enter.ease.join(', ')})`
 const SLIDE = 'cubic-bezier(0.25, 1.18, 0.35, 1)' // a marker landing on what was chosen: arrives, with a little give
 const SLIDE_MS = 380
 const VIEW_MS = 320
+const SAID_MS = 420 // how long a word keeps its lime after it has been said
 const VIEW_Y = 12 // px a whole view rises as it arrives: less than a row (T.enter.y), it is a bigger thing
 
 const rules = [
@@ -82,6 +83,28 @@ const rules = [
   // new one rises in. No waiting, no empty frame between them.
   `@keyframes noesis-view{from{opacity:0;transform:translateY(${VIEW_Y}px)}}`,
   `[data-rise="view"]{animation:noesis-view ${VIEW_MS}ms ${EASE} backwards}`,
+  // The word being said fills with lime from its first letter to its last (Spoken.jsx). A copy of the word,
+  // drawn from the attribute, lies exactly over it: a holder with no width in the line of text, with the
+  // word once unseen (so its line sits at the same height as the real one) and once in lime inside a window.
+  // The window slides in from the left while the lime slides the other way inside it, so the lime stands
+  // still and is uncovered: two transforms, no layout, no repaint. A word just said lets its lime fade.
+  // What moves is always a real element (the <i>), never a ::before or ::after: the browser works a moving
+  // one of those out again on every frame, on the thread that builds the page (measured: 145 times a second
+  // against none), which doubled the phone's work while reading.
+  '@keyframes noesis-wipe{from{transform:translateX(-100%)}}',
+  '@keyframes noesis-wipe-in{from{transform:translateX(100%)}}',
+  '@keyframes noesis-said{to{opacity:0}}',
+  '[data-lit],[data-said]{display:inline-block;width:0;position:relative;z-index:1;white-space:pre;user-select:none;pointer-events:none}',
+  '[data-lit]::before{content:attr(data-lit);visibility:hidden}',
+  '[data-said]::before{content:attr(data-said);visibility:hidden}',
+  `[data-lit] i,[data-said] i{font-style:normal;color:${T.lime}}`,
+  '[data-lit] i::before,[data-said] i::before{content:attr(data-w)}',
+  '[data-lit]>span{position:absolute;left:0;top:0;overflow:hidden;animation:noesis-wipe var(--ms) linear both}',
+  '[data-lit]>span>i{display:block;animation:noesis-wipe-in var(--ms) linear both}',
+  `[data-said]>i{position:absolute;left:0;top:0;animation:noesis-said ${SAID_MS}ms ease-out both}`,
+  // the light behind Focus's word breathes while something is being read: one animation, started once
+  '@keyframes noesis-breathe{from{opacity:0.62;transform:scale(1)}to{opacity:1;transform:scale(1.07)}}',
+  '[data-breathe]{animation:noesis-breathe 2.4s ease-in-out infinite alternate}',
   // a line that has just replaced another (a status) fades up
   '@keyframes noesis-fade{from{transform:translateY(5px);opacity:0}to{transform:none;opacity:1}}',
   `[data-fade]{animation:noesis-fade 240ms ${EASE} both}`,

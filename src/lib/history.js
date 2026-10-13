@@ -5,14 +5,17 @@
 // plus `titles: { [docId]: title }` (kept so a deleted document still has a
 // name) and `finished: [{ id, day }]`. It is not synced in this task.
 // Time is wall-clock time while sound is actually playing, not audio duration
-// and not multiplied by speed.
+// and not multiplied by speed. It is measured, not sampled: from the moment sound starts to the moment it
+// stops, to the second, under the calendar day (this device's own date) it was heard on. The hour is not kept:
+// nothing in Noesis shows it, and a record nobody reads is not kept. Each document also keeps `lastPlayed`,
+// the moment it was last heard (library.js).
 import { createStore, useStore } from './store.js'
 import { db } from './db.js'
 import { player, audioState } from './player.js'
 import { activeEngine } from './engine.js'
 import { library, getDoc, addDocument } from './library.js'
 import { aiText } from './ai.js'
-import { dayKey } from './heard.js'
+import { dayKey, listenedBetween } from './heard.js'
 
 export const emptyLog = () => ({ titles: {}, finished: [] })
 
@@ -158,8 +161,12 @@ export async function makeRetrospective({ signal, period = 'month' } = {}) {
 
 let started = false
 
-// Count wall-clock time while sound is really playing. Loads the log once,
-// then every 5 seconds adds 5 seconds for the current document when playing.
+// Count wall-clock time while sound is really playing. Loads the log once, then looks at the player every
+// LOOK_MS and at every moment sound starts, stops or moves to another document, and adds the time that
+// really passed since the last look (heard.js listenedBetween). (It added a flat 5 seconds whenever a
+// 5-second timer found sound playing: 27 seconds of listening was written down as 30, and a browser that
+// slows a hidden page's timers would have written a minute down as 5 seconds.)
+const LOOK_MS = 5000
 export function startHistory() {
   if (started) return
   started = true
@@ -203,26 +210,36 @@ export function startHistory() {
       if (loaded) { lastSave = Date.now(); void db.putHistory(log) }
     }
   })
-  const tick = () => {
-    if (!loaded) return
+  // the document sound is coming out for right now, or null
+  const sounding = () => {
     const p = player.get()
-    if (p.playing && !p.waiting && p.id && (audioState().paused === false || (activeEngine() === 'system' && globalThis.speechSynthesis?.speaking))) {
-      const d = getDoc(p.id)
-      const titles = historyStore.get().log.titles || {}
-      const day = dayKey(new Date())
-      const log = addSeconds(historyStore.get().log, day, p.id, 5, d?.title || titles[p.id] || 'Untitled')
-      historyStore.set({ log })
-      if (Date.now() - lastSave >= 20000) {
-        lastSave = Date.now()
-        void db.putHistory(log)
-      }
+    return p.playing && !p.waiting && p.id && (audioState().paused === false || (activeEngine() === 'system' && globalThis.speechSynthesis?.speaking)) ? p.id : null
+  }
+  let last = { at: Date.now(), id: null, carry: 0 }
+  const look = () => {
+    const now = Date.now()
+    const { seconds, carry } = listenedBetween(last, now)
+    const id = last.id
+    last = { at: now, id: sounding(), carry }
+    if (!loaded || !seconds) return
+    const titles = historyStore.get().log.titles || {}
+    const log = addSeconds(historyStore.get().log, dayKey(new Date(now)), id, seconds, getDoc(id)?.title || titles[id] || 'Untitled')
+    historyStore.set({ log })
+    // written down every 20 seconds while sound plays, and at once when it stops: closing the app straight
+    // after a pause loses nothing (it lost up to 20 seconds)
+    if (now - lastSave >= 20000 || !last.id) {
+      lastSave = now
+      void db.putHistory(log)
     }
   }
-  setInterval(tick, 5000)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && loaded) {
-      lastSave = Date.now()
-      void db.putHistory(historyStore.get().log)
-    }
-  })
+  setInterval(look, LOOK_MS)
+  player.sub(() => { if (sounding() !== last.id) look() }) // sound started, stopped or changed document: the stretch ends here
+  const leaving = () => {
+    if (!loaded) return
+    look()
+    lastSave = Date.now()
+    void db.putHistory(historyStore.get().log)
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') leaving() })
+  addEventListener('pagehide', leaving)
 }

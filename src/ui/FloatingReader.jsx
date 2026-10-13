@@ -53,7 +53,9 @@ export function FloatingReader() {
   // frame clock: the app tab's frames stop while the reader is used from another tab or app.
   useEffect(() => {
     if (!playing || sys || !doc || !sentText) return
-    const view = host.current.ownerDocument.defaultView
+    // a floating window that has just been closed has no frame clock, and nobody to show a word to
+    const view = host.current?.ownerDocument.defaultView
+    if (!view) return undefined
     let frame = 0
     const loop = () => {
       const dur = doc.durs[i]
