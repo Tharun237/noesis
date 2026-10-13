@@ -33,6 +33,9 @@ export const db = {
   putChat: (id, msgs) => set('chat:' + id, msgs, content),
   getHistory: () => get('history', content),
   putHistory: log => set('history', log, content),
+  // listening on the customer's other devices, as received: { '<device>:<year>': log } (history.js)
+  getHeardElsewhere: () => get('history-elsewhere', content),
+  putHeardElsewhere: all => set('history-elsewhere', all, content),
   delContent: id => delMany(['src:' + id, 'doc:' + id, 'durs:' + id, 'chat:' + id, 'tr:' + id], content),
 
   // Finished translation chunks (Map chunkIndex → strings) so a restarted run

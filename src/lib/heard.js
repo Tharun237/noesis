@@ -22,6 +22,59 @@ export function listenedBetween({ at, id, carry = 0 }, now) {
   return { seconds: Math.floor(all / 1000), carry: all % 1000 }
 }
 
+// Listening on several devices. Each device writes down only its OWN listening, and what is shown is all of
+// them added together: so two devices listening at the same hour never overwrite each other, and nothing is
+// counted twice (a device's record is never added into another's).
+const isDay = k => /^\d{4}-\d{2}-\d{2}$/.test(k)
+const yearOfDay = day => String(day).slice(0, 4)
+
+// Records as one: seconds add up; a title or a finish known to any of them is known. Later records win a
+// title, so this device's own goes last.
+export function mergeLogs(logs) {
+  const out = { titles: {}, finished: [] }
+  const seen = new Set()
+  for (const log of logs) {
+    if (!log) continue
+    for (const k of Object.keys(log)) {
+      if (!isDay(k)) continue
+      const day = (out[k] ||= {})
+      for (const [id, s] of Object.entries(log[k] || {})) day[id] = (day[id] || 0) + (s || 0)
+    }
+    Object.assign(out.titles, log.titles)
+    for (const f of log.finished || []) {
+      const key = `${f.id} ${f.day}`
+      if (!seen.has(key)) { seen.add(key); out.finished.push(f) }
+    }
+  }
+  return out
+}
+
+// One year of a record, with the titles it needs: what is sent (a year is a small file that stops growing
+// when the year ends, however many years someone listens for).
+export function yearOf(log, year) {
+  const out = { titles: {}, finished: (log?.finished || []).filter(f => yearOfDay(f.day) === year) }
+  const ids = new Set(out.finished.map(f => f.id))
+  for (const k of Object.keys(log || {})) {
+    if (!isDay(k) || yearOfDay(k) !== year) continue
+    out[k] = log[k]
+    for (const id of Object.keys(log[k] || {})) ids.add(id)
+  }
+  for (const id of ids) if (log?.titles?.[id]) out.titles[id] = log.titles[id]
+  return out
+}
+export const yearsIn = log => [...new Set([...Object.keys(log || {}).filter(isDay), ...(log?.finished || []).map(f => f.day)].map(yearOfDay))].sort()
+
+// Two copies of the SAME device's record (this one, and the one it sent before its storage was cleared): a
+// count only ever grows, so the larger of each is the true one.
+export function newest(a, b) {
+  const out = mergeLogs([b, a])
+  for (const k of Object.keys(out)) {
+    if (!isDay(k)) continue
+    for (const id of Object.keys(out[k])) out[k][id] = Math.max(a?.[k]?.[id] || 0, b?.[k]?.[id] || 0)
+  }
+  return out
+}
+
 const LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const back = (now, days) => { const d = new Date(now); d.setDate(now.getDate() - days); return d }
 

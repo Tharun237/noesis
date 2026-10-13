@@ -3,7 +3,7 @@ import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
-import { useHistory, summarise, makeRetrospective } from '../lib/history.js'
+import { useHistory, historyStore, summarise, makeRetrospective } from '../lib/history.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { motion } from 'motion/react'
 import { Button, IconButton, Pulse, Appear, Count, rowIn } from './kit.jsx'
@@ -28,6 +28,7 @@ const fmtSince = since => {
 export function Listening({ wide }) {
   useStore(settings)
   const log = useHistory()
+  const devices = useStore(historyStore, s => s.devices)
   const summary = useMemo(() => summarise(log, new Date()), [log])
   const keyed = hasAiKey()
   const enough = summary.month >= 600
@@ -87,7 +88,7 @@ export function Listening({ wide }) {
         </div>
       )}
       <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
-        {summary.since ? `Counted on this device since ${fmtSince(summary.since)}.` : 'Nothing counted yet. Listening time is counted from now on, on this device.'}
+        {summary.since ? `Counted on ${devices > 1 ? `your ${devices} devices` : 'this device'} since ${fmtSince(summary.since)}.` : 'Nothing counted yet. Listening time is counted from now on.'}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         {/* two buttons share the row: each takes half. (Each was "full" width, so the second sat wholly off the

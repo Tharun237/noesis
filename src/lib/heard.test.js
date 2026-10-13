@@ -1,7 +1,7 @@
 // The numbers behind the listening bars (heard.js).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS } from './heard.js'
+import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS, mergeLogs, yearOf, yearsIn, newest } from './heard.js'
 
 const now = new Date(2026, 9, 12, 15) // Monday 12 October 2026
 const day = n => dayKey(new Date(2026, 9, 12 - n))
@@ -54,4 +54,28 @@ test('listening is the time that really passed while sound played, to the second
   // the page was asleep, or the clock went backwards: not known, so not counted
   assert.equal(listenedBetween({ at: 0, id: 'a' }, ASLEEP_MS + 1).seconds, 0)
   assert.equal(listenedBetween({ at: 5000, id: 'a' }, 1000).seconds, 0)
+})
+
+test('listening on several devices is added together, and nothing is counted twice', () => {
+  const phone = { '2026-10-13': { a: 600, b: 60 }, '2025-12-31': { a: 30 }, titles: { a: 'Alpha', b: 'Beta' }, finished: [{ id: 'a', day: '2026-10-13' }] }
+  const laptop = { '2026-10-13': { a: 300 }, '2026-10-12': { c: 120 }, titles: { a: 'Alpha (renamed)', c: 'Gamma' }, finished: [{ id: 'a', day: '2026-10-13' }] }
+  const all = mergeLogs([phone, laptop])
+  assert.deepEqual(all['2026-10-13'], { a: 900, b: 60 })
+  assert.deepEqual(all['2026-10-12'], { c: 120 })
+  assert.equal(all.finished.length, 1) // the same finish, known to both, is one finish
+  assert.equal(all.titles.a, 'Alpha (renamed)') // the later record names it
+  assert.deepEqual(phone['2026-10-13'], { a: 600, b: 60 }) // the records themselves are untouched
+  // merging what a device sent with what it already shows of ITSELF must never happen by adding: newest()
+  const sentBefore = { '2026-10-13': { a: 500 }, titles: { a: 'Alpha' }, finished: [] }
+  assert.deepEqual(newest(phone, sentBefore)['2026-10-13'], { a: 600, b: 60 })
+})
+
+test('a record is sent a year at a time, with only what that year needs', () => {
+  const log = { '2026-10-13': { a: 600 }, '2025-12-31': { b: 30 }, titles: { a: 'Alpha', b: 'Beta', z: 'Never heard' }, finished: [{ id: 'b', day: '2025-12-31' }] }
+  assert.deepEqual(yearsIn(log), ['2025', '2026'])
+  assert.deepEqual(yearOf(log, '2025'), { '2025-12-31': { b: 30 }, titles: { b: 'Beta' }, finished: [{ id: 'b', day: '2025-12-31' }] })
+  // the years put back together are the record
+  const back = mergeLogs(yearsIn(log).map(y => yearOf(log, y)))
+  assert.deepEqual(back['2026-10-13'], { a: 600 })
+  assert.deepEqual(back['2025-12-31'], { b: 30 })
 })

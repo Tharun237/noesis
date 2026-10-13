@@ -583,11 +583,16 @@ const remotePos = new Set()
 export const onRemotePos = f => { remotePos.add(f); return () => remotePos.delete(f) }
 const pending = new Map() // pos/marks that arrived before their doc's meta: id → patch
 
+// Listening records are history.js's: it gives sync their keys, their contents and what to do with one that arrives.
+let heard = null
+export const setHeardSync = h => { heard = h }
+
 const syncHooks = {
-  allKeys: () => ['cols', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id])],
+  allKeys: async () => ['cols', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id]), ...(await heard?.keys() || [])],
   content: id => db.getDoc(id),
   snapshot(k) {
     if (k === 'cols') return { collections: library.get().collections }
+    if (k.startsWith('heard:')) return heard?.snapshot(k)
     const [type, id] = k.split(':')
     const d = getDoc(id)
     if (type === 'meta') return d ? pick(d, META_FIELDS) : { deleted: true } // deleted → tombstone
@@ -597,6 +602,7 @@ const syncHooks = {
   },
   async apply(k, v) {
     if (k === 'cols') return library.set({ collections: v.collections || [] })
+    if (k.startsWith('heard:')) return heard?.apply(k, v)
     const [type, id] = k.split(':')
     const d = getDoc(id)
     if (type === 'meta') {

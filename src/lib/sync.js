@@ -5,6 +5,9 @@
 //
 // Records, one small file each, named by its key:
 //   meta:<doc> · pos:<doc> · marks:<doc> · cols · doc:<doc>:<ver>:<part> (book text, gzipped, uploaded once)
+//   heard:<device>:<year>  how long was listened to each document on each day, ON THAT DEVICE. A device only
+//   ever writes its own, so the newer-wins rule can never lose listening; what is shown is all of them added
+//   (history.js).
 // Audio is never synced: each device voices the text itself, so sync stays small.
 // Without an account Noesis works fully offline/local; signing in only adds sync.
 //
