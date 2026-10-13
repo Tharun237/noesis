@@ -176,7 +176,7 @@ export function AiCard({ Card }) {
       )}
 
       <Toggle checked={ai} onChange={v => settings.set({ aiNarration: v })} disabled={!connectedNow} labelText="AI narration for PDFs by default"
-        hint={id === 'gemini'
+        hint={!connectedNow ? 'Needs your own AI key, set up above. It is then used for the PDFs you add, not the ones already in your library.' : id === 'gemini'
           ? 'Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests.'
           : 'The model reads each page as an image, so it must be one that can see images; many cannot, and the app says so when one refuses. One request per 2 pages.'} />
     </Card>

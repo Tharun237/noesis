@@ -7,6 +7,9 @@ import { activeEngine, hasSystemVoice, isMobile, systemVoices, pickSystemVoice, 
 import { voicesFor, voiceKind } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth, parseVoiceNames, fetchOwnSpeech, encodeWav, explainVoiceError, ownHost } from '../lib/cloudvoice.js'
 import { Field, Segmented, Button, inputStyle, IconButton, Appear } from './kit.jsx'
+import { toast } from '../lib/nav.js'
+import { getDoc, changeVoice } from '../lib/library.js'
+import { player } from '../lib/player.js'
 
 export function speakSample(voice) {
   speechSynthesis.cancel()
@@ -90,6 +93,7 @@ export function OwnVoiceService() {
       </Field>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button kind="primary" onClick={test} disabled={!ready || state === 'testing'}>{state === 'testing' ? 'Testing…' : 'Test'}</Button>
+        {!ready && <span style={{ fontSize: 12.5, color: T.faint }}>Fill in the address, the model and at least one voice to test it.</span>}
         {state === 'ok' && <Appear as="span" style={{ fontSize: 12.5, color: T.ok }}>This voice service answers.</Appear>}
         {state && state !== 'ok' && state !== 'testing' && <Appear as="span" style={{ fontSize: 12.5, color: T.danger }}>{state}</Appear>}
       </div>
@@ -123,7 +127,16 @@ export function VoiceCard({ Card }) {
         : (
           <>
             <Field title="Natural voice (default for new documents)" hint={isCloudVoice(s.voice) ? cloudTruth(s.voice) : null}>
-              <select value={s.voice} onChange={e => settings.set({ voice: e.target.value })} style={{ ...inputStyle, appearance: 'auto' }}>
+              <select value={s.voice} style={{ ...inputStyle, appearance: 'auto' }} onChange={e => {
+                const voice = e.target.value
+                settings.set({ voice })
+                // A document keeps the voice it has. Changing this and hearing the same voice go on reads as
+                // "not working": it says what it changed, and offers the book in hand.
+                const cur = getDoc(player.get().id)
+                const name = voicesFor('en').find(v => v.id === voice)?.name || 'This voice'
+                if (cur && cur.voice !== voice && (cur.lang || 'en') === 'en') toast(`${name} will read documents you add from now on`, { label: `Use it for "${cur.title.slice(0, 24)}${cur.title.length > 24 ? '…' : ''}" too`, run: () => changeVoice(cur.id, voice) })
+                else toast(`${name} will read documents you add from now on`)
+              }}>
                 {voicesFor('en').map(v => <option key={v.id} value={v.id} style={{ background: T.bg }}>{v.name} · {voiceKind(v)}</option>)}
               </select>
             </Field>

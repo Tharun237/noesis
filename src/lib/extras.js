@@ -40,14 +40,15 @@ export function startExtras() {
   let aware = null
   let opening = false
   const wanted = () => { const s = settings.get(); return (s.awareSlow || s.awarePause || s.awareClear) && sounding() && awareSupported() }
-  const onRoom = e => {
+  const onRoom = async e => {
     const s = settings.get()
     // The device's own voice is spoken by the device, not played by Noesis: it cannot be made clearer here.
     const clear = s.awareClear && activeEngine(s) !== 'system'
     if (e.type === 'noisy') {
       if (s.awareSlow) setEase(NOISE_EASE)
-      if (clear) setClarity(true)
-      if (s.awareSlow || clear) toast(s.awareSlow && clear ? 'Slower and clearer for the noise around you.' : s.awareSlow ? 'Slowed a little for the noise around you.' : 'Made clearer for the noise around you.')
+      // said only if it was done: the browser may not let the sound be reshaped (it used to say so regardless)
+      const clearer = clear && await setClarity(true).catch(() => false)
+      if (s.awareSlow || clearer) toast(s.awareSlow && clearer ? 'Slower and clearer for the noise around you.' : s.awareSlow ? 'Slowed a little for the noise around you.' : 'Made clearer for the noise around you.')
     }
     if (e.type === 'quiet') {
       setEase(1)

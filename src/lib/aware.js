@@ -130,6 +130,9 @@ export async function startAwareness({ onEvent = () => {}, onLevel = () => {} } 
     ctx.close()
     throw new Error(MIC_REFUSED)
   }
+  // A phone starts an audio context asleep until it is told to run: left asleep, the microphone is open and
+  // nothing is ever measured, so "slow down when it is noisy" could be on and never do anything.
+  await ctx.resume?.().catch(() => {})
   const analyser = ctx.createAnalyser()
   analyser.fftSize = FFT_SIZE
   ctx.createMediaStreamSource(stream).connect(analyser)

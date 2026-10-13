@@ -2,7 +2,8 @@
 // The parent owns the values; this card reports one change at a time as { mode }, { volume } or { haptics }.
 import { T } from '../theme.js'
 import { Segmented, Toggle, Appear } from './kit.jsx'
-import { hapticsSupported } from '../lib/haptics.js'
+import { hapticsSupported, haptic, HELLO } from '../lib/haptics.js'
+import { toast } from '../lib/nav.js'
 
 const OPTIONS = [
   { value: 'off', label: 'Off' },
@@ -25,11 +26,17 @@ export function AmbientCard({ Card, mode, volume, haptics, onChange }) {
         )}
         <p style={para}>
           Focus and Calm are binaural beats: they need headphones, because each ear gets a slightly different tone.
-          They play only while the voice is playing.
+          Through a phone's own speaker they can hardly be heard. All three play only while the voice is playing; choosing one lets you hear it for a few seconds.
         </p>
         {hapticsSupported() && (
-          <Toggle checked={haptics} onChange={next => onChange({ haptics: next })} labelText="Vibrate with the rhythm of the text"
-            hint="A short pulse at the end of each sentence, a longer one at headings. For readers who feel rhythm better than they hear it." />
+          <Toggle checked={haptics} labelText="Vibrate with the rhythm of the text"
+            // Switched on, it is felt at once: the proof that it works on this phone. If the phone will not
+            // vibrate, it says so and stays off, where it used to stay on and do nothing.
+            onChange={next => {
+              if (next && !haptic(HELLO)) return toast('This phone would not vibrate. Check that vibration is on in its own settings.')
+              onChange({ haptics: next })
+            }}
+            hint="A short pulse at the end of each sentence, a longer one at headings. For readers who feel rhythm better than they hear it. Felt while the screen is on." />
         )}
       </div>
     </Card>
