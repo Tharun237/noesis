@@ -77,7 +77,9 @@ export function summary(log, days) {
   }
   const titles = log?.titles || {}
   const docs = [...per.entries()].sort((a, b) => b[1] - a[1]).map(([id, seconds]) => ({ id, title: titles[id] || 'Untitled', seconds, share: total ? seconds / total : 0 }))
-  const finished = (log?.finished || []).filter(f => set.has(f.day)).map(f => ({ ...f, title: titles[f.id] || 'Untitled' }))
+  // each document once: a book finished twice in these days is one finished book
+  const once = new Set()
+  const finished = (log?.finished || []).filter(f => set.has(f.day) && !once.has(f.id) && once.add(f.id)).map(f => ({ ...f, title: titles[f.id] || 'Untitled' }))
   return { total, docs, listened, best, finished }
 }
 

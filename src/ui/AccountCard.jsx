@@ -15,7 +15,7 @@ export function AccountCard({ Card }) {
     return (
       <Card title="Account & sync">
         <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
-          Sign in to keep your library in step on every device. Start a book on your laptop and pick it up on your phone, <span style={{ color: T.text }}>to the same sentence</span>. Your documents, positions, bookmarks and collections sync automatically. Noesis works fully without an account too.
+          Sign in to keep your library in step on every device. Start a book on your laptop and pick it up on your phone, <span style={{ color: T.text }}>to the same sentence</span>. Your documents, positions, bookmarks, collections, and how fast and in which voice you listen sync automatically. Noesis works fully without an account too.
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <GoogleButton disabled={!a.google} />

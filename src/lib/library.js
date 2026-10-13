@@ -17,6 +17,8 @@ import { cleanMeta } from '../ingest/meta.js'
 import { bookStart } from '../ingest/front.js'
 import { READER } from '../ingest/pdftext.js'
 import { carrier } from './carry.js'
+import { mergeMarks, sameMarks, carryMarks } from './marks.js'
+import { prefsSnapshot, applyPrefs, quietly, offerPrefs } from './prefs.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
 import { touch, touchAfter, configureSync, startSync, downloadContent, deviceName } from './sync.js'
 
@@ -50,13 +52,23 @@ const voicedSet = id => voiced.get(id) ?? voiced.set(id, new Set()).get(id)
 export const isVoiced = (id, i) => voicedSet(id).has(i)
 
 // What syncs between devices. Everything else on a doc (status, voicing progress, errors) is per-device.
-const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts', 'target', 'from']
+const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts', 'target', 'from', 'part', 'spc']
 const POS_FIELDS = ['pos', 'posF', 'finished', 'lastPlayed']
 const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]))
 
+// A place and a set of bookmarks are sentence numbers: they mean something only in the text they were counted
+// in. So each is kept with the version of the text it belongs to (posVer, marksVer), which is the text this
+// device holds (textVer) unless the one writing it says otherwise.
+const holds = d => d.textVer ?? d.contentVer
+const withVersions = (d, p) => ({
+  ...d, ...p,
+  ...('pos' in p && !('posVer' in p) ? { posVer: holds(d) } : {}),
+  ...('marks' in p && !('marksVer' in p) ? { marksVer: holds(d) } : {}),
+})
+
 export function patch(id, p, remote = false) {
   let next = null
-  library.set(s => ({ docs: s.docs.map(d => (d.id === id ? (next = { ...d, ...p }) : d)) }))
+  library.set(s => ({ docs: s.docs.map(d => (d.id === id ? (next = withVersions(d, p)) : d)) }))
   if (!next) return
   saveMeta(id, next)
   if (remote) return
@@ -97,7 +109,11 @@ addEventListener('pagehide', flushMeta)
 const stepped = id => { let last = -1; return p => { if (p >= 1 || p - last >= 0.01) { last = p; patch(id, { prep: p }) } } }
 
 // Seconds of audio per character, learned from what this device has actually produced.
-export const secPerChar = d => (d.vChars > 400 ? d.vSec / d.vChars : 1 / 14.5)
+// How long a letter takes to say. Each device measured its own, so the same book was a different length on
+// each. The first device to have voiced a good part of it says what it measured (spc, kept in step with the
+// document), and every device uses that.
+const SPC_FROM = 20000 // letters voiced before the measure is told to the others: about twenty minutes of audio
+export const secPerChar = d => d.spc || (d.vChars > 400 ? d.vSec / d.vChars : 1 / 14.5)
 export const docDuration = d => d.chars * secPerChar(d)
 
 // Library sort orders. The player uses the same order to pick "up next", so the queue you see is the queue you hear.
@@ -368,6 +384,8 @@ async function voiceOne(id, i) {
     vSec: now.vSec + rec.dur,
     ...(done >= c.segs.length ? { status: 'ready', stage: 'Ready' } : {}),
   })
+  const voicedNow = getDoc(id)
+  if (voicedNow && !voicedNow.spc && voicedNow.vChars > SPC_FROM) derive(id, { spc: Math.round((voicedNow.vSec / voicedNow.vChars) * 1e5) / 1e5 })
   segListeners.forEach(f => f(id, i))
 }
 
@@ -513,6 +531,7 @@ async function prepare(id) {
         ? 'No selectable text found (scanned PDF?). Add an AI key in Settings to read scanned pages.'
         : 'No readable text found in this document.')
     }
+    const hadText = await db.getDoc(id) // the text it had, if it had one: the place and the bookmarks are carried from it
     await db.delAudio(id)
     await db.putDoc(id, refs.length ? { blocks: listening, refs } : { blocks: listening })
     const total = listening.reduce((a, b) => a + b.s.length, 0)
@@ -522,7 +541,11 @@ async function prepare(id) {
     cache.delete(id)
     voiced.set(id, new Set())
     // A version switch carries the place by block number: first sentence of that block.
-    let pos = Math.min(d.pos || 0, total - 1)
+    const was = (hadText?.blocks || []).flatMap(b => b.s)
+    const to = was.length ? carrier(was, listening.flatMap(b => b.s)) : i => Math.min(i, total - 1)
+    const cur = getDoc(id) // as it is now: the customer may have listened on while this was prepared
+    let pos = cur.pos ? to(cur.pos) : 0
+    const kept = was.length ? carryMarks({ marks: cur.marks, gone: cur.marksGone }, to) : { marks: cur.marks || [], gone: cur.marksGone || {} }
     let startPatch = {}
     const startBlock = getDoc(id)?.startBlock
     if (startBlock != null && listening.length) {
@@ -531,13 +554,18 @@ async function prepare(id) {
       for (const b of listening) { starts.push(at); at += b.s.length }
       pos = starts[Math.min(startBlock, starts.length - 1)]
       startPatch = { startBlock: null }
-    } else if (!d.pos) {
+    } else if (!cur.pos) {
       // a new document: the voice begins where the book does, after the copyright page and the contents (front.js)
       pos = listening.slice(0, bookStart(listening)).reduce((a, b) => a + b.s.length, 0)
     }
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
+    const ver = Date.now()
     // settings.voice stays an English voice and is never changed here; only the document's own voice follows its lang.
-    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, foreign, voice, contentVer: Date.now(), readVer: READER })
+    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, ...startPatch, note: langNote ?? note, lang, foreign, voice, contentVer: ver, textVer: ver, readVer: READER })
+    // Where it begins, and where its bookmarks now are, is worked out here: nobody listened or marked anything
+    // just now, so it is not sent as if somebody had (derive).
+    derive(id, { pos, posF: pos === cur.pos ? cur.posF || 0 : 0, posVer: ver, marks: kept.marks, marksGone: kept.gone, marksVer: ver })
+    if (was.length) reread.forEach(f => f(id, pos)) // the player, if it holds this document, goes to the same words in the new text
     kickVoice()
   } catch (e) {
     // Paused by the customer: not a failure. What was translated is kept, and Resume carries on from there.
@@ -590,7 +618,7 @@ async function rereadOld() {
       else if (r.ask) {
         const cur = getDoc(id)
         rewriting.add(id)
-        try { takeNewText(id, cur, await ask({ write: true, id, pos: cur.pos || 0, marks: cur.marks || [] })) } finally { rewriting.delete(id) }
+        try { takeNewText(id, cur, await ask({ write: true, id, pos: cur.pos || 0, marks: cur.marks || [], gone: cur.marksGone || {} })) } finally { rewriting.delete(id) }
       }
     } catch (e) {
       if (!noWorker) console.warn('Reading again in a worker failed, doing it here:', e?.message || e)
@@ -606,16 +634,17 @@ async function rereadOld() {
 
 // The new text is in storage: the page lets go of the old one and says so.
 function takeNewText(id, cur, n) {
+  const ver = Date.now()
   cache.delete(id)
   voiced.set(id, new Set())
   patch(id, {
     status: cur.voice == null ? 'ready' : 'voicing', stage: cur.voice == null ? '' : 'Generating audio',
     total: n.total, chars: n.chars, done: 0, vChars: 0, vSec: 0, note: n.note ?? cur.note, scanned: n.scanned,
-    contentVer: Date.now(), readVer: READER,
+    contentVer: ver, textVer: ver, readVer: READER,
   })
   // The text is new, and says so. The place and the bookmarks are the same ones, carried to the same words:
   // nobody listened or marked anything just now, so they are not stamped as if somebody had.
-  derive(id, { pos: n.pos, posF: 0, marks: n.marks })
+  derive(id, { pos: n.pos, posF: 0, posVer: ver, marks: n.marks, marksGone: n.gone || {}, marksVer: ver })
   reread.forEach(f => f(id, n.pos))
   kickVoice()
 }
@@ -648,14 +677,13 @@ async function readAgain(id) {
     const cur = getDoc(id)
     const to = carrier(was, now)
     const pos = cur.pos ? to(cur.pos) : listening.slice(0, bookStart(listening)).reduce((a, b) => a + b.s.length, 0)
-    const seen = new Set()
-    const marks = (cur.marks || []).map(m => ({ ...m, i: to(m.i) })).filter(m => !seen.has(m.i) && seen.add(m.i))
+    const kept = carryMarks({ marks: cur.marks, gone: cur.marksGone }, to)
     rewriting.add(id)
     try {
       await db.delAudio(id)
       await db.putDoc(id, refs.length ? { blocks: listening, refs } : { blocks: listening })
       await db.putDurs(id, { durs: new Array(now.length).fill(0), tails: new Array(now.length).fill(0) })
-      takeNewText(id, cur, { total: now.length, chars: now.reduce((a, t) => a + t.length, 0), pos, marks, note, scanned: !!parsed.scanned })
+      takeNewText(id, cur, { total: now.length, chars: now.reduce((a, t) => a + t.length, 0), pos, marks: kept.marks, gone: kept.gone, note, scanned: !!parsed.scanned })
     } finally { rewriting.delete(id) }
   } finally {
     parsed?.pdf?.loadingTask.destroy()
@@ -682,6 +710,7 @@ export async function boot() {
   // NVIDIA voices, if the customer saved a key: refresh the list at most once a day.
   void loadCloudVoices().catch(e => console.warn('NVIDIA voice list not loaded:', e?.message || e))
   configureSync(syncHooks)
+  offerPrefs()
   for (const d of metas) {
     if (d.status === 'syncing' && !d.contentVer && d.stage !== NOT_SENT) patch(d.id, { stage: NOT_SENT }, true) // said in older words
     if (d.status === 'syncing') fetchSynced(d.id) // resume interrupted downloads
@@ -716,7 +745,7 @@ async function repairMeta(metas) {
 // Kokoro voice the closest Piper voice (their Kokoro audio is deleted so it regenerates, never skipped).
 async function retireKokoro(metas) {
   globalThis.caches?.delete('transformers-cache').catch(() => {})
-  if (!isVoice(settings.get().voice)) settings.set({ voice: fromKokoro(settings.get().voice) })
+  if (!isVoice(settings.get().voice)) quietly(() => settings.set({ voice: fromKokoro(settings.get().voice) })) // mended, not chosen
   for (const d of metas) {
     if (d.voice == null || isVoice(d.voice)) continue
     await resetAudio(d.id)
@@ -728,16 +757,29 @@ async function retireKokoro(metas) {
 const remotePos = new Set()
 export const onRemotePos = f => { remotePos.add(f); return () => remotePos.delete(f) }
 const pending = new Map() // pos/marks that arrived before their doc's meta: id → patch
+const aside = new Map() // a place or bookmarks counted in a text this device does not have: id → { pos?, marks? }
+
+// Bookmarks from another device are put together with the ones here (marks.js), not put in their place.
+// → 'again' when this device had something the other did not: the two together are then sent back.
+function takeMarks(id, v) {
+  const d = getDoc(id)
+  const mine = { marks: d.marks || [], gone: d.marksGone || {} }
+  const theirs = { marks: v.marks || [], gone: v.gone || {} }
+  const both = mergeMarks(mine, theirs)
+  patch(id, { marks: both.marks, marksGone: both.gone, marksVer: v.ver ?? holds(d) }, true)
+  return sameMarks(both, theirs) ? undefined : 'again'
+}
 
 // Listening records are history.js's: it gives sync their keys, their contents and what to do with one that arrives.
 let heard = null
 export const setHeardSync = h => { heard = h }
 
 const syncHooks = {
-  allKeys: async () => ['cols', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id]), ...(await heard?.keys() || [])],
+  allKeys: async () => ['cols', 'prefs', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id]), ...(await heard?.keys() || [])],
   content: id => db.getDoc(id),
   snapshot(k) {
     if (k === 'cols') return { collections: library.get().collections }
+    if (k === 'prefs') return prefsSnapshot()
     if (k.startsWith('heard:')) return heard?.snapshot(k)
     const [type, id] = k.split(':')
     const d = getDoc(id)
@@ -746,11 +788,13 @@ const syncHooks = {
     // closed or the file failed. Every change to it marks it to be sent again, so nothing is lost by waiting.
     if (type === 'meta') return !d ? { deleted: true } : d.contentVer ? pick(d, META_FIELDS) : undefined // deleted → tombstone
     if (!d) return undefined
-    if (type === 'pos') return { ...pick(d, POS_FIELDS), dev: deviceName() }
-    if (type === 'marks') return { marks: d.marks || [] }
+    // each says which text it is counted in (ver), and bookmarks say which were taken away and when (gone)
+    if (type === 'pos') return { ...pick(d, POS_FIELDS), dev: deviceName(), ver: d.posVer ?? holds(d) }
+    if (type === 'marks') return { marks: d.marks || [], gone: d.marksGone || {}, ver: d.marksVer ?? holds(d) }
   },
   async apply(k, v) {
     if (k === 'cols') return library.set({ collections: v.collections || [] })
+    if (k === 'prefs') return applyPrefs(v)
     if (k.startsWith('heard:')) return heard?.apply(k, v)
     const [type, id] = k.split(':')
     const d = getDoc(id)
@@ -767,10 +811,18 @@ const syncHooks = {
       if (v.contentVer && v.contentVer !== d.contentVer) fetchSynced(id) // text was re-processed elsewhere
       return
     }
-    const p = type === 'pos' ? pick(v, POS_FIELDS) : { marks: v.marks || [] }
-    if (!d) return pending.set(id, { ...pending.get(id), ...p })
-    patch(id, p, true)
-    if (type === 'pos') remotePos.forEach(f => f(id, v))
+    if (!d) return pending.set(id, { ...pending.get(id), ...(type === 'pos' ? { ...pick(v, POS_FIELDS), posVer: v.ver } : { marks: v.marks || [], marksGone: v.gone || {}, marksVer: v.ver }) })
+    // Counted in a text this device does not hold: the numbers would point at other sentences. That text may be
+    // on its way here (its record has arrived, its words have not), or the other device may not yet have a
+    // text this one has. Either way it is kept aside, and taken when this device holds that text (carryHere),
+    // after this device's own place and bookmarks have been carried to it.
+    if (v.ver && v.ver !== holds(d)) { aside.set(id, { ...aside.get(id), [type]: v }); return }
+    if (type === 'pos') {
+      patch(id, { ...pick(v, POS_FIELDS), posVer: v.ver ?? holds(d) }, true)
+      remotePos.forEach(f => f(id, v))
+      return
+    }
+    return takeMarks(id, v)
   },
 }
 
@@ -792,6 +844,30 @@ async function createSynced(id, v) {
 }
 
 const fetching = new Set()
+// The text of a document has just been replaced by a newer one from another device. This device's place and
+// bookmarks, if they were counted in the text it had, are carried to the same words; and anything kept aside
+// because it was counted in the text that has now arrived is taken.
+function carryHere(id, before, doc, ver) {
+  const cur = getDoc(id)
+  const was = (before?.blocks || []).flatMap(b => b.s)
+  const carried = {}
+  if (was.length && cur) {
+    const stale = v => (v ?? null) !== ver
+    const hasPlace = cur.pos > 0 && stale(cur.posVer), hasMarks = ((cur.marks || []).length || Object.keys(cur.marksGone || {}).length) && stale(cur.marksVer)
+    if (hasPlace || hasMarks) {
+      const to = carrier(was, doc.blocks.flatMap(b => b.s))
+      if (hasPlace) Object.assign(carried, { pos: to(cur.pos), posF: 0, posVer: ver })
+      if (hasMarks) { const kept = carryMarks({ marks: cur.marks, gone: cur.marksGone }, to); Object.assign(carried, { marks: kept.marks, marksGone: kept.gone, marksVer: ver }) }
+    }
+  }
+  if (Object.keys(carried).length) derive(id, carried)
+  else if (cur) patch(id, { ...(cur.posVer == null ? { posVer: ver } : {}), ...(cur.marksVer == null ? { marksVer: ver } : {}) }, true)
+  const kept = aside.get(id)
+  aside.delete(id)
+  if (kept?.pos?.ver === ver) { patch(id, { ...pick(kept.pos, POS_FIELDS), posVer: ver }, true); remotePos.forEach(f => f(id, kept.pos)) }
+  if (kept?.marks?.ver === ver && takeMarks(id, kept.marks) === 'again') touchAfter('marks:' + id)
+  if (carried.pos != null && !(kept?.pos?.ver === ver)) reread.forEach(f => f(id, carried.pos)) // the player, if it holds this book, moves with it
+}
 async function fetchSynced(id) {
   const d = getDoc(id)
   if (!d?.contentVer || !d.parts || fetching.has(id)) return
@@ -799,6 +875,7 @@ async function fetchSynced(id) {
   try {
     patch(id, { status: 'syncing', stage: 'Downloading from your other device', error: null }, true)
     const doc = await downloadContent(id, d.contentVer, d.parts)
+    const before = await db.getDoc(id) // the text this device had: its place and bookmarks are counted in that
     await db.delAudio(id)
     await db.putDoc(id, doc)
     const total = doc.blocks.reduce((a, b) => a + b.s.length, 0)
@@ -807,7 +884,8 @@ async function fetchSynced(id) {
     cache.delete(id)
     voiced.set(id, new Set())
     const spoken = getDoc(id)?.voice != null // no natural voice for its language: the device's own voice reads it, nothing is made
-    patch(id, { status: spoken ? 'voicing' : 'ready', stage: spoken ? 'Making the audio' : '', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1 }, true)
+    patch(id, { status: spoken ? 'voicing' : 'ready', stage: spoken ? 'Making the audio' : '', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, textVer: d.contentVer }, true)
+    carryHere(id, before, doc, d.contentVer)
     kickVoice()
   } catch (e) {
     patch(id, { status: 'syncing', stage: 'Waiting to download from your other device', error: e.message }, true)
@@ -864,7 +942,7 @@ export async function listenIn(id, target, part = null) {
   if (wanted && (wanted.status === 'voicing' || wanted.status === 'ready')) {
     const wc = await loadDoc(wantedId)
     if (wc) {
-      patch(wantedId, { pos: wc.starts[Math.min(block, wc.starts.length - 1)], startBlock: null })
+      patch(wantedId, { pos: wc.starts[Math.min(block, wc.starts.length - 1)], posF: 0, lastPlayed: Date.now(), startBlock: null })
       return wantedId
     }
   }
@@ -876,7 +954,7 @@ export async function changeVoice(id, voice) {
   const d = getDoc(id)
   if (!d || d.voice === voice) return
   await resetAudio(id)
-  patch(id, { voice })
+  patch(id, { voice, spc: null }) // another voice speaks at another pace: the measure is taken again
   kickVoice()
 }
 
@@ -919,12 +997,16 @@ export async function deleteAllAudio() {
 
 // Bookmarks & notes: [{ i: sentence index, note, at }]
 export function toggleMark(id, i) {
-  const marks = getDoc(id).marks || []
+  const d = getDoc(id)
+  const marks = d.marks || []
   const has = marks.some(m => m.i === i)
-  patch(id, { marks: has ? marks.filter(m => m.i !== i) : [...marks, { i, note: '', at: Date.now() }].sort((a, b) => a.i - b.i) })
+  const gone = { ...(d.marksGone || {}) }
+  if (has) gone[i] = Date.now() // taken away, and when: so that it is not brought back by a device that still has it
+  else delete gone[i]
+  patch(id, { marks: has ? marks.filter(m => m.i !== i) : [...marks, { i, note: '', at: Date.now() }].sort((a, b) => a.i - b.i), marksGone: gone })
   return !has
 }
-export const setMarkNote = (id, i, note) => patch(id, { marks: (getDoc(id).marks || []).map(m => (m.i === i ? { ...m, note } : m)) })
+export const setMarkNote = (id, i, note) => patch(id, { marks: (getDoc(id).marks || []).map(m => (m.i === i ? { ...m, note, at: Date.now() } : m)) })
 
 export function addCollection(name) {
   const c = { id: uid(), name: name.trim() }

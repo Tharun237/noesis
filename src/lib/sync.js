@@ -4,7 +4,8 @@
 // (./drive.js). Noesis stores nothing and pays for nothing as customers grow: their storage, their account.
 //
 // Records, one small file each, named by its key:
-//   meta:<doc> · pos:<doc> · marks:<doc> · cols · doc:<doc>:<ver>:<part> (book text, gzipped, uploaded once)
+//   meta:<doc> · pos:<doc> · marks:<doc> · cols · prefs · doc:<doc>:<ver>:<part> (book text, gzipped, uploaded once)
+//   prefs: the settings that are the customer's and not the device's (prefs.js)
 //   heard:<device>:<year>  how long was listened to each document on each day, ON THAT DEVICE. A device only
 //   ever writes its own, so the newer-wins rule can never lose listening; what is shown is all of them added
 //   (history.js).
@@ -174,9 +175,12 @@ async function pull() {
 
 async function receive(k, at, v) {
   if (v == null || at <= (clock[k] || 0)) return
-  await hooks.apply(k, v) // first: if this fails the record is still "not seen", and is taken again next round
+  const answer = await hooks.apply(k, v) // first: if this fails the record is still "not seen", and is taken again next round
   clock[k] = at
   if (dirty[k] && dirty[k] < at) delete dirty[k] // a newer edit from another device beats our queued one
+  // What arrived was put together with what was here (bookmarks made on two devices), and this device had
+  // something the other did not: the two together go back, as the record that follows this one.
+  if (answer === 'again') { clock[k] = at + 1; dirty[k] = clock[k] }
 }
 
 // Write a record over the file it already has, or as a new file. If the file it had is gone (the folder was

@@ -68,6 +68,17 @@ test('markFinished records once per document per day', () => {
   assert.deepEqual(log.finished, [{ id: 'a', day: '2026-10-11' }, { id: 'a', day: '2026-10-10' }])
 })
 
+test('finished counts different documents: a book finished twice in the period is one', () => {
+  let log = emptyLog()
+  log = markFinished(log, '2026-10-11', 'a')
+  log = markFinished(log, '2026-10-02', 'a') // the same book again, earlier this month
+  log = markFinished(log, '2026-10-05', 'b')
+  log = markFinished(log, '2026-03-01', 'a') // and in March
+  const s = summarise(log, at(2026, 10, 11))
+  assert.equal(s.finishedThisMonth, 2)
+  assert.equal(s.finishedThisYear, 2) // a and b, though that is four finishes
+})
+
 test('week is the last 7 calendar days including today; month is the calendar month', () => {
   const now = at(2026, 10, 11)
   let log = emptyLog()

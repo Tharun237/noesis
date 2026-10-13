@@ -1,7 +1,7 @@
 // The numbers behind the listening bars (heard.js).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS, mergeLogs, yearOf, yearsIn, newest, addHour } from './heard.js'
+import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS, mergeLogs, yearOf, yearsIn, newest, addHour, shelfOf, shareOf, justStopped } from './heard.js'
 
 const now = new Date(2026, 9, 12, 15) // Monday 12 October 2026
 const day = n => dayKey(new Date(2026, 9, 12 - n))
@@ -31,8 +31,9 @@ test('a bar: heard, today as its last stretch, left, and the days it takes at th
   const bar = docBar({ duration: 36000, share: 0.25, rate: 1.25 }, { today: 1800, perDay: 1800 })
   assert.equal(bar.heard, 0.25)
   assert.equal(bar.today, 1800 * 1.25 / 36000) // half an hour of listening at 1.25x covers 37.5 minutes of the book
-  assert.equal(bar.leftSeconds, 27000)
-  assert.equal(bar.days, 12) // 7.5 h of audio is 6 h of listening at 1.25x: twelve half hours
+  assert.equal(bar.leftSeconds, 21600) // 7.5 h of audio is 6 h of listening at 1.25x
+  assert.equal(bar.heardSeconds, 7200) // and 2.5 h of audio is 2 h
+  assert.equal(bar.days, 12) // six hours: twelve half hours
   assert.ok(Math.abs(bar.dayShare - 0.0625) < 1e-9)
 })
 
@@ -41,6 +42,45 @@ test('nothing is promised without a pace, or when it is too far off', () => {
   assert.equal(docBar({ duration: 360000, share: 0 }, { today: 60, perDay: 60 }).days, null)
   assert.equal(docBar({ duration: 600, share: 1 }, { today: 600, perDay: 600 }).days, null) // finished
   assert.equal(docBar({ duration: 600, share: 0.2 }, { today: 99999, perDay: 600 }).today, 0.2) // today never exceeds heard
+})
+
+test('the shelf is every unarchived document with text: the strip and the listening page add up the same set', () => {
+  const docs = [
+    { id: 'a', chars: 100, total: 10, pos: 5 }, // half done
+    { id: 'b', chars: 100, total: 10, pos: 0, finished: true }, // finished: all of it
+    { id: 'c', chars: 100, total: 10, pos: 9, archived: true }, // archived: not on the shelf
+    { id: 'd', chars: 0, total: 0, pos: 0 }, // no text yet: not on the shelf
+  ]
+  const s = shelfOf(docs, () => 600)
+  assert.deepEqual(s.shelf.map(x => x.d.id), ['a', 'b'])
+  assert.equal(s.all, 1200)
+  assert.equal(s.heard, 300 + 600)
+  assert.equal(s.left, 300)
+  assert.equal(shareOf({ finished: true }), 1)
+  assert.equal(shareOf({ total: 0, pos: 3 }), 0)
+  assert.equal(shareOf({ total: 4, pos: 9 }), 1) // a place past the end is the end
+})
+
+test('a document ended HERE when the player stopped it in the same turn its flag turned true', async () => {
+  const w = justStopped()
+  w.seen({ id: 'a', playing: true })
+  assert.equal(w.is('a'), false) // playing is not ending
+  w.seen({ id: 'a', playing: false }) // player.js finish(): stops, then marks the document finished in the same run
+  assert.equal(w.is('a'), true)
+  assert.equal(w.is('b'), false)
+  await Promise.resolve() // the turn is over: a finish that arrives from another device now is not this one
+  assert.equal(w.is('a'), false)
+  // switching to another document while playing is not a stop
+  const v = justStopped()
+  v.seen({ id: 'a', playing: true })
+  v.seen({ id: 'b', playing: true })
+  assert.equal(v.is('a'), false)
+  // it is the document that was sounding that stopped, whatever the player is on afterwards
+  v.seen({ id: null, playing: false })
+  assert.equal(v.is('b'), true)
+  await Promise.resolve()
+  v.seen({ id: null, playing: false }) // an idle player changing again stops nothing
+  assert.equal(v.is('b'), false)
 })
 
 test('listening is the time that really passed while sound played, to the second', () => {

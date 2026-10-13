@@ -21,6 +21,8 @@ function useVoiceLabel(d) {
 import { Icon } from './icons.jsx'
 import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap, useBusy, Spinner } from './kit.jsx'
 import { Cover } from './Library.jsx'
+import { usePace } from './usePace.js'
+import { atPace } from '../lib/pace.js'
 import { ArcScrubber } from './ArcScrubber.jsx'
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
@@ -44,11 +46,15 @@ export function PlayerBar({ wide, full }) {
   const waiting = useStore(player, s => s.waiting)
   const sleep = useStore(player, s => s.sleep)
   const voiceLabel = useVoiceLabel(d || {})
+  const rate = usePace(id)
   if (!id || !d) return null
   const total = offs ? offs[offs.length - 1] : 0
   const pos = offs ? Math.min(total, offs[Math.min(i, offs.length - 1)] + t) : 0
   const shown = drag ?? pos
-  const remaining = Math.max(0, total - shown) / player.get().rate
+  // The scrubber is drawn in the audio's own seconds, but both times beside it are the listener's: at the speed
+  // it plays, so elapsed + remaining is the length the library says (pace.js).
+  const elapsed = atPace(shown, rate)
+  const remaining = atPace(Math.max(0, total - shown), rate)
   const est = d.vChars <= 400
   const left = total ? `${est ? '~' : ''}${fmtDur(remaining)} left` : ''
   const sleepLine = sleepText(sleep)
@@ -57,7 +63,7 @@ export function PlayerBar({ wide, full }) {
     <div style={{ display: 'grid', gap: 2 }}>
       {waiting && <div style={{ fontSize: 12, color: T.sub }}>Making the audio</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
-      <span style={{ minWidth: 52, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtTime(shown)}</span>
+      <span style={{ minWidth: 52, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtTime(elapsed)}</span>
       <ArcScrubber d={d} value={shown} max={total} disabled={!c} onChange={setDrag} onCommit={v => { if (drag !== null) { seekTime(v); setDrag(null) } }} />
       <span style={{ minWidth: 60, textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>-{fmtTime(remaining)}</span>
       </div>

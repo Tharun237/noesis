@@ -83,9 +83,10 @@ Tharun when it matters, do not round it up.
 | A book I only opened is not "listened to" | listening is counted only while sound is really playing (`history.js` sounding), `heard.test.js` | Kept |
 | My listening time is the same on every device | `e2e/heard-sync.mjs` | Kept |
 | A book deleted on one device is gone on all | `e2e/sync.mjs`: a deletion on A reaches B | Kept |
-| When Noesis reads a book better, my place and bookmarks stay on the same words | `carry.test.js`; the upgrade run of 13 October (three real books) | Kept on the device that reads it again. **Not proved across devices**: a place written against the older text by a device that has not yet received the new text is taken as a sentence number of the new one. Places and bookmarks need to say which version of the text they are counted in |
+| When a book's text changes, my place and bookmarks stay on the same words, on every device | `carry.test.js`, `marks.test.js`; `e2e/sync.mjs`: a text prepared again on A, the place and bookmarks on the same words on both; the upgrade run of 13 October (three real books, one device) | Kept |
 | Bookmarks and their notes follow me | `e2e/sync.mjs`: a bookmark and its note made on B are on A; removed on A, it is removed on B | Kept |
-| What I set (speed, voice, how the library is sorted) follows me | nothing: settings are kept on the device only | **Not promised yet**: decide with Tharun which settings are the customer's and which are the device's |
+| How fast I listen, my usual voice, how my library is sorted, autoplay next and archive-when-finished follow me (Tharun's decision, 13 October) | `e2e/sync.mjs`: the speed and the sort set on A are set on B | Kept. Text size and layout stay with the device, on purpose |
+| Bookmarks made on two devices are all kept | `marks.test.js`; `e2e/sync.mjs`: one made on each device at the same time | Kept |
 
 ## The first sweep (13 October 2026): question 1 asked of every record, question 6 of every number
 
@@ -105,33 +106,51 @@ Fixed that day, each from the list and not from a report:
   everything again" all stamped whole records as newest. The first two are now sent as mendings; the third is
   gone (every launch already sends what the folder lacks).
 
-Found and **not fixed** (say so when it matters; do not let these be discovered by Tharun):
+Fixed on 13 October after Tharun said "fix the found" (each with a two-device test in `e2e/sync.mjs` unless said):
 
-- A place or bookmark does not say which version of the text it is counted in (ledger above).
-- A voice changed on another device can start a book that was only open and waiting (`player.js` voiceChanged):
-  not verified by reading it through.
-- A document whose preparing is resumed when the app opens re-stamps its place from when preparing began.
-- A place past the end of a text (after a re-read made it shorter) marks the book finished on opening.
-- The speed reader, a tap on a passage in "ask the library", and switching language version move the place but
-  leave the old part-of-a-sentence and the old "last listened" time with it.
-- Bookmarks are one record for the whole book: two devices adding one each in the same minute lose one.
-- A version of a document that is one chapter (`part`) is not told to other devices as that chapter.
-- Not kept in step at all, and a customer would expect it: listening speed, the default voice, how the library
-  is sorted, autoplay next, archive when finished, full text or summary, skip figures, the speed reader's
-  speed, which AI service (not its key), the address of a custom voice service, and the conversations had with
-  a book in Ask. Tharun decides which are the customer's and which are the device's.
+- **A place and a bookmark say which text they are counted in** (`ver` in the record; `posVer`, `marksVer`,
+  `textVer` on the device). One counted in a text a device does not hold is kept aside, not applied; a device
+  that receives a newer text carries its own place and bookmarks to the same words (`library.js` carryHere);
+  preparing a document again carries them too. Test: a text prepared again on A, the place and the bookmarks
+  end on the same words on both.
+- **Bookmarks are put together, not replaced** (`marks.js`): each says when it was made or written on, one taken
+  away says when. Test: one made on each device at the same time, both on both.
+- **Settings that are the customer's follow them** (`prefs.js`): listening speed, usual voice, sort order,
+  autoplay next, archive when finished. Test: speed and sort set on A are set on B. The privacy page says so.
+- A voice changed on another device no longer starts a book that was only open and waiting. **No test.**
+- A place past the end of a text that became shorter is the last sentence, not "finished". **No test.**
+- The speed reader, a tap on a passage in "ask the library" and a switch of language version write the place
+  whole (no left-over part of a sentence, and "last listened" is now). **No test.**
+- A document's `part` (a chapter as its own version) is told to other devices. **Not proved**: what a second
+  device does with it was not looked at.
+- The same book is the same length on every device: the first to have voiced twenty minutes of it says how long
+  a letter takes (`spc`). **No test.**
 
-Numbers that can contradict each other (question 6), none fixed yet:
+Found and **not fixed**:
 
-- "X done" (from the place) beside "Y today" (from the listening log): after going back, after finishing, in a
-  translated version.
-- The library's "Today" and the sum of what the cards say today (cards hide under a minute, and when finished).
-- The player's elapsed time (the audio's seconds) and its time left (divided by the speed): at 2x they do not
-  add up to the length; a chapter's time in the contents is divided by the speed, the player's is not.
-- "left" on a card (from the place, at the default speed) and "left" in the player (at the speed being played).
-- "done / left" in the library strip (the documents shown, filters and archived included) and in the listening
-  page it opens (every unarchived document).
-- "N documents" in the library header (archived and still-preparing included) and in the listening page (not).
-- "Finished" in the listening page counts every time a book became finished on this device, again if it was
-  finished twice, and still after the book is deleted.
-- The same book has a different length on each device (each measures its own voice's speed).
+- The conversations had with a book in Ask stay on the device they were had on.
+- Which AI service is used and the address of a custom voice service stay on the device (the keys always will).
+- A document whose preparing is resumed when the app opens: its place is now carried and sent as worked out,
+  but the resumed job itself still stamps the document's record.
+
+Numbers (question 6), fixed on 13 October. The rule now: **every length of a document shown anywhere is how
+long it takes this customer**, at the speed it would be heard at (the player's speed for the document in the
+player, their usual speed otherwise: `src/lib/pace.js`). Listening already done ("listened today", the week)
+is the clock's time and is never divided.
+
+- Card length, done, left, the reader's header, the library's total, the strip, the listening page, the
+  player's elapsed and remaining, a chapter's and a bookmark's time: all at that one pace. Read off a 390 px
+  screen with three real books at 1x and 1.5x: header total = done + left = the cards added up.
+- "Xm listened today" (not "Xm today", which read as progress), shown for any listening at all, on finished
+  books too, so the cards add up to "Today".
+- The strip and the listening page it opens count the same documents with one function (`heard.js` shelfOf).
+- The listening page says "N in your queue" where it counted a different set from the library's "N documents".
+- "Finished" counts each document once, and only on the device where the listening ended.
+
+Still able to differ, and why (say so if asked; none is a contradiction a customer can see on one screen):
+
+- Before about 400 letters of a book are voiced, its length is an estimate on the card ("~") and in the player.
+- The player shows minutes and seconds, cards round to the minute.
+- "N in your queue" leaves out a document still being prepared; the sidebar's Queue count includes it.
+- "Finished only where the listening ended" rests on the player stopping and marking the book in one step
+  (`player.js` finish): if that is ever made to wait in between, a finish is not logged. **No test guards it.**

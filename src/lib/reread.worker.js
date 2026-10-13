@@ -13,6 +13,7 @@ import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { toListeningAsync, pause } from './text.js'
 import { bookStart } from '../ingest/front.js'
 import { carrier } from './carry.js'
+import { carryMarks } from './marks.js'
 
 let content, audio
 const read = new Map() // id → the new text, waiting to be told it may replace the old
@@ -46,18 +47,17 @@ async function readIt({ id, lang }) {
   }
 }
 
-async function writeIt({ id, pos, marks }) {
+async function writeIt({ id, pos, marks, gone }) {
   const r = read.get(id)
   read.delete(id)
   const to = carrier(r.was, r.now)
   // not begun: the voice starts where the book does, after the copyright page and the contents (front.js)
   const at = pos ? to(pos) : r.listening.slice(0, bookStart(r.listening)).reduce((a, b) => a + b.s.length, 0)
-  const seen = new Set()
-  const kept = marks.map(m => ({ ...m, i: to(m.i) })).filter(m => !seen.has(m.i) && seen.add(m.i))
+  const kept = carryMarks({ marks, gone }, to)
   await delMany((await keys(audio)).filter(k => k.startsWith(id + ':')), audio)
   await set('doc:' + id, r.refs.length ? { blocks: r.listening, refs: r.refs } : { blocks: r.listening }, content)
   await set('durs:' + id, { durs: new Array(r.now.length).fill(0), tails: new Array(r.now.length).fill(0) }, content)
-  return { id, done: true, total: r.now.length, chars: r.now.reduce((a, t) => a + t.length, 0), pos: at, marks: kept, note: r.note, scanned: r.scanned }
+  return { id, done: true, total: r.now.length, chars: r.now.reduce((a, t) => a + t.length, 0), pos: at, marks: kept.marks, gone: kept.gone, note: r.note, scanned: r.scanned }
 }
 
 // Every answer carries the number of the question it answers (re). pdf.js, set up inside this worker, also

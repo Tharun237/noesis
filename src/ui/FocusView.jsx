@@ -91,7 +91,7 @@ export function FocusView({ doc, active, onSeek, playing, stickTop = 0 }) {
     const now = Date.now()
     if (force || now - lastSave.current > 1000) {
       lastSave.current = now
-      patch(id, { pos: i })
+      patch(id, { pos: i, posF: 0, lastPlayed: Date.now() }) // the place whole: not this sentence with how far into another one
     }
   }
 

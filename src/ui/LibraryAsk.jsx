@@ -8,9 +8,12 @@ import { go, closeSheet, toast } from '../lib/nav.js'
 import { speak, stopSpeaking, voiceForText } from '../lib/aside.js'
 import { motion } from 'motion/react'
 import { Button, IconButton, Pulse, inputStyle, Appear, rowIn, fmtTime } from './kit.jsx'
+import { usePacer } from './usePace.js'
+import { atPace } from '../lib/pace.js'
 
 export function LibraryAsk({ wide }) {
   useStore(settings)
+  const pace = usePacer() // where a passage is, in the listener's own time (pace.js), as in the contents
   const keyed = hasAiKey()
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
@@ -93,7 +96,7 @@ export function LibraryAsk({ wide }) {
           {passages.map((p, i) => (
             <motion.button key={`${p.doc}:${p.block}`} {...rowIn(i)} whileTap={{ scale: T.tap.row }} type="button" onClick={() => openPassage(p)}
               style={{ textAlign: 'left', padding: '11px 14px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, cursor: 'pointer', fontFamily: T.font, display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}><span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.lime, marginRight: 8 }}>[{p.n}]</span>{p.title}{(p.page != null || p.time != null) && <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 500, color: T.faint, marginLeft: 8 }}>{[p.page != null ? `p. ${p.page}` : null, p.time != null ? `at ${fmtTime(p.time)}` : null].filter(Boolean).join(' · ')}</span>}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}><span style={{ fontFamily: T.mono, fontSize: 12.5, color: T.lime, marginRight: 8 }}>[{p.n}]</span>{p.title}{(p.page != null || p.time != null) && <span style={{ fontFamily: T.mono, fontSize: 12, fontWeight: 500, color: T.faint, marginLeft: 8 }}>{[p.page != null ? `p. ${p.page}` : null, p.time != null ? `at ${fmtTime(atPace(p.time, pace(p.doc)))}` : null].filter(Boolean).join(' · ')}</span>}</span>
               <span style={{ fontSize: 13, color: T.sub, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.text}</span>
             </motion.button>
           ))}

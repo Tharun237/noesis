@@ -16,16 +16,15 @@ import { useMemo } from 'react'
 import { motion } from 'motion/react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
-import { settings } from '../lib/settings.js'
-import { docDuration } from '../lib/library.js'
+import { library, docDuration } from '../lib/library.js'
 import { historyStore } from '../lib/history.js'
-import { dayKey, weekOf, docListening, docBar } from '../lib/heard.js'
+import { dayKey, weekOf, docListening, docBar, shelfOf, shareOf } from '../lib/heard.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
 import { fmtDur } from './kit.jsx'
+import { usePace, useLength } from './usePace.js'
 import { openSheet } from '../lib/nav.js'
 
 const BEFORE = 0.5 // heard before today: the document's colour, dimmed
-const shareOf = d => (d.finished ? 1 : d.total ? Math.min(1, d.pos / d.total) : 0)
 const grow = { initial: { scaleX: 0 }, animate: { scaleX: 1 }, transition: { duration: T.dur.slow, ease: T.ease } }
 const mono = { fontFamily: T.mono, fontSize: 11.5, color: T.faint, whiteSpace: 'nowrap' }
 
@@ -39,15 +38,13 @@ function Lit({ bar, colour }) {
   )
 }
 
-function useDocBar(d, withPace) {
-  const today = dayKey(new Date())
-  const heardToday = useStore(historyStore, s => s.log[today]?.[d.id] || 0)
-  const log = useStore(historyStore, s => (withPace ? s.log : null))
-  const rate = useStore(settings, s => s.speed)
+// `rate`: the speed the document is heard at (pace.js), so what is done and left are in the listener's own time.
+function useDocBar(d, rate) {
+  const log = useStore(historyStore, s => s.log)
   const colour = colourOf(d, useStore(colours))
   const duration = d.chars ? docDuration(d) : 0
-  const listening = useMemo(() => (log ? docListening(log, d.id, new Date()) : { today: heardToday, perDay: 0 }), [log, d.id, heardToday])
-  return { bar: docBar({ duration, share: shareOf(d), rate }, listening), colour, heardToday, duration }
+  const listening = useMemo(() => docListening(log, d.id, new Date()), [log, d.id])
+  return { bar: docBar({ duration, share: shareOf(d), rate }, listening), colour, heardToday: listening.today, duration }
 }
 
 const DAY_GAP_PX = 2 // the cut between one day's listening and the next, in what is left
@@ -72,23 +69,29 @@ function Bar({ bar, colour, h }) {
   )
 }
 
-export function DocBar({ d }) {
-  const { bar, colour, heardToday, duration } = useDocBar(d, true)
-  if (!duration || d.finished || !(bar.heard > 0)) return null // not begun, or done: the card already says so
+// `pace`: the speed this document is heard at (pace.js). Every document with listening today says so, whether
+// or not it has a bar: the strip above the library counts every second of today, and the cards must add up to it.
+// "listened", not "today" alone: beside a progress bar, a bare "12m today" read as progress.
+export function DocBar({ d, pace }) {
+  const { bar, colour, heardToday, duration } = useDocBar(d, pace)
+  const drawn = duration > 0 && !d.finished && bar.heard > 0 // not begun, or done: the card already says so
+  if (!drawn && !(heardToday > 0)) return null
+  const today = heardToday > 0 && <span style={{ color: colour }}>{fmtDur(heardToday)} listened today</span>
   return (
     <div style={{ display: 'grid', gap: 5, minWidth: 0, marginTop: 2 }}>
-      <Bar bar={bar} colour={colour} h={3} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, ...mono, fontSize: 11 }}>
-        <span style={{ color: colour }}>{heardToday >= 60 ? `${fmtDur(heardToday)} today` : ''}</span>
-        <span>{fmtDur(bar.leftSeconds)} left</span>
+      {drawn && <Bar bar={bar} colour={colour} h={3} />}
+      {/* wraps on a narrow phone: the two halves are one line when they fit and two when they do not */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 10px', minWidth: 0, ...mono, fontSize: 11 }}>
+        <span>{today}</span>
+        {drawn && <span>{fmtDur(bar.leftSeconds)} left</span>}
       </div>
     </div>
   )
 }
 
 export function DocInsight({ d }) {
-  const { bar, colour, heardToday, duration } = useDocBar(d, true)
-  if (!duration || d.finished || !(bar.heard > 0 || heardToday >= 60)) return null
+  const { bar, colour, heardToday, duration } = useDocBar(d, usePace(d.id))
+  if (!duration || d.finished || !(bar.heard > 0 || heardToday > 0)) return null
   return (
     <div data-rise="3" style={{ display: 'grid', gap: 9, margin: '-8px 0 30px' }}>
       <Bar bar={bar} colour={colour} h={8} />
@@ -97,7 +100,7 @@ export function DocInsight({ d }) {
           {/* how far through the document the place is: a place can be jumped to, so it is not called "heard";
               what WAS listened to, today, is the number beside it */}
           <span style={{ color: T.sub }}>{fmtDur(bar.heardSeconds)} done</span>
-          {heardToday >= 60 && <span style={{ color: colour }}> · {fmtDur(heardToday)} today</span>}
+          {heardToday > 0 && <span style={{ color: colour }}> · {fmtDur(heardToday)} listened today</span>}
         </span>
         <span>
           <span style={{ color: T.sub }}>{fmtDur(bar.leftSeconds)} left</span>
@@ -112,16 +115,18 @@ const COL_H = 46 // the tallest a day's column stands
 const QUIET_DAY_S = 20 * 60 // a week of short listens is drawn against this, not blown up to full height
 const OTHER_DAY = 0.5 // days before today stand back
 
-export function LibraryGlance({ docs, wide }) {
+// Reads the whole library, not the list it sits above: its done and left are the listening page's (shelfOf),
+// which a filter, a search or the Archived shelf must not change.
+export function LibraryGlance({ wide }) {
   const log = useStore(historyStore, s => s.log)
   const known = useStore(colours)
+  const docs = useStore(library, s => s.docs)
+  const length = useLength()
   const now = new Date()
   const week = useMemo(() => weekOf(log, now), [log, dayKey(now)]) // eslint-disable-line react-hooks/exhaustive-deps
   const byId = useMemo(() => new Map(docs.map(d => [d.id, d])), [docs])
   const colourFor = id => (byId.has(id) ? colourOf(byId.get(id), known) : hueOf(log.titles?.[id] || id)) // a deleted document keeps a colour
-  const shelf = docs.filter(d => d.chars).map(d => ({ d, seconds: docDuration(d), share: shareOf(d) }))
-  const heard = shelf.reduce((a, s) => a + s.seconds * s.share, 0)
-  const all = shelf.reduce((a, s) => a + s.seconds, 0)
+  const { shelf, all, heard } = useMemo(() => shelfOf(docs, length), [docs, length])
   const weekSeconds = week.reduce((a, d) => a + d.seconds, 0)
   if (!(weekSeconds >= 60) && !(heard >= 60)) return null // under a minute listened to: nothing worth saying yet ("0m")
   const tallest = Math.max(QUIET_DAY_S, ...week.map(d => d.seconds))

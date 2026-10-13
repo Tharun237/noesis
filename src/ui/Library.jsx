@@ -1,5 +1,7 @@
 import { hueOf } from './bookcolour.js'
 import { DocBar, LibraryGlance } from './Heard.jsx'
+import { usePacer } from './usePace.js'
+import { atPace } from '../lib/pace.js'
 import { onShelf } from '../lib/shelf.js'
 import { memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { later } from './later.jsx'
@@ -81,7 +83,8 @@ export function Library({ wide }) {
   const view = useStore(settings, s => s.view)
   const playingId = useStore(player, s => s.id)
   const query = useStore(ui, s => s.query)
-  const hours = docs.reduce((a, d) => a + docDuration(d), 0)
+  const pace = usePacer()
+  const hours = docs.reduce((a, d) => a + atPace(docDuration(d), pace(d.id)), 0)
   // A device new to the library is told its documents over some seconds: the count says that more are coming,
   // or seven of twenty-one books look like all there is.
   const taking = useStore(syncState, s => s.taking)
@@ -109,14 +112,14 @@ export function Library({ wide }) {
       <main style={{ flex: 1, minWidth: 0, padding: wide ? '28px 36px 40px' : '0 0 24px' }}>
         {wide ? <DesktopHeader summary={summary} /> : <MobileHeader summary={summary} />}
         {/* the customer's listening, where they already are: not a screen to go and visit */}
-        {!query && docs.length > 0 && <LibraryGlance docs={docs} wide={wide} />}
+        {!query && docs.length > 0 && <LibraryGlance wide={wide} />}
         <>
             <div style={{
               display: 'grid', gap: wide ? 8 : 2, padding: wide ? 0 : '0 8px', position: 'relative',
               gridTemplateColumns: wide && view === 'grid' ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
             }}>
               <AnimatePresence mode="popLayout">
-                {docs.map((d, i) => <DocCard key={d.id} d={d} i={i} order={order} glide={wide} playing={d.id === playingId} />)}
+                {docs.map((d, i) => <DocCard key={d.id} d={d} i={i} order={order} glide={wide} playing={d.id === playingId} pace={pace(d.id)} />)}
               </AnimatePresence>
             </div>
             {loaded && docs.length === 0 && (
@@ -401,8 +404,10 @@ function queuedText(id, qkey) {
   return at < 0 ? 'Queued' : `Queued, ${ord(at + 1)} in line`
 }
 
-const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
-  const dur = d.chars ? fmtDur(docDuration(d)) : null
+// `pace`: the speed this document is heard at (pace.js): its length, and what is done and left, are in the
+// listener's own time.
+const DocCard = memo(function DocCard({ d, i, order, glide, playing, pace, ref }) {
+  const dur = d.chars ? fmtDur(atPace(docDuration(d), pace)) : null
   const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
   // The cover is one object: it leaves with the tap and flies home when the reader is left (coverflight.js).
@@ -437,7 +442,7 @@ const DocCard = memo(function DocCard({ d, i, order, glide, playing, ref }) {
           {/* The status changes in place (queued, reading, preparing, ready): one line fades into the next. */}
           <div key={d.status} data-fade="" style={{ fontSize: 12, minHeight: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><StatusLine d={d} /></div>
           {/* how far, how much of it today, how much is left: drawn, in the document's own colour (Heard.jsx) */}
-          <DocBar d={d} />
+          <DocBar d={d} pace={pace} />
         </div>
         {d.finished && <Icon name="check" size={18} style={{ color: T.ok }} />}
         <div onClick={e => e.stopPropagation()}>

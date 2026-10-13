@@ -4,6 +4,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings, DEFAULTS } from '../lib/settings.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
+import { atPace } from '../lib/pace.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented, Toggle, fmtTime } from './kit.jsx'
 
@@ -23,7 +24,7 @@ export function Toc({ headings, offs, rate, active, onSeek, onClose }) {
               background: on ? T.surfaceHi : 'transparent', color: on ? T.text : T.sub, fontFamily: T.font, fontSize: 13.5, lineHeight: 1.4, cursor: 'pointer',
             }}>
             <span style={{ flex: 1, minWidth: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{h.text}</span>
-            {offs && <span style={{ fontFamily: T.mono, fontSize: 11, color: on ? T.lime : T.faint, flexShrink: 0 }}>{fmtTime(offs[h.i] / rate)}</span>}
+            {offs && <span style={{ fontFamily: T.mono, fontSize: 11, color: on ? T.lime : T.faint, flexShrink: 0 }}>{fmtTime(atPace(offs[h.i], rate))}</span>}
           </button>
         )
       })}
@@ -88,7 +89,7 @@ export function Marks({ d, doc, offs, rate, onSeek, onClose }) {
             <IconButton icon="trash" label="Delete bookmark" size={32} iconSize={15} onClick={() => toggleMark(d.id, m.i)} style={{ color: T.faint }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {offs && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.accent }}>{fmtTime(offs[m.i] / rate)}</span>}
+            {offs && <span style={{ fontFamily: T.mono, fontSize: 11, color: T.accent }}>{fmtTime(atPace(offs[m.i], rate))}</span>}
             <input defaultValue={m.note} placeholder="Add a note" onBlur={e => e.target.value !== m.note && setMarkNote(d.id, m.i, e.target.value)}
               style={{ flex: 1, height: 34, padding: '0 10px', borderRadius: T.r.sm, border: `1px solid ${T.border}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 13.5, outline: 'none' }} />
           </div>

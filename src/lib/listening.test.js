@@ -33,6 +33,12 @@ test('a week is the last seven days, a bar a day, split by document', () => {
   assert.equal(summary(log, w.before).total, 300) // the week before, to compare with
 })
 
+test('finished is each document once, however many times it was finished in the days', () => {
+  const twice = { ...log, finished: [{ id: 'b', day: day(3) }, { id: 'b', day: day(1) }, { id: 'a', day: day(0) }, { id: 'c', day: day(40) }] }
+  const s = summary(twice, stretch(twice, 'week', now).days)
+  assert.deepEqual(s.finished.map(f => f.title), ['Beta', 'Alpha'])
+})
+
 test('a year is twelve calendar months; all of it starts at the first listening', () => {
   const y = stretch(log, 'year', now)
   assert.equal(y.bars.length, 12)

@@ -26,7 +26,7 @@ async function device(name) {
   await page.goto(HOME); await page.waitForLoadState('networkidle'); await sleep(800)
   const lib = expr => page.evaluate(async expr => {
     const at = path => performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes(path)) || path
-    const m = { library: await import(at('/src/lib/library.js')), sync: await import(at('/src/lib/sync.js')), player: await import(at('/src/lib/player.js')) }
+    const m = { library: await import(at('/src/lib/library.js')), sync: await import(at('/src/lib/sync.js')), player: await import(at('/src/lib/player.js')), settings: await import(at('/src/lib/settings.js')), db: await import(at('/src/lib/db.js')) }
     return eval(expr)
   }, expr)
   const titles = () => lib('m.library.library.get().docs.map(d => d.title).sort()')
@@ -172,6 +172,38 @@ try {
   await sleep(2000); await a.sync()
   const gone = await b.until('the bookmark to be removed on device B', async () => { await b.sync(); return b.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.length === 0`) }).catch(() => false)
   check('removed on A, it is removed on B', gone === true)
+
+  // (g) A bookmark made on each device before either has heard of the other's: both are kept on both.
+  await a.lib(`m.library.toggleMark(${JSON.stringify(slow)}, 10)`)
+  await b.lib(`m.library.toggleMark(${JSON.stringify(slow)}, 20)`)
+  await sleep(2000); await a.sync(); await b.sync(); await sleep(1800); await a.sync(); await sleep(1800); await b.sync(); await a.sync()
+  const both = { a: await a.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.map(x => x.i)`), b: await b.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.map(x => x.i)`) }
+  check('a bookmark made on each device at the same time: both are on both', String(both.a) === '10,20' && String(both.b) === '10,20', `A ${both.a}, B ${both.b}`)
+
+  // (h) What the customer sets that is theirs follows them: how fast they listen.
+  await a.lib('m.settings.settings.set({ speed: 1.5, sort: "title" })')
+  await sleep(2000); await a.sync()
+  const set = await b.until('the setting to reach device B', async () => { await b.sync(); const s = await b.lib('m.settings.settings.get()'); return s.speed === 1.5 && s.sort === 'title' ? s : null }).catch(() => null)
+  check('the listening speed and the sort order set on A are set on B', !!set, set ? `speed ${set.speed}, sort ${set.sort}` : 'not arrived')
+
+  // (i) The text of a book changes on A (it is prepared again and comes out with five more sentences at its
+  // start). A place and a bookmark are sentence numbers: on BOTH devices they must end on the same words.
+  const words = i => `m.library.loadDoc(${JSON.stringify(slow)}).then(c => c.segs[${i}]?.t)`
+  const placeWords = await a.lib(words(40)), markWords = await a.lib(words(20))
+  await a.lib(`m.db.db.getSource(${JSON.stringify(slow)}).then(src => m.db.db.putSource(${JSON.stringify(slow)}, { ...src, text: src.text.replace('\\n\\n', '\\n\\nFive. New. Sentences. Come. First. ') })).then(() => m.library.reprocess(${JSON.stringify(slow)}))`)
+  await a.until('the changed text to be prepared on A', () => a.lib(`m.library.getDoc(${JSON.stringify(slow)}).total > 800 && ['voicing', 'ready'].includes(m.library.getDoc(${JSON.stringify(slow)}).status)`), 60000)
+  const at = async d => ({ pos: await d.lib(`m.library.getDoc(${JSON.stringify(slow)}).pos`), marks: await d.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.map(x => x.i)`), total: await d.lib(`m.library.getDoc(${JSON.stringify(slow)}).total`) })
+  const onA = await at(a)
+  const aWords = { place: await a.lib(words(onA.pos)), mark: await a.lib(words(onA.marks[1])) }
+  await sleep(2500); await a.sync()
+  await b.until('the changed text to reach device B', async () => { await b.sync(); return b.lib(`m.library.loadDoc(${JSON.stringify(slow)}).then(c => c?.segs?.length === ${onA.total})`) }, 60000)
+  await sleep(1500); await b.sync(); await sleep(1000)
+  const onB = await at(b)
+  const bState = await b.lib(`(d => ({ contentVer: d.contentVer, textVer: d.textVer, posVer: d.posVer, marksVer: d.marksVer, status: d.status }))(m.library.getDoc(${JSON.stringify(slow)}))`)
+  const bWords = { place: await b.lib(words(onB.pos)), mark: await b.lib(words(onB.marks[1])) }
+  check('a text prepared again on A: the place is on the same words on A', aWords.place === placeWords && onA.pos !== 40, `sentence 40 → ${onA.pos}`)
+  check('and on B, which only received the new text', bWords.place === placeWords, `B at ${onB.pos}: "${String(bWords.place).slice(0, 40)}" ${JSON.stringify(bState)}`)
+  check('the bookmarks are on the same words on both', aWords.mark === markWords && bWords.mark === markWords && onB.marks.length === 2, `A ${onA.marks}, B ${onB.marks}`)
 
   // (f) A finished book that is only opened stays finished. (Opening it marked it unfinished, at the start, on
   // every device: looking at a book is not beginning it again.)

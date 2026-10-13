@@ -174,7 +174,9 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   if (!c) return
   doc = c
   i = skipVisual(c, Math.max(0, i), dir)
-  if (i >= c.segs.length) return finish()
+  // Past the end: listening got there, and the book is finished. Handed a place past the end (the text was read
+  // again and is shorter), nobody finished anything: it is the last sentence.
+  if (i >= c.segs.length) { if (!given) return finish(); i = c.segs.length - 1 }
   const my = ++token
   cancelSpeech()
   player.set({ i, t: offset, waiting: false, word: from })
@@ -427,7 +429,7 @@ function voiceChanged() {
   heard = now
   if (!changed) return
   // Audio in the previous voice must never resume: drop both stretches before playing on.
-  const resume = p.playing || p.waiting || pendingStart // Play was pressed while audio was being prepared: it still stands
+  const resume = p.playing || pendingStart // Play was pressed (while audio was being prepared, it still stands). A book only open and waiting stays silent
   stopOutput()
   revoke(next); revoke(current)
   next = current = null

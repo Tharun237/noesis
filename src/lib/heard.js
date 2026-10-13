@@ -86,6 +86,38 @@ export function newest(a, b) {
   return out
 }
 
+// How far through a document the listener is (0..1): a finished one is all of it, otherwise where the place is.
+export const shareOf = d => (d.finished ? 1 : d.total ? Math.min(1, d.pos / d.total) : 0)
+
+// The documents "done" and "left" are added up over: every one that is not archived and has text, whatever the
+// library is filtered to. The strip above the library and the listening page it opens both read this, so
+// they cannot say two things about the same shelf.
+//   lengthOf(d): how long the document takes the listener (the caller puts it at the speed it is heard at)
+// → { shelf: [{ d, seconds, share }], all, heard, left }, in those seconds.
+export function shelfOf(docs, lengthOf) {
+  const shelf = docs.filter(d => d.chars && !d.archived).map(d => ({ d, seconds: lengthOf(d), share: shareOf(d) }))
+  const all = shelf.reduce((a, s) => a + s.seconds, 0)
+  const heard = shelf.reduce((a, s) => a + s.seconds * s.share, 0)
+  return { shelf, all, heard, left: all - heard }
+}
+
+// Did the player stop this document in the same synchronous turn that something else is now looking at?
+// The player stops (playing: false) and only then marks a finished document finished, in one run of code
+// (player.js finish); a finish that arrives from another device comes in a turn of its own. So "stopped in this
+// turn" tells a document that ended HERE from one that was told it had ended. `seen` is called with the
+// player's state on every change of it.
+export function justStopped(later = queueMicrotask) {
+  let playing = null
+  let stopped = null
+  return {
+    seen(p) {
+      if (playing && !p.playing) { stopped = playing; later(() => { stopped = null }) }
+      playing = p.playing ? p.id : null
+    },
+    is: id => stopped === id,
+  }
+}
+
 const LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const back = (now, days) => { const d = new Date(now); d.setDate(now.getDate() - days); return d }
 
@@ -111,20 +143,22 @@ export function docListening(log, id, now) {
 }
 
 // How a document's timeline divides, for its bar.
-//   duration: seconds of audio at 1x · share: how far through it the listener is (0..1) · rate: playback speed
-// → { heard, today, left } as shares of the bar (today is the last stretch of heard), the seconds of audio
-//   heard and left, and `days`: how many more days of listening it takes at the usual pace (null when
-//   there is no pace to speak of, or it is too far off to promise).
+//   duration: seconds of audio at 1x · share: how far through it the listener is (0..1) · rate: the speed it
+//   is heard at (pace.js)
+// → { heard, today, left } as shares of the bar (today is the last stretch of heard), the seconds it takes the
+//   listener to have heard and to have left (at that speed: the unit of every length shown, pace.js), and
+//   `days`: how many more days of listening it takes at the usual pace (null when there is no pace to speak
+//   of, or it is too far off to promise).
 const TOO_FAR_DAYS = 90
 export function docBar({ duration, share, rate = 1 }, { today = 0, perDay = 0 } = {}) {
   const heard = Math.max(0, Math.min(1, share || 0))
   const speed = rate > 0 ? rate : 1
   const todayShare = duration > 0 ? Math.min(heard, (today * speed) / duration) : 0
-  const leftSeconds = Math.max(0, duration * (1 - heard))
+  const leftSeconds = Math.max(0, duration * (1 - heard)) / speed
   const dayShare = duration > 0 ? (perDay * speed) / duration : 0
-  const days = perDay >= A_SITTING_S && leftSeconds > 0 ? Math.ceil(leftSeconds / speed / perDay) : null
+  const days = perDay >= A_SITTING_S && leftSeconds > 0 ? Math.ceil(leftSeconds / perDay) : null
   return {
-    heard, today: todayShare, left: 1 - heard, heardSeconds: duration * heard, leftSeconds,
+    heard, today: todayShare, left: 1 - heard, heardSeconds: (duration * heard) / speed, leftSeconds,
     days: days != null && days <= TOO_FAR_DAYS ? days : null,
     dayShare: days != null && days <= TOO_FAR_DAYS ? dayShare : 0,
   }

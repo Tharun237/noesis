@@ -24,13 +24,14 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
-import { library, docDuration } from '../lib/library.js'
+import { library } from '../lib/library.js'
 import { useHistory, historyStore, makeRetrospective, listeningPlaces } from '../lib/history.js'
-import { dayKey } from '../lib/heard.js'
+import { dayKey, shelfOf } from '../lib/heard.js'
 import { KINDS, stretch, summary, streaks, calendar, hours, hourName } from '../lib/listening.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
 import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur } from './kit.jsx'
+import { useLength } from './usePace.js'
 
 const CHART_H = 132 // px: the tallest a bar stands
 const QUIET_S = 20 * 60 // a stretch of short listens is drawn against this, not blown up to full height
@@ -51,7 +52,6 @@ const isDay = k => /^\d{4}-\d{2}-\d{2}$/.test(k)
 const shortDay = key => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en', { day: 'numeric', month: 'short' }) }
 const longDay = key => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) }
 const days = n => (n === 1 ? '1 day' : `${n} days`)
-const shareOf = d => (d.finished ? 1 : d.total ? Math.min(1, d.pos / d.total) : 0)
 const sub = { fontSize: 13, color: T.sub, lineHeight: 1.5 }
 const mono = { fontFamily: T.mono, fontSize: 11, color: T.faint }
 
@@ -240,12 +240,13 @@ const Below = memo(function Below({ log, now }) {
   const month = useMemo(() => summary(log, stretch(log, 'month', now).days).total, [log, now])
   const since = everyDay[0] || null
 
-  // the library: how much there is, how much is done, and how long what is left takes at the customer's own pace
-  const shelf = useMemo(() => docs.filter(d => d.chars && !d.archived).map(d => ({ d, seconds: docDuration(d), share: shareOf(d) })), [docs])
-  const inAll = shelf.reduce((a, s) => a + s.seconds, 0)
-  const done = shelf.reduce((a, s) => a + s.seconds * s.share, 0)
+  // the library: how much there is, how much is done, and how long what is left takes at the customer's own pace.
+  // The same sums as the strip above the library (heard.js shelfOf), in the same unit: the time each document takes
+  // at the speed it is heard at (pace.js), so what is left is already the listening it takes.
+  const length = useLength()
+  const { shelf, all: inAll, heard: done, left } = useMemo(() => shelfOf(docs, length), [docs, length])
   const pace = useMemo(() => { let s = 0; for (let i = 0; i < PACE_DAYS; i++) { const d = new Date(now); d.setDate(d.getDate() - i); for (const v of Object.values(log[dayKey(d)] || {})) s += v || 0 } return s / PACE_DAYS }, [log, now])
-  const daysLeft = pace >= 60 && inAll > done ? Math.ceil((inAll - done) / rate / pace) : null
+  const daysLeft = pace >= 60 && left > 0 ? Math.ceil(left / pace) : null
 
   const keyed = hasAiKey()
   const enough = month >= 600
@@ -307,7 +308,7 @@ const Below = memo(function Below({ log, now }) {
 
       {/* how much is left */}
       {inAll > 0 && (
-        <Section title="Your library" aside={`${shelf.length} ${shelf.length === 1 ? 'document' : 'documents'}`}>
+        <Section title="Your library" aside={`${shelf.length} in your queue`}>
           <div role="img" aria-label={`${fmtDur(done)} done of ${fmtDur(inAll)}`} style={{ display: 'flex', gap: 2, height: 12 }}>
             {shelf.map(({ d, seconds, share }) => (
               <div key={d.id} title={`${d.title} · ${Math.round(share * 100)}%`} style={{ position: 'relative', flex: `${seconds} 1 0`, minWidth: 3, borderRadius: 3, overflow: 'hidden', background: T.surfaceTop }}>
@@ -316,7 +317,7 @@ const Below = memo(function Below({ log, now }) {
             ))}
           </div>
           <div style={sub}>
-            <span style={{ color: T.text }}>{fmtDur(inAll)}</span> to listen to, <span style={{ color: T.text }}>{fmtDur(done)}</span> done, <span style={{ color: T.text }}>{fmtDur(inAll - done)}</span> left.
+            <span style={{ color: T.text }}>{fmtDur(inAll)}</span> to listen to, <span style={{ color: T.text }}>{fmtDur(done)}</span> done, <span style={{ color: T.text }}>{fmtDur(left)}</span> left.
             {daysLeft != null && daysLeft <= FAR_DAYS && ` At your last two weeks' pace (${fmtDur(pace)} a day${rate !== 1 ? ` at ${rate}x` : ''}) that is ${days(daysLeft)}.`}
           </div>
         </Section>

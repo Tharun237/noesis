@@ -32,6 +32,8 @@ import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Swap, fmtD
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { DocInsight } from './Heard.jsx'
+import { usePace } from './usePace.js'
+import { atPace } from '../lib/pace.js'
 import { Toc, ReadingSettings, Marks, SearchBar, JumpToNow } from './ReaderParts.jsx'
 import { FocusView } from './FocusView.jsx'
 import { playerHeight } from './PlayerBar.jsx'
@@ -152,7 +154,7 @@ export function Reader({ wide }) {
   const playId = useStore(player, s => s.id)
   const pi = useStore(player, s => s.i)
   const isPlaying = useStore(player, s => s.playing)
-  const rate = useStore(player, s => s.rate)
+  const rate = usePace(id) // the speed this document is heard at (pace.js): the contents' times and its length
   const skip = useStore(settings, s => s.skipVisuals)
   const tocOpen = useStore(settings, s => s.tocOpen)
   const font = useStore(settings, s => s.readFont)
@@ -422,7 +424,7 @@ export function Reader({ wide }) {
               <div style={{ minWidth: 0, display: 'grid', gap: 8 }}>
                 <h1 {...rowIn(0)} style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</h1>
                 <div {...rowIn(1)} style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
-                  {[d.author, d.chars ? fmtDur(docDuration(d)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
+                  {[d.author, d.chars ? fmtDur(atPace(docDuration(d), rate)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
                 </div>
                 {playId !== id && (d.status === 'voicing' || d.status === 'ready') && (
                   <div {...rowIn(2)}><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></div>

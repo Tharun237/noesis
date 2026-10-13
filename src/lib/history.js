@@ -19,7 +19,7 @@ import { library, getDoc, addDocument, setHeardSync } from './library.js'
 import { touch, deviceName } from './sync.js'
 import { aiText } from './ai.js'
 import { onShelf } from './shelf.js'
-import { dayKey, listenedBetween, mergeLogs, yearOf, yearsIn, newest, addHour } from './heard.js'
+import { dayKey, listenedBetween, mergeLogs, yearOf, yearsIn, newest, addHour, justStopped } from './heard.js'
 
 export const emptyLog = () => ({ titles: {}, finished: [], hours: {} })
 
@@ -44,6 +44,10 @@ export function markFinished(log, day, docId) {
   if (!finished.some(f => f.id === docId && f.day === day)) finished.push({ id: docId, day })
   return { ...base, titles: { ...(base.titles || {}) }, finished }
 }
+
+// How many different documents were finished on days that start with `prefix` ('2026-10' or '2026'). A book
+// finished twice in the period is one book, and a deleted document's finish still counts: the log keeps it.
+const finishedIn = (log, prefix) => new Set((log.finished || []).filter(f => f.day && f.day.startsWith(prefix)).map(f => f.id)).size
 
 const dayTotal = (log, key) => {
   const m = log?.[key]
@@ -93,8 +97,8 @@ export function summarise(log, now) {
     }
     if (ks > 0 && (since === null || k < since)) since = k
   }
-  const finishedThisMonth = (base.finished || []).filter(f => f.day && f.day.slice(0, 7) === monthPrefix).length
-  const finishedThisYear = (base.finished || []).filter(f => f.day && f.day.slice(0, 4) === yearPrefix).length
+  const finishedThisMonth = finishedIn(base, monthPrefix)
+  const finishedThisYear = finishedIn(base, yearPrefix)
   let streak = 0
   const cursor = new Date(now)
   if (dayTotal(base, dayKey(cursor)) < 60) cursor.setDate(cursor.getDate() - 1)
@@ -262,6 +266,11 @@ export function startHistory() {
     historyStore.set(s => ({ log: change(s.log) }))
     unsent = true
   }
+  // A finish is the listening that ended HERE: the player stopped the document in the same turn its flag turned
+  // true. A flag that arrives from another device turns true in a turn of its own, and that device's own record
+  // already holds the finish (the two are added together, mergeLogs).
+  const stopping = justStopped()
+  player.sub(() => stopping.seen(player.get()))
   library.sub(() => {
     const docs = library.get().docs || []
     if (firstSync) {
@@ -274,7 +283,7 @@ export function startHistory() {
     for (const d of docs) {
       const was = prev.get(d.id)
       if (was === undefined) { prev.set(d.id, !!d.finished); continue }
-      if (!was && d.finished) done.push(d.id)
+      if (!was && d.finished && stopping.is(d.id)) done.push(d.id)
       prev.set(d.id, !!d.finished)
     }
     for (const id of [...prev.keys()]) {

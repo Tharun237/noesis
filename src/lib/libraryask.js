@@ -89,6 +89,6 @@ export async function askLibrary(question, { onStage, onPassages, onText, signal
 // Open a passage in the reader at that passage (playback not started).
 export async function openPassage(p) {
   const c = await loadDoc(p.doc)
-  patch(p.doc, { pos: c?.starts?.[p.block] ?? 0 })
+  patch(p.doc, { pos: c?.starts?.[p.block] ?? 0, posF: 0, lastPlayed: Date.now() })
   go('reader', p.doc)
 }
