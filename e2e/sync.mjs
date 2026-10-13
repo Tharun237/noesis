@@ -172,6 +172,17 @@ try {
   await sleep(2000); await a.sync()
   const gone = await b.until('the bookmark to be removed on device B', async () => { await b.sync(); return b.lib(`m.library.getDoc(${JSON.stringify(slow)}).marks.length === 0`) }).catch(() => false)
   check('removed on A, it is removed on B', gone === true)
+
+  // (f) A finished book that is only opened stays finished. (Opening it marked it unfinished, at the start, on
+  // every device: looking at a book is not beginning it again.)
+  await a.lib(`m.library.patch(${JSON.stringify(slow)}, { finished: true, pos: 0, posF: 0 })`)
+  await sleep(2000); await a.sync()
+  await b.until('the finished book to be finished on device B', async () => { await b.sync(); return b.lib(`m.library.getDoc(${JSON.stringify(slow)}).finished === true`) })
+  await b.lib(`m.player.open(${JSON.stringify(first)}, { autoplay: false }).catch(() => {})`) // another book in the player first, so the next is a fresh opening
+  await b.lib(`m.player.open(${JSON.stringify(slow)}, { autoplay: false })`)
+  await sleep(2000); await b.sync(); await sleep(1000); await a.sync(); await sleep(800); await a.sync()
+  const fin = { a: await a.lib(`m.library.getDoc(${JSON.stringify(slow)}).finished`), b: await b.lib(`m.library.getDoc(${JSON.stringify(slow)}).finished`) }
+  check('a finished book that is only opened stays finished, on both devices', fin.a === true && fin.b === true, `A ${fin.a}, B ${fin.b}`)
   check('no errors were thrown on either device', a.errors.length + b.errors.length === 0, [...a.errors, ...b.errors].join(' | '))
 } catch (e) {
   check(String(e.message).split('\n')[0], false)

@@ -18,14 +18,13 @@ import { bookStart } from '../ingest/front.js'
 import { READER } from '../ingest/pdftext.js'
 import { carrier } from './carry.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
-import { touch, configureSync, startSync, downloadContent, deviceName } from './sync.js'
+import { touch, touchAfter, configureSync, startSync, downloadContent, deviceName } from './sync.js'
 
 // Document lifecycle: queued → reading → narrating (AI only) → voicing → ready  (or error)
 // Two independent loops: PREP (parse + optional Gemini) and VOICE (on-device TTS, one sentence at a time),
 // so a long book can be prepared while you already listen to something else.
 
 const COLLECTIONS_KEY = onShelf('noesis.collections.v1')
-const RESENT_KEY = onShelf('noesis.sync.resent')
 const loadCollections = () => { try { return JSON.parse(localStorage.getItem(COLLECTIONS_KEY) || '[]') } catch { return [] } }
 
 export const library = createStore({ docs: [], loaded: false, collections: loadCollections(), voicingNow: null })
@@ -65,6 +64,17 @@ export function patch(id, p, remote = false) {
   if (keys.some(k => META_FIELDS.includes(k))) touch('meta:' + id)
   if (keys.some(k => POS_FIELDS.includes(k))) touch('pos:' + id)
   if (keys.includes('marks')) touch('marks:' + id)
+}
+
+// A change the machine worked out (sync.js touchAfter): kept here, and sent as the record it came from plus
+// one tick, never as "the customer just did this". For everything Noesis changes by itself in a record that
+// holds what the customer chose: their place, their bookmarks, a title, a voice.
+export function derive(id, p) {
+  patch(id, p, true)
+  const keys = Object.keys(p)
+  if (keys.some(k => META_FIELDS.includes(k))) touchAfter('meta:' + id)
+  if (keys.some(k => POS_FIELDS.includes(k))) touchAfter('pos:' + id)
+  if (keys.includes('marks')) touchAfter('marks:' + id)
 }
 
 // Disk writes are grouped. Progress changes several times a second while a book is prepared or voiced, and
@@ -600,9 +610,12 @@ function takeNewText(id, cur, n) {
   voiced.set(id, new Set())
   patch(id, {
     status: cur.voice == null ? 'ready' : 'voicing', stage: cur.voice == null ? '' : 'Generating audio',
-    total: n.total, chars: n.chars, done: 0, vChars: 0, vSec: 0, pos: n.pos, posF: 0, marks: n.marks, note: n.note ?? cur.note, scanned: n.scanned,
+    total: n.total, chars: n.chars, done: 0, vChars: 0, vSec: 0, note: n.note ?? cur.note, scanned: n.scanned,
     contentVer: Date.now(), readVer: READER,
   })
+  // The text is new, and says so. The place and the bookmarks are the same ones, carried to the same words:
+  // nobody listened or marked anything just now, so they are not stamped as if somebody had.
+  derive(id, { pos: n.pos, posF: 0, marks: n.marks })
   reread.forEach(f => f(id, n.pos))
   kickVoice()
 }
@@ -669,21 +682,11 @@ export async function boot() {
   // NVIDIA voices, if the customer saved a key: refresh the list at most once a day.
   void loadCloudVoices().catch(e => console.warn('NVIDIA voice list not loaded:', e?.message || e))
   configureSync(syncHooks)
-  // Once, on the version that mended them: every document this device HOLDS THE TEXT OF is sent again, with
-  // its text. A device that was told about a document before the text was sent, or was handed a record
-  // saying the text had no parts, is waiting for exactly this. (A device that is itself still waiting for a
-  // text sends nothing: it has nothing true to say about it.)
-  try {
-    if (!localStorage.getItem(RESENT_KEY)) {
-      for (const d of metas) if (d.contentVer && d.total > 0 && d.status !== 'syncing') touch('meta:' + d.id)
-      localStorage.setItem(RESENT_KEY, '1')
-    }
-  } catch { /* no storage */ }
   for (const d of metas) {
     if (d.status === 'syncing' && !d.contentVer && d.stage !== NOT_SENT) patch(d.id, { stage: NOT_SENT }, true) // said in older words
     if (d.status === 'syncing') fetchSynced(d.id) // resume interrupted downloads
     // Documents prepared before text versioning existed: give them a stable version so their text can sync.
-    else if (d.total && !d.contentVer) patch(d.id, { contentVer: d.createdAt })
+    else if (d.total && !d.contentVer) derive(d.id, { contentVer: d.createdAt })
   }
   startSync().catch(e => console.warn('Sync failed to start:', e))
   setTimeout(() => void rereadOld(), REREAD_AFTER_MS)
@@ -700,7 +703,10 @@ async function repairMeta(metas) {
       const stored = await db.getDoc(d.id).catch(() => null)
       const firstHeading = stored?.blocks?.find(b => b.k === 'h')?.s?.join(' ') || ''
       const cleaned = cleanMeta({ title: d.title, author: d.author }, { fileName: src.name, firstHeading })
-      if (cleaned.title !== d.title || cleaned.author !== (d.author || '')) patch(d.id, cleaned)
+      // looked at as it is NOW (a title that arrived from another device since the app opened is not mended away), and
+      // sent as a mending, not as something the customer just typed
+      const now = getDoc(d.id)
+      if (now && !now.renamed && (cleaned.title !== now.title || cleaned.author !== (now.author || '')) && now.title === d.title) derive(d.id, cleaned)
     } catch { /* one bad document must not stop the repair */ }
     await pause()
   }
@@ -714,7 +720,7 @@ async function retireKokoro(metas) {
   for (const d of metas) {
     if (d.voice == null || isVoice(d.voice)) continue
     await resetAudio(d.id)
-    patch(d.id, { voice: fromKokoro(d.voice) })
+    derive(d.id, { voice: fromKokoro(d.voice) }) // the nearest voice to the one they chose: not a new choice
   }
 }
 

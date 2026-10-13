@@ -67,6 +67,26 @@ export function touch(k, at = drive.clockNow()) {
   schedule(throttled ? Math.max(1500, POS_THROTTLE_MS - (Date.now() - lastPosPush)) : 1500)
 }
 
+// A change the MACHINE worked out from a record (a place carried to a text that was read again, a title mended
+// from a file's name) is not something the customer just did, so it must not be stamped "now": that made this
+// device's copy the newest, over anything done since on another device. It is stamped one tick after the
+// record it was worked out from: it replaces that record everywhere, and anything a customer did later, on
+// any device, still wins.
+const earlyAfter = new Set() // worked out before the account check finished (at boot)
+export function touchAfter(k) {
+  if (!uid) { earlyAfter.add(k); return }
+  clock[k] = (clock[k] || 0) + 1
+  dirty[k] = clock[k]
+  persist()
+  schedule(1500)
+}
+const mergeEarly = () => {
+  for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
+  for (const k of earlyAfter) if (!(k in early)) { clock[k] = (clock[k] || 0) + 1; dirty[k] = clock[k] }
+  early = {}
+  earlyAfter.clear()
+}
+
 // Pause / stop: the moment you are most likely to switch devices, so skip the playback throttle.
 export function flushNow() {
   if (!uid) return
@@ -315,8 +335,7 @@ export async function startSync() {
   if (me === null) { // offline: keep syncing with the account we last knew about
     if (saved?.uid && saved.ids) {
       ({ uid, cursor, clock, dirty, ids } = saved)
-      for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
-      early = {}
+      mergeEarly()
     }
     account.set({ checked: true, reachable: false })
     if (uid) { syncState.set({ status: 'offline' }); wire() }
@@ -335,8 +354,7 @@ export async function startSync() {
   // Tharun's phone, 13 October 2026, 7 of 21 books however often it synced. Looking at everything is one
   // request, and only what is newer than ours is then read.
   cursor = null
-  for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
-  early = {}
+  mergeEarly()
   wire()
   await flush()
 }

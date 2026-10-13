@@ -86,3 +86,52 @@ Tharun when it matters, do not round it up.
 | When Noesis reads a book better, my place and bookmarks stay on the same words | `carry.test.js`; the upgrade run of 13 October (three real books) | Kept on the device that reads it again. **Not proved across devices**: a place written against the older text by a device that has not yet received the new text is taken as a sentence number of the new one. Places and bookmarks need to say which version of the text they are counted in |
 | Bookmarks and their notes follow me | `e2e/sync.mjs`: a bookmark and its note made on B are on A; removed on A, it is removed on B | Kept |
 | What I set (speed, voice, how the library is sorted) follows me | nothing: settings are kept on the device only | **Not promised yet**: decide with Tharun which settings are the customer's and which are the device's |
+
+## The first sweep (13 October 2026): question 1 asked of every record, question 6 of every number
+
+An agent listed every place the app writes a synced record without the customer doing anything, and every pair
+of numbers on a screen that come from different sources. Each line was read in the code before it was acted on.
+
+Fixed that day, each from the list and not from a report:
+
+- Opening a book wrote its place as the newest (test: fails before, passes after).
+- The same through another door: a sentence the player was waiting for arrived, and loading it counted as the
+  customer moving. Fixed; **not proved by a test** (it needs a voice being made).
+- Opening a finished book marked it unfinished, at the start, on every device (test: fails before, passes after).
+- A text read again stamped that device's place and bookmarks as the newest. They are now sent as "the same
+  place, carried", one tick after the record they came from (`sync.js` touchAfter, `library.js` derive), so
+  anything listened to later on another device still wins. **Not proved across two devices.**
+- At every launch: a title mended from the file's name, a retired voice replaced, and a one-time "send
+  everything again" all stamped whole records as newest. The first two are now sent as mendings; the third is
+  gone (every launch already sends what the folder lacks).
+
+Found and **not fixed** (say so when it matters; do not let these be discovered by Tharun):
+
+- A place or bookmark does not say which version of the text it is counted in (ledger above).
+- A voice changed on another device can start a book that was only open and waiting (`player.js` voiceChanged):
+  not verified by reading it through.
+- A document whose preparing is resumed when the app opens re-stamps its place from when preparing began.
+- A place past the end of a text (after a re-read made it shorter) marks the book finished on opening.
+- The speed reader, a tap on a passage in "ask the library", and switching language version move the place but
+  leave the old part-of-a-sentence and the old "last listened" time with it.
+- Bookmarks are one record for the whole book: two devices adding one each in the same minute lose one.
+- A version of a document that is one chapter (`part`) is not told to other devices as that chapter.
+- Not kept in step at all, and a customer would expect it: listening speed, the default voice, how the library
+  is sorted, autoplay next, archive when finished, full text or summary, skip figures, the speed reader's
+  speed, which AI service (not its key), the address of a custom voice service, and the conversations had with
+  a book in Ask. Tharun decides which are the customer's and which are the device's.
+
+Numbers that can contradict each other (question 6), none fixed yet:
+
+- "X done" (from the place) beside "Y today" (from the listening log): after going back, after finishing, in a
+  translated version.
+- The library's "Today" and the sum of what the cards say today (cards hide under a minute, and when finished).
+- The player's elapsed time (the audio's seconds) and its time left (divided by the speed): at 2x they do not
+  add up to the length; a chapter's time in the contents is divided by the speed, the player's is not.
+- "left" on a card (from the place, at the default speed) and "left" in the player (at the speed being played).
+- "done / left" in the library strip (the documents shown, filters and archived included) and in the listening
+  page it opens (every unarchived document).
+- "N documents" in the library header (archived and still-preparing included) and in the listening page (not).
+- "Finished" in the listening page counts every time a book became finished on this device, again if it was
+  finished twice, and still after the book is deleted.
+- The same book has a different length on each device (each measures its own voice's speed).

@@ -148,6 +148,13 @@ const segText = i => doc?.segs[i]?.t || ''
 // book, being handed the place by another device, or the text being read again is not a move: writing then
 // stamped this device's older place as the newest, and the real one was lost on every device.
 let here = false
+// The customer has listened or moved here. A finished book is begun again by that, and only by that: opening
+// it to look marked it unfinished, at the start, on every device.
+function mine() {
+  here = true
+  const { id } = player.get()
+  if (id && getDoc(id)?.finished) patch(id, { finished: false })
+}
 function savePosition(now = false) {
   clearTimeout(posTimer)
   const save = () => {
@@ -172,7 +179,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   cancelSpeech()
   player.set({ i, t: offset, waiting: false, word: from })
   refreshMedia()
-  if (!given) here = true
+  if (!given) mine()
   savePosition()
   if (system()) { audio.pause(); return speak(c, i, autoplay, from) }
 
@@ -317,7 +324,7 @@ async function gateCheck() {
 onSegment(async (id, i) => {
   const p = player.get()
   if (p.id !== id) return
-  if (p.waiting && p.i === i) return load(i, { autoplay: p.playing })
+  if (p.waiting && p.i === i) return load(i, { autoplay: p.playing, given: true }) // the sentence it waited for is made: not a move
   if (pendingStart && await gateCheck()) {
     pendingStart = false
     play()
@@ -340,7 +347,6 @@ export async function open(id, { at, autoplay = true } = {}) {
   if (!c) return // still being prepared — the reader shows progress
   doc = c
   const start = at ?? (same ? player.get().i : d.finished ? 0 : d.pos || 0)
-  if (d.finished && at == null) patch(id, { finished: false })
   const resume = at == null && !same && !d.finished && start === d.pos && d.posF
   await load(start, {
     autoplay: false,
@@ -358,7 +364,7 @@ const wordStart = (t, f) => { const at = Math.floor(t.length * f); const k = t.l
 export async function play() {
   const p = player.get()
   if (!p.id) return
-  here = true // listening here: from now on the place is this device's to write
+  mine() // listening here: from now on the place is this device's to write
   // Resuming audio that is already loaded starts inside the tap itself: Safari refuses a play() that
   // comes after an await, and nothing here needs to wait.
   if (!system() && !p.waiting && p.gate == null && audio.src && covers(current, p.id, p.i)) audio.play().catch(playFailed)
