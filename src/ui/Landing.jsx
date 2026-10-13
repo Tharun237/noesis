@@ -19,7 +19,7 @@ import { go, openSheet, closeWelcome, pushPanel, toast } from '../lib/nav.js'
 import { useStore } from '../lib/store.js'
 import { account } from '../lib/sync.js'
 import { addDocument, library } from '../lib/library.js'
-import { VOICES } from '../lib/voices.js'
+import { VOICES, voicesFor } from '../lib/voices.js'
 import { LANGS } from '../lib/lang.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented } from './kit.jsx'
@@ -196,7 +196,7 @@ export function Landing({ wide, hasLibrary }) {
             <div style={label}>04 · Your language</div>
             <h2 style={{ ...h2, marginTop: 16 }}>Hear it in<br />your language.</h2>
             <p style={say}>A paper written in English, heard in Telugu. Noesis translates the whole document on your own device, free, and reads the translation to you. With your own AI key the translation is more natural still.</p>
-            <p style={{ margin: '18px 0 0', maxWidth: 520, fontFamily: T.code, fontSize: 11.5, lineHeight: 1.8, letterSpacing: '0.04em', color: T.faint }}>{Object.values(LANGS).map(l => l.name).join(' · ')}</p>
+            <p style={{ margin: '18px 0 0', maxWidth: 520, fontFamily: T.code, fontSize: 11.5, lineHeight: 1.8, letterSpacing: '0.04em', color: T.faint }}>{Object.entries(LANGS).filter(([code]) => voicesFor(code).length > 0 || code === 'hi').map(([, l]) => l.name).join(' · ')}</p>
           </div>
           <Tongues wide={wide} />
         </section>

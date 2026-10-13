@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { PLAIN_PAGES } from './tools/pages.mjs' // writes the plain search pages into public/ as it is read, and names them
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { handleFetch } from './functions/api/fetch.js'
@@ -35,6 +36,9 @@ const apiInDev = {
     route('/api/devdrive', handleDevDrive)
   },
 }
+
+// the plain pages people arrive at from a search (tools/pages.mjs): files of their own, not screens of the app
+const PLAIN = new RegExp(`^/(${PLAIN_PAGES.join('|')})(/|$|\\.html$)`)
 
 export default defineConfig({
   plugins: [
@@ -82,7 +86,7 @@ export default defineConfig({
         globIgnores: ['pdfjs/**', 'dict/**', 'ort/**', 'espeak/**', 'translate/**'],
         importScripts: ['notify-sw.js'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        navigateFallbackDenylist: [/^\/api\//, /^\/privacy/, /^\/listen-to-pdf/, /^\/alternatives/, /^\/robots\.txt$/, /^\/sitemap\.xml$/], // the privacy page is a file of its own, not a screen of the app
+        navigateFallbackDenylist: [/^\/api\//, /^\/privacy/, /^\/listen-to-pdf/, /^\/alternatives/, PLAIN, /^\/robots\.txt$/, /^\/sitemap\.xml$/], // the privacy page is a file of its own, not a screen of the app
         // Voices are cached by the voice worker itself (Cache Storage 'noesis-voices').
         runtimeCaching: [{
           // The 11 MB ONNX runtime WASM is too big to precache; cache it the first time the engine loads.

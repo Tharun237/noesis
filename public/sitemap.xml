@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The pages of Noesis that are for everyone. The app itself (a library, a document being read) is each
-     person's own and lives on their device: it has no public pages to list. -->
+<!-- The pages of Noesis that are for everyone (written by tools/pages.mjs). The app itself (a library, a document
+     being read) is each person's own and lives on their device: it has no public pages to list. -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://www.noesisaudio.com/</loc></url>
   <url><loc>https://www.noesisaudio.com/listen-to-pdf</loc></url>
   <url><loc>https://www.noesisaudio.com/alternatives</loc></url>
+  <url><loc>https://www.noesisaudio.com/pdf-to-audio</loc></url>
+  <url><loc>https://www.noesisaudio.com/text-to-speech</loc></url>
+  <url><loc>https://www.noesisaudio.com/epub-to-audiobook</loc></url>
+  <url><loc>https://www.noesisaudio.com/listen-to-research-papers</loc></url>
+  <url><loc>https://www.noesisaudio.com/article-to-audio</loc></url>
+  <url><loc>https://www.noesisaudio.com/word-to-audio</loc></url>
+  <url><loc>https://www.noesisaudio.com/hindi-text-to-speech</loc></url>
+  <url><loc>https://www.noesisaudio.com/telugu-text-to-speech</loc></url>
+  <url><loc>https://www.noesisaudio.com/guides</loc></url>
   <url><loc>https://www.noesisaudio.com/privacy</loc></url>
 </urlset>
