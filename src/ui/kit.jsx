@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, useDragControls, useMotionValue, useSpring, useTransform } from 'motion/react'
 import { T, label } from '../theme.js'
@@ -201,20 +201,34 @@ export function Pulse({ color = T.lime }) {
 }
 
 // Bottom sheet on phones, centred dialog on wide screens. Escape and backdrop close it.
+//
+// How it arrives is ONE `transform` on its holder, which the browser's compositor runs by itself: the sheet
+// keeps moving smoothly while what is inside it is still being built. (It was `y`, animated by script on the
+// thread that was busy building the contents: on a phone the sheet came up in jerks. Pages were mended the
+// same way, App.jsx.) The pull-down on a phone is a second, inner element with its own `y`, so dragging and
+// arriving never fight over one value. At rest the holder's transform is taken off.
+//
+// SheetLanded tells what is inside when the sheet has come to rest: a long page builds what is further down
+// then, not while the sheet is moving.
+export const SheetLanded = createContext(true)
+const SHEET_IN = { duration: 0.42, ease: T.enter.ease }
+const SHEET_OUT = { duration: 0.24, ease: 'easeIn' }
+
 export function Sheet({ open, onClose, children, wide, width = 560, title }) {
   // On a phone the sheet is pulled down by its handle to close, like every native sheet. Only the handle
   // starts the drag, so scrolling the sheet's contents is never mistaken for it.
   const pull = useDragControls()
   // The dark behind the sheet lightens as the sheet is pulled away: the page underneath is coming back.
-  // (While the sheet is arriving its position is a percentage, not pixels: the dark stays full.)
   const y = useMotionValue(0)
   const dim = useTransform(y, v => (typeof v === 'number' ? 1 - Math.min(0.6, Math.max(0, v) / 420) : 1))
+  const [landed, setLanded] = useState(false)
   useEffect(() => {
-    if (!open) return
+    if (!open) { setLanded(false); return }
+    y.set(0) // a sheet closed by pulling it down opens again where a sheet rests
     const k = e => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
-  }, [open, onClose])
+  }, [open, onClose, y])
   return (
     <AnimatePresence>
       {open && (
@@ -222,27 +236,30 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
           onClick={onClose}
           style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: wide ? 'center' : 'flex-end', justifyContent: 'center', padding: wide ? 24 : 0 }}>
           <motion.div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: T.scrim, opacity: wide ? 1 : dim }} />
-          <motion.div role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}
-            initial={wide ? { opacity: 0, y: 16, scale: 0.98 } : { y: '100%' }}
-            animate={wide ? { opacity: 1, y: 0, scale: 1 } : { y: 0 }}
-            exit={wide ? { opacity: 0, y: 12, scale: 0.98 } : { y: '100%' }}
-            transition={T.spring}
-            drag={wide ? false : 'y'} dragControls={pull} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
-            onDragEnd={(e, info) => { if (info.offset.y > 110 || info.velocity.y > 600) onClose() }}
-            style={{
-              y, position: 'relative',
-              width: wide ? width : '100%', maxWidth: '100%', maxHeight: wide ? 'calc(100dvh - 48px)' : '92dvh', overflowY: 'auto', overflowX: 'hidden',
-              background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: wide ? T.r.xl : `${T.r.xl}px ${T.r.xl}px 0 0`,
-              borderBottom: wide ? undefined : 'none', paddingBottom: wide ? 0 : 'env(safe-area-inset-bottom)',
-              boxShadow: '0 30px 80px rgba(0,0,0,0.8)',
-            }}>
-            {!wide && (
-              <div onPointerDown={e => pull.start(e)} aria-hidden="true" style={{ padding: '10px 0 12px', margin: '0 auto -12px', width: 120, cursor: 'grab', touchAction: 'none' }}>
-                <div style={{ width: 40, height: 4, borderRadius: 4, background: T.surfaceTop, margin: '0 auto' }} />
-              </div>
-            )}
-            {/* What is inside settles a moment after the sheet itself: the sheet arrives, then its content. */}
-            <div data-rise="sheet" style={{ minWidth: 0, maxWidth: '100%' }}>{children}</div>
+          <motion.div onClick={e => e.stopPropagation()}
+            initial={wide ? { opacity: 0, transform: 'translateY(16px) scale(0.98)' } : { transform: 'translateY(100%) scale(1)' }}
+            animate={{ ...(wide ? { opacity: 1 } : {}), transform: 'translateY(0px) scale(1)', transition: SHEET_IN, transitionEnd: { transform: 'none' } }}
+            exit={{ ...(wide ? { opacity: 0, transform: ['translateY(0px) scale(1)', 'translateY(12px) scale(0.98)'] } : { transform: ['translateY(0%) scale(1)', 'translateY(100%) scale(1)'] }), transition: SHEET_OUT }}
+            onAnimationComplete={() => setLanded(true)}
+            style={{ position: 'relative', width: wide ? width : '100%', maxWidth: '100%', willChange: 'transform' }}>
+            <motion.div role="dialog" aria-modal="true" aria-label={title}
+              drag={wide ? false : 'y'} dragControls={pull} dragListener={false} dragConstraints={{ top: 0, bottom: 0 }} dragElastic={{ top: 0, bottom: 0.7 }}
+              onDragEnd={(e, info) => { if (info.offset.y > 110 || info.velocity.y > 600) onClose() }}
+              style={{
+                y, position: 'relative',
+                maxHeight: wide ? 'calc(100dvh - 48px)' : '92dvh', overflowY: 'auto', overflowX: 'hidden',
+                background: T.bg, border: `1px solid ${T.borderHi}`, borderRadius: wide ? T.r.xl : `${T.r.xl}px ${T.r.xl}px 0 0`,
+                borderBottom: wide ? undefined : 'none', paddingBottom: wide ? 0 : 'env(safe-area-inset-bottom)',
+                boxShadow: '0 30px 80px rgba(0,0,0,0.8)',
+              }}>
+              {!wide && (
+                <div onPointerDown={e => pull.start(e)} aria-hidden="true" style={{ padding: '10px 0 12px', margin: '0 auto -12px', width: 120, cursor: 'grab', touchAction: 'none' }}>
+                  <div style={{ width: 40, height: 4, borderRadius: 4, background: T.surfaceTop, margin: '0 auto' }} />
+                </div>
+              )}
+              {/* What is inside settles a moment after the sheet itself: the sheet arrives, then its content. */}
+              <SheetLanded.Provider value={landed}><div data-rise="sheet" style={{ minWidth: 0, maxWidth: '100%' }}>{children}</div></SheetLanded.Provider>
+            </motion.div>
           </motion.div>
         </motion.div>
       )}

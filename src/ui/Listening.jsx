@@ -19,7 +19,7 @@
 //   - the bars grow as ONE thing (their holder, one transform run by the browser), not as thirty animations
 //     driven by script; the number is written, not counted up frame by frame
 //   - a calendar day is one element, and the calendar has one tap handler for all of them
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
@@ -30,7 +30,7 @@ import { dayKey } from '../lib/heard.js'
 import { KINDS, stretch, summary, streaks, calendar, hours, hourName } from '../lib/listening.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
-import { Button, IconButton, Pulse, Appear, Segmented, fmtDur } from './kit.jsx'
+import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur } from './kit.jsx'
 
 const CHART_H = 132 // px: the tallest a bar stands
 const QUIET_S = 20 * 60 // a stretch of short listens is drawn against this, not blown up to full height
@@ -39,8 +39,9 @@ const WEEKS = 17 // the calendar: about four months, and as many columns as a ph
 const HOURS_MIN_S = 10 * 60 // less than this by the hour says nothing about when
 const PACE_DAYS = 14 // "your pace" is the last two weeks, days without listening included
 const FAR_DAYS = 999
-const NEXT_MS = 140 // and the part after that, a moment later
-const LANDED_MS = 460 // the sheet has arrived (T.spring is 0.42 s): what is further down is built now
+const NEXT_MS = 140 // what is furthest down is built this long after the sheet has come to rest
+// the height the page holds from its first frame, when there is listening to show: the sheet's own tallest
+const HELD = { phone: '92dvh', wide: 'calc(100dvh - 50px)' }
 const BEFORE = { week: 'the 7 days before', month: 'the 30 days before', year: 'the 12 months before' }
 const SPAN = { week: 'The last 7 days', month: 'The last 30 days', year: 'The last 12 months', all: 'All of it' }
 const LIME = [1, 3, 5].map(i => parseInt(T.lime.slice(i, i + 2), 16)).join(' ')
@@ -89,10 +90,21 @@ export function Listening({ wide }) {
   const [kind, setKind] = useState('week')
   const [picked, setPicked] = useState(null) // the key of the bar tapped, or null: the whole stretch
   const [allDocs, setAllDocs] = useState(false)
-  // 0: the sheet is arriving · 1: it has landed, the cards are built · 2: the rest is built (one piece at a time:
-  // together they were one long stop just after the sheet had come to rest)
+  // 0: the sheet is arriving · 1: it has come to rest (the sheet says so: kit.jsx SheetLanded), the cards are
+  // built · 2: the rest is built, a moment later (together they were one long stop). Nothing is built while
+  // the sheet is moving, and nothing that is built changes the sheet's size: its height is held from the first
+  // frame (HELD), so it does not jump taller as it fills. ("It's coming from bottom while lagging, doing some
+  // kind of jump": it was built on a timer, which a slow phone reached while the sheet was still on its way,
+  // and each piece made the sheet taller. Tharun, 2026-10-13.)
+  const atRest = useContext(SheetLanded)
   const [landed, setLanded] = useState(0)
-  useEffect(() => { const a = setTimeout(() => setLanded(1), LANDED_MS), b = setTimeout(() => setLanded(2), LANDED_MS + NEXT_MS); return () => { clearTimeout(a); clearTimeout(b) } }, [])
+  useEffect(() => {
+    if (!atRest) return undefined
+    setLanded(1)
+    const t = setTimeout(() => setLanded(2), NEXT_MS)
+    return () => clearTimeout(t)
+  }, [atRest])
+  const any = useMemo(() => Object.keys(log).some(isDay), [log])
   const now = useMemo(() => new Date(), [log]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const st = useMemo(() => stretch(log, kind, now), [log, kind, now])
@@ -116,7 +128,7 @@ export function Listening({ wide }) {
   const cols = { display: 'grid', gridTemplateColumns: `repeat(${st.bars.length}, minmax(0, 1fr))`, gap: st.bars.length > 14 ? 3 : 8 }
 
   return (
-    <div style={{ padding: wide ? '26px 28px 30px' : '16px 20px 26px', display: 'grid', gap: 30, minWidth: 0 }}>
+    <div style={{ padding: wide ? '26px 28px 30px' : '16px 20px 26px', display: 'grid', gap: 30, alignContent: 'start', minWidth: 0, minHeight: any ? (wide ? HELD.wide : HELD.phone) : undefined, boxSizing: 'border-box' }}>
       <div style={{ display: 'grid', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, fontSize: 20, fontWeight: 700, color: T.text }}>Your listening</div>

@@ -154,3 +154,13 @@ counters (style recalculations a second, main-thread work a second) while the vo
   stretch. Now what is further down is built after the sheet has landed, in two pieces; what does not depend
   on the control at the top is its own memo component; many bars grow as ONE holder (`[data-grow]`). Opening
   it costs what the lightest sheet costs (76 ms worst frame against 264; the Add sheet is 83).
+- **A sheet arrives by ONE `transform` on its holder, never by `y`** (kit.jsx `Sheet`): the compositor moves
+  it while its contents are still being built. With `y` (script) a slow phone showed it come up in jerks, and
+  the spring's bounce lifted it 20 px past its place and back. The pull-down is a second, inner element with
+  its own `y`. Measured at six times slower than the laptop: 96% of the arriving frames moved by the browser
+  (was 13 to 27%).
+- **A sheet has its final height in its first frame.** What is built later (after `SheetLanded`) must not
+  make it taller: with a few minutes of listening "Your listening" opened 549 px tall and jumped to 776 while
+  still arriving. A page that fills in later holds its height from the start (`minHeight`).
+- **"After it has landed" is the sheet saying so (`SheetLanded`), not a timer.** A timer written for a fast
+  machine fires on a slow one while the sheet is still on its way.
