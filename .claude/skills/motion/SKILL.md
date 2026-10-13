@@ -164,3 +164,10 @@ counters (style recalculations a second, main-thread work a second) while the vo
   still arriving. A page that fills in later holds its height from the start (`minHeight`).
 - **"After it has landed" is the sheet saying so (`SheetLanded`), not a timer.** A timer written for a fast
   machine fires on a slow one while the sheet is still on its way.
+- **Compare two builds only from a clean profile each.** The measuring profile kept a service worker, which
+  serves whichever build it last cached: two builds measured in turn on one address were each measured on the
+  other's files, and a comparison came out both ways (2026-10-13). `e2e/feel.mjs` now starts clean every run and
+  takes `FEEL_URL` for a second build on another port. Measured that way, alternately, twice each: the day's
+  redesigns cost nothing overall (3640 against 3660 ms of script, 46 against 46 late frames) and sheets got
+  lighter. A page "stuck part-faded" in the random customer's list is the dev server being slow: on the
+  production build a page is fully there within 0.8 s at a slow phone's speed, however fast the taps.

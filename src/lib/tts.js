@@ -42,10 +42,16 @@ function call(msg) {
       data.type === 'error' ? p.reject(new Error(data.message)) : p.resolve(data)
     }
     // A worker that fails to start (bad import, unsupported browser) must fail loudly, not hang forever.
+    // It is also thrown away: a dead engine was kept, so every later request (Retry included) was sent to it
+    // and waited for ever. The next request starts a new one.
     worker.onerror = e => {
       const err = new Error(e.message || 'The voice engine could not start')
       for (const p of pending.values()) p.reject(err)
       pending.clear()
+      try { worker.terminate() } catch { /* already gone */ }
+      worker = null
+      loading = null
+      engine.set({ status: 'error', error: err.message })
     }
   }
   const id = ++seq

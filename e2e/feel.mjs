@@ -10,11 +10,16 @@
 // Targets: first answer under 100 ms, no stall over 100 ms, late frames under a fifth. Compare runs before
 // and after a change; a number here is worth more than "it feels fine on my machine".
 import { chromium } from 'playwright-core'
+import { rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const RATE = +(process.argv[2] || 4)
-const HOME = 'http://localhost:5190/'
+const HOME = process.env.FEEL_URL || 'http://localhost:5190/' // FEEL_URL: another build, to compare with in the same sitting
 const PROFILE = fileURLToPath(new URL('../.feel-profile', import.meta.url))
+// A new profile every run. A kept one holds a service worker, which serves whichever build it last cached: two
+// builds measured one after the other on the same address were then each measured on the other's files (found
+// 2026-10-13, when a comparison came out both ways).
+rmSync(PROFILE, { recursive: true, force: true })
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const ctx = await chromium.launchPersistentContext(PROFILE, { channel: 'chrome', headless: true, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, args: ['--autoplay-policy=no-user-gesture-required'] })
 const page = ctx.pages()[0] || await ctx.newPage()
@@ -23,7 +28,8 @@ const errors = []
 page.on('pageerror', e => errors.push(String(e).slice(0, 160)))
 // the install card floats over the bottom of the library after a while: this customer has waved it away
 await page.addInitScript(() => { try { localStorage.setItem('noesis.install.dismissed', String(Date.now())) } catch { /* no storage */ } })
-await page.goto(HOME); await page.waitForLoadState('networkidle'); await sleep(800)
+await page.goto(HOME); await page.waitForLoadState('networkidle'); await sleep(6000)
+await page.waitForLoadState('networkidle'); await sleep(1500)
 
 const btn = name => page.getByRole('button', { name, exact: true }).first()
 // the install card floats over the bottom of the library: a customer would wave it away first
@@ -32,7 +38,7 @@ if (await btn('Not now').count()) { await btn('Not now').click(); await sleep(40
 const have = await page.locator('body').innerText()
 const add = async text => {
   await btn('Add').click(); await sleep(500)
-  await page.getByRole('tab', { name: 'Text', exact: true }).click()
+  await page.getByRole('dialog').getByRole('tab', { name: 'Text', exact: true }).click()
   await page.locator('[role=dialog] textarea').first().fill(text)
   await page.getByRole('button', { name: 'Add to library' }).click()
   await page.waitForFunction(() => history.state?.view === 'reader', null, { timeout: 20000 })

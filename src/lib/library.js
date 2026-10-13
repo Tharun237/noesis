@@ -238,6 +238,7 @@ if (typeof addEventListener === 'function') addEventListener('online', () => { c
 export const kickVoice = makeLoop(async () => {
   if (activeEngine() === 'system') return false // built-in voice speaks directly; no generation, no CPU load
   if (engine.get().status === 'error') return false // wait for a retry (which kicks)
+  if (library.get().noRoom) return false // no room to keep audio in: wait until something is removed
   const job = await nextVoiceJob()
   if (!job) { if (library.get().voicingNow) library.set({ voicingNow: null }); return false }
   await voiceOne(job.id, job.i)
@@ -253,12 +254,17 @@ async function resetAudio(id) {
   patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Making the audio' } : {}) })
 }
 
+// Documents whose online voice could not be reached, and when each is tried again.
+const later = new Map()
+const AGAIN_MS = 5000
+
 async function nextVoiceJob() {
   const p = priority()
   const docs = library.get().docs.filter(d => d.status === 'voicing')
     .sort((a, b) => (b.id === p?.id) - (a.id === p?.id) || a.createdAt - b.createdAt)
   for (const d of docs) {
     if (d.voice == null) continue // no natural voice for this language: the built-in voice speaks it, no generation
+    if (later.get(d.id) > Date.now()) continue // its online voice could not be reached a moment ago: the others go first
     const c = await loadDoc(d.id)
     if (!c) continue
     const set = voicedSet(d.id)
@@ -300,25 +306,23 @@ async function voiceOne(id, i) {
   }
   try {
     if (cloud) {
-      // A network or quota failure must never mark the sentence as failed: wait and try again.
-      // Only a real refusal (bad key, text rejected) leaves this loop for the failure path below.
-      for (;;) {
-        try {
-          rec = await synthesize(seg.t, voice, pauseKind, tone, { onRetry })
-          break
-        } catch (e) {
-          if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
-          const status = e?.status
-          const msg = String(e?.message || '')
-          const refusal = status === 401 || status === 403 || status === 404 || status === 400 ||
-            /did not accept the key/i.test(msg)
-          if (refusal) throw e
-          if (/limiting requests/i.test(msg)) { /* stage already says so via onRetry; keep waiting */ }
-          else patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
-          await new Promise(r => setTimeout(r, 5000))
-          const still = getDoc(id)
-          if (!still || (isVoice(still.voice) ? still.voice : fromKokoro(still.voice)) !== voice) return
-        }
+      // A network or quota failure must never mark the sentence as failed: it is tried again in a moment.
+      // Only a real refusal (bad key, text rejected) goes to the failure path below. Meanwhile this document
+      // steps aside (`later`), so the others in the line are made: it used to wait here, in the one line
+      // there is, and a document in a voice made on the device waited behind it for as long as it did.
+      try {
+        rec = await synthesize(seg.t, voice, pauseKind, tone, { onRetry })
+      } catch (e) {
+        if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
+        const status = e?.status
+        const msg = String(e?.message || '')
+        const refusal = status === 401 || status === 403 || status === 404 || status === 400 ||
+          /did not accept the key/i.test(msg)
+        if (refusal) throw e
+        if (!/limiting requests/i.test(msg)) patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
+        later.set(id, Date.now() + AGAIN_MS)
+        setTimeout(() => kickVoice(), AGAIN_MS + 100)
+        return
       }
     } else {
       rec = await synthesize(seg.t, voice, pauseKind, tone)
@@ -332,7 +336,14 @@ async function voiceOne(id, i) {
   const now = getDoc(id)
   if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c) return // deleted / voice changed / re-processed meanwhile
   rec.v = tone === 'natural' ? voice : voice + '|' + tone
-  await db.putAudio(id, i, rec)
+  // No room left on this device: the audio just made cannot be kept. That used to stop the line without a
+  // word, and start it again on every nudge to make the same sentence and fail the same way. Now it is
+  // said (Activity.jsx), and nothing more is made until something has been removed.
+  try { await db.putAudio(id, i, rec) } catch (e) {
+    console.warn('Audio could not be kept:', e)
+    library.set({ noRoom: true })
+    return
+  }
   const set = voicedSet(id)
   set.add(i)
   c.durs[i] = rec.dur
@@ -627,7 +638,13 @@ const syncHooks = {
     if (type === 'meta') {
       if (v.deleted) return d && deleteDoc(id, true)
       if (!d) return createSynced(id, v)
+      // The voice was changed on another device: the audio kept here is in the old one. It is made again, as
+      // if the voice had been changed here (it was left as it was, and a document open in the player then
+      // waited for a sentence in the new voice that nothing was making).
+      const revoice = v.voice && d.voice && v.voice !== d.voice && d.total > 0 && d.status !== 'syncing'
+      if (revoice) await resetAudio(id)
       patch(id, pick(v, META_FIELDS), true)
+      if (revoice) kickVoice()
       if (v.contentVer && v.contentVer !== d.contentVer) fetchSynced(id) // text was re-processed elsewhere
       return
     }
@@ -761,6 +778,7 @@ export function reprocess(id, changes = {}) {
 }
 
 export async function deleteDoc(id, remote = false) {
+  if (library.get().noRoom) { library.set({ noRoom: false }); setTimeout(() => kickVoice(), 500) } // room has been made
   cache.delete(id)
   voiced.delete(id)
   library.set(s => ({ docs: s.docs.filter(d => d.id !== id) }))
@@ -769,6 +787,7 @@ export async function deleteDoc(id, remote = false) {
 }
 
 export async function deleteAllAudio() {
+  if (library.get().noRoom) library.set({ noRoom: false }) // room has been made
   for (const d of library.get().docs) {
     await db.delAudio(d.id)
     voicedSet(d.id).clear()

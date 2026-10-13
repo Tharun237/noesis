@@ -712,7 +712,7 @@ function Preparing({ d, doc, pos }) {
         `${d.eta != null ? `${waitWords(d.eta).replace(/^./, ch => ch.toUpperCase())} left. ` : ''}It carries on if you leave this page.`]
     : [<StatusLine d={d} />, d.prep >= 0.01 ? d.prep : undefined,
         d.status === 'queued' ? 'Starts when the document before it is done.'
-        : d.status === 'syncing' ? (d.contentVer ? 'It is coming from your other device.' : 'Open Noesis on that device and it arrives here. If it could not be read there, delete it here.')
+        : d.status === 'syncing' ? (d.contentVer ? (d.error || 'It is coming from your other device.') : 'Open Noesis on that device and it arrives here. If it could not be read there, delete it here.')
         : 'The text appears here as it is read.']
   return (
     <div data-rise="0" role="status" style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${d.status === 'error' || failed ? T.danger : T.border}`, background: T.surface, display: 'grid', gap: 12, marginBottom: 32 }}>

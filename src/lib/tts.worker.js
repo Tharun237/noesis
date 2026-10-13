@@ -64,11 +64,18 @@ async function fetchModel(url) {
 async function load(id) {
   if (voice?.id === id) return voice
   const url = voiceUrl(id)
-  const cfg = await (await fetchCached(url + '.json')).json()
+  // A file that is kept but cannot be used (a hotel's sign-in page that came back instead of the voice, a
+  // download cut short) is thrown away before the error is reported: kept, every retry would read the same bad
+  // file from this device and fail the same way for ever.
+  const forget = async what => { try { await (await caches.open(CACHE)).delete(what) } catch { /* nothing kept */ } }
+  let cfg
+  try { cfg = await (await fetchCached(url + '.json')).json() } catch (e) { await forget(url + '.json'); throw e }
   const model = await fetchModel(url)
   postMessage({ type: 'opening' }) // downloaded; the engine now builds the voice (a few seconds on a phone)
   voice = null // release the previous voice before creating the next session
-  voice = { id, cfg, session: await ort.InferenceSession.create(model, { executionProviders: ['wasm'] }) }
+  let session
+  try { session = await ort.InferenceSession.create(model, { executionProviders: ['wasm'] }) } catch (e) { await forget(url); throw e }
+  voice = { id, cfg, session }
   return voice
 }
 

@@ -53,11 +53,14 @@ export function useActivity() {
   const voiceFor = useStore(library, s => s.docs.find(d => d.status === 'voicing' && d.voice === eng.voice) || null)
   const gate = useStore(player, s => s.gate)
   const playId = useStore(player, s => s.id)
+  const noRoom = useStore(library, s => !!s.noRoom)
   const view = useStore(ui, s => s.view)
   const docId = useStore(ui, s => s.docId)
   const online = useOnline()
   const onReaderOf = id => view === 'reader' && docId === id // that page already shows this in full
 
+  // (0) no room left to keep audio in: nothing more is made until something is removed
+  if (noRoom) return { key: 'no-room', error: true, text: 'No room left on this device for more audio', action: { label: 'Storage', run: () => go('settings') } }
   // (1) voice error: offline reads differently from other failures, and retry loads the voice that failed.
   if (natural && eng.status === 'error') {
     if (offlineVoice(eng.error)) {

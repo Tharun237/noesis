@@ -36,10 +36,14 @@ async function readHtml(html, url, fallback) {
 
 const ARXIV = /^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|html)\/([\w.\-/]+?)(?:v\d+)?\/?$/
 
+const FETCH_MS = 90_000
+
 export async function fetchUrl(url) {
   const m = url.match(ARXIV)
   if (m) url = `https://arxiv.org/pdf/${m[1]}` // listen to the paper, not the abstract page
-  const res = await fetch('/api/fetch?url=' + encodeURIComponent(url))
+  // a page that never answers must end: it is one line, and every document behind it was waiting too
+  const res = await fetch('/api/fetch?url=' + encodeURIComponent(url), { signal: AbortSignal.timeout(FETCH_MS) })
+    .catch(e => { throw e?.name === 'TimeoutError' ? new Error('That link took too long to answer. Try it again, or add the file itself.') : e })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `Could not fetch that link (${res.status})`)
   const type = (res.headers.get('content-type') || '').split(';')[0].trim()
   const finalUrl = res.headers.get('x-final-url') || url
