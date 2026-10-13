@@ -23,6 +23,7 @@ import { AmbientCard } from './AmbientCard.jsx'
 import { AwarenessCard } from './AwarenessCard.jsx'
 import { askAware } from '../lib/extras.js'
 import SUPPORT from '../lib/support.json'
+import { updateState, updateNow } from '../lib/updates.js'
 
 const SOUND_NAMES = { off: 'Off', focus: 'Focus', calm: 'Calm', brown: 'Brown noise' }
 
@@ -180,6 +181,7 @@ function SectionBody({ id, s }) {
   return (
     <>
       <InstallBody />
+      <VersionCard />
       {/* Paying is voluntary and changes nothing in the app (.claude/skills/goods-and-services). It is offered here,
           once, and nowhere else: no banner, no reminder. Shown only when there is somewhere to pay (support.json). */}
       {SUPPORT.url && (
@@ -194,7 +196,6 @@ function SectionBody({ id, s }) {
         <Button onClick={showWelcome}>See the welcome page</Button>
         <Button onClick={() => { location.href = '/privacy' }}>Privacy</Button>
       </div>
-      <div style={{ fontFamily: T.mono, fontSize: 11.5, color: T.faint, padding: '0 4px' }}>Noesis {__APP_VERSION__} · build {__APP_BUILD__.slice(0, 16).replace('T', ' ')}</div>
     </>
   )
 }
@@ -209,6 +210,29 @@ function Bare({ children, right }) {
   )
 }
 // One kind of thing inside a section that holds several: a small title and a box.
+// Which version this is, and a way to get the newest by hand. Noesis updates itself (lib/updates.js); this is
+// for when it has not, or when the customer wants to be sure.
+const UPDATE_SAYS = {
+  checking: 'Checking for a newer version.',
+  getting: 'Getting the new version. The app will open again by itself.',
+  ready: 'A newer version is ready.',
+  current: 'This is the newest version.',
+  unreachable: 'Could not reach Noesis. Check your connection and try again.',
+}
+function VersionCard() {
+  const { status } = useStore(updateState)
+  const busy = status === 'checking' || status === 'getting'
+  return (
+    <Group title="Version">
+      <div style={{ fontSize: 14, lineHeight: 1.55, color: T.sub }}>
+        Noesis {__APP_VERSION__}, built {__APP_BUILD__.slice(0, 16).replace('T', ' at ')} UTC. It updates itself when you are not in the middle of something.
+      </div>
+      {UPDATE_SAYS[status] && <div role="status" data-fade="" key={status} style={{ fontSize: 14, color: status === 'unreachable' ? T.danger : T.text }}>{UPDATE_SAYS[status]}</div>}
+      <div><Button kind={status === 'ready' ? 'primary' : undefined} busy={busy} disabled={busy} onClick={updateNow}>{status === 'ready' ? 'Update now' : 'Check for updates'}</Button></div>
+    </Group>
+  )
+}
+
 function Group({ title, children, right }) {
   return (
     <section style={{ padding: 18, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 18 }}>

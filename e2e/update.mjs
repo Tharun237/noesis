@@ -2,6 +2,7 @@
 //   node e2e/update.mjs      (builds, serves on :4180, simulates two redeploys)
 import { chromium } from 'playwright-core'
 import { execSync, spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const URL = 'http://localhost:4180/'
 const build = () => execSync('npx vite build', { stdio: 'ignore' })
@@ -61,6 +62,46 @@ try {
   const reloaded = await page.waitForFunction(() => window.__marker === undefined, null, { timeout: 20000 }).then(() => true).catch(() => false)
   if (!reloaded) console.log('    diag after background:', JSON.stringify(await page.evaluate(async () => { const r = await navigator.serviceWorker.getRegistration(); return { marker: window.__marker, waiting: !!r.waiting, vis: document.visibilityState } })))
   check('switches when the app goes to the background', reloaded, reloaded ? '' : await swlog())
+
+  // ── by hand: Settings, About, "Check for updates" ──
+  const newest = () => JSON.parse(readFileSync('dist/version.json', 'utf8')).build
+  const running = () => page.evaluate(() => (document.body.innerText.match(/built (\d{4}-\d\d-\d\d) at (\d\d:\d\d)/) || []).slice(1).join('T'))
+  const toAbout = async () => {
+    await page.setViewportSize({ width: 390, height: 844 }) // a phone's width: Settings is one tap away even from the welcome page
+    if (await page.getByRole('button', { name: /Check for updates|Update now/ }).count()) return
+    await page.getByRole('button', { name: 'Settings', exact: true }).first().click()
+    await page.getByText('About', { exact: true }).first().click()
+    await page.getByRole('button', { name: /Check for updates|Update now/ }).waitFor({ timeout: 10000 })
+  }
+  const byHand = async what => {
+    await toAbout()
+    const was = await running()
+    await page.getByRole('button', { name: /Check for updates|Update now/ }).click()
+    let now = was
+    for (const end = Date.now() + 60000; Date.now() < end; await sleep(400)) {
+      const said = await page.evaluate(() => document.body.innerText.includes('Noesis updated')).catch(() => false)
+      if (!said) continue
+      await toAbout().catch(() => {})
+      now = await running().catch(() => was)
+      if (now !== was) break
+    }
+    check(what, now === newest().slice(0, 16), `${was} → ${now}, the newest is ${newest().slice(0, 16)}`)
+  }
+  await page.mouse.click(5, 5) // the customer is using the app: nothing switches by itself
+  await sleep(61000) // a build's stamp is read to the minute: the next build must fall in a later one
+  build()
+  await byHand('"Check for updates" in Settings gets the new version while the app is in use')
+
+  // ── the service worker cannot deliver it (its own file cannot be fetched): the direct way ──
+  await page.route('**/sw.js', r => r.abort())
+  await sleep(61000)
+  build()
+  await byHand('and when the service worker cannot deliver it, the new version is loaded directly')
+  await page.unroute('**/sw.js')
+  const idle = await page.evaluate(async () => { const said = () => document.body.innerText; return said().includes('built') })
+  await page.getByRole('button', { name: /Check for updates/ }).click()
+  const current = await page.waitForFunction(() => document.body.innerText.includes('This is the newest version.'), null, { timeout: 20000 }).then(() => true, () => false)
+  check('asked again with nothing newer, it says this is the newest version', idle && current)
 } finally {
   await browser.close()
   stopServer()

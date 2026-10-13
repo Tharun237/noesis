@@ -7,6 +7,14 @@ import { handleDevDrive } from './server/devdrive.js'
 import { handleAuth } from './server/auth.js'
 import pkg from './package.json' with { type: 'json' }
 
+// This build's stamp: shown in Settings, and written to /version.json so a running app can ask what the newest
+// build is without asking its own service worker (src/lib/updates.js).
+const BUILD = new Date().toISOString()
+const versionFile = {
+  name: 'noesis-version',
+  generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD, version: pkg.version }) }) },
+}
+
 // Cross-origin isolation unlocks SharedArrayBuffer → multithreaded WASM inference.
 // `credentialless` (not require-corp) so model downloads from huggingface.co still work.
 // Production gets the same headers from public/_headers (Cloudflare Pages).
@@ -44,6 +52,7 @@ export default defineConfig({
   plugins: [
     react(),
     apiInDev,
+    versionFile,
     VitePWA({
       registerType: 'prompt', // we choose a safe moment to switch versions (src/lib/updates.js)
       injectRegister: false,
@@ -102,7 +111,7 @@ export default defineConfig({
       },
     }),
   ],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version), __APP_BUILD__: JSON.stringify(new Date().toISOString()) },
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), __APP_BUILD__: JSON.stringify(BUILD) },
   worker: { format: 'es' },
   server: { headers: isolation },
   preview: { headers: isolation },

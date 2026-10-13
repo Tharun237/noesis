@@ -5,5 +5,9 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(self), geolocation=()
 
+# what the newest build is: always asked of the server, never answered from a cache
+/version.json
+  Cache-Control: no-store
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

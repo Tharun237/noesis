@@ -86,6 +86,7 @@ Tharun when it matters, do not round it up.
 | When a book's text changes, my place and bookmarks stay on the same words, on every device | `carry.test.js`, `marks.test.js`; `e2e/sync.mjs`: a text prepared again on A, the place and bookmarks on the same words on both; the upgrade run of 13 October (three real books, one device) | Kept |
 | Bookmarks and their notes follow me | `e2e/sync.mjs`: a bookmark and its note made on B are on A; removed on A, it is removed on B | Kept |
 | How fast I listen, my usual voice, how my library is sorted, autoplay next and archive-when-finished follow me (Tharun's decision, 13 October) | `e2e/sync.mjs`: the speed and the sort set on A are set on B | Kept. Text size and layout stay with the device, on purpose |
+| The app I open is the newest, or it tells me a newer one is ready and lets me take it | `e2e/update.mjs` (7 checks): switches by itself at launch and in the background; "Check for updates" in Settings gets it while the app is in use; with the service worker's own file blocked, the new build is loaded directly; nothing newer, it says so. `/version.json` is the truth about the newest build | Kept on a computer's Chrome. **Not proved on a phone or in Safari**, and the launch that mends a stuck update by itself has no test |
 | Bookmarks made on two devices are all kept | `marks.test.js`; `e2e/sync.mjs`: one made on each device at the same time | Kept |
 
 ## The first sweep (13 October 2026): question 1 asked of every record, question 6 of every number
