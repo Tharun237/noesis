@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { floatingSupported, floatingSize, baseCss } from './floating.js'
+import { floatingSupported, floatingSize, baseCss, floatingLayout, captionGroups } from './floating.js'
 import { T } from '../theme.js'
 
 test('floatingSize is 420 wide on a wide screen, 190 high', () => {
@@ -51,4 +51,33 @@ test('floatingSupported is true only when documentPictureInPicture exists', () =
   } finally {
     delete globalThis.window
   }
+})
+
+test('floatingLayout: everything fits the window, and the word has the most of it', () => {
+  for (const [w, h] of [[420, 190], [260, 190], [300, 150], [800, 420], [1200, 300]]) {
+    const L = floatingLayout(w, h)
+    assert.ok(L.pad * 2 + L.stageH + L.capH + L.controls <= Math.max(h, L.pad * 2 + 36 + L.capH + L.controls), `${w}x${h} overflows`)
+    assert.ok(L.word <= L.stageH, `${w}x${h}: the word is taller than its stage`)
+    assert.ok(L.word > L.capFont, `${w}x${h}: the word is not the largest thing`)
+  }
+  assert.ok(floatingLayout(800, 420).word > floatingLayout(420, 190).word) // a larger window, a larger word
+})
+
+test('captionGroups: whole words, in order, none lost, each piece within the room', () => {
+  const words = 'Fotini Markopoulou-Kalamara is responsible for changing my views on several important aspects of quantum gravity over the last several years'.split(' ')
+  const groups = captionGroups(words, 60)
+  assert.ok(groups.length > 1)
+  assert.deepEqual(groups.flatMap(([a, b]) => words.slice(a, b)), words)
+  for (const [a, b] of groups) assert.ok(words.slice(a, b).join(' ').length <= 60)
+  assert.deepEqual(captionGroups(['Yes.'], 60), [[0, 1]])
+  assert.deepEqual(captionGroups([], 60), [])
+  assert.deepEqual(captionGroups(['Pneumonoultramicroscopicsilicovolcanoconiosis', 'is'], 10), [[0, 1], [1, 2]]) // a word longer than the room still gets its piece
+})
+
+test('captionGroups: the pieces of a long sentence are evened out, not filled to the brim', () => {
+  const words = 'The ancient Greeks had a word for the moment understanding arrives all at once: noesis.'.split(' ')
+  const groups = captionGroups(words, 62)
+  assert.equal(groups.length, 2)
+  const sizes = groups.map(([a, b]) => words.slice(a, b).join(' ').length)
+  assert.ok(Math.min(...sizes) >= 30, `pieces of ${sizes}`) // was 73 and 13: "once: noesis." alone
 })

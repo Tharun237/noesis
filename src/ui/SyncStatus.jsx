@@ -29,7 +29,7 @@ export function SyncStatus() {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: T.sub }}>
       {st.status === 'syncing' ? <Pulse /> : <span style={{ width: 6, height: 6, borderRadius: 6, background: color }} />}
-      {st.status === 'syncing' ? 'Syncing…' : st.status === 'offline' ? 'Offline · will sync' : st.last ? `Synced ${ago(st.last)}` : 'Connecting...'}
+      {st.status === 'syncing' ? (st.taking ? `Syncing · ${Math.round((st.taking.done / st.taking.of) * 100)}%` : 'Syncing…') : st.status === 'offline' ? 'Offline · will sync' : st.last ? `Synced ${ago(st.last)}` : 'Connecting...'}
     </span>
   )
 }

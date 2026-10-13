@@ -143,6 +143,8 @@ export function Reader({ wide }) {
   const float = async () => {
     // Opening the window has to happen inside the tap; only its contents are loaded on demand.
     const win = openFloating(() => <FloatingLazy />)
+    // nothing in the player yet: the window shows this document, silent, not "Nothing is playing"
+    if (player.get().id == null) openPlayer(id, { autoplay: false })
     await win
   }
   const [searching, setSearching] = useState(false)

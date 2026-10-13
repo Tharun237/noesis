@@ -16,8 +16,9 @@ import { engine } from '../lib/tts.js'
 import { voiceName } from '../lib/voices.js'
 import { activeEngine } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
-import { Button, IconButton, Menu, Pulse, inputStyle, fmtDur, Swap } from './kit.jsx'
+import { Button, IconButton, Menu, Pulse, Spinner, inputStyle, fmtDur, Swap } from './kit.jsx'
 import { AccountChip } from './SyncStatus.jsx'
+import { syncState } from '../lib/sync.js'
 import { waitSeconds, waitWords } from '../lib/readiness-math.js'
 
 const KIND = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', html: 'WEB', md: 'MD', txt: 'TXT', text: 'TEXT', link: 'LINK' }
@@ -81,10 +82,26 @@ export function Library({ wide }) {
   const playingId = useStore(player, s => s.id)
   const query = useStore(ui, s => s.query)
   const hours = docs.reduce((a, d) => a + docDuration(d), 0)
-  const summary = total > 0 && `${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}`
+  // A device new to the library is told its documents over some seconds: the count says that more are coming,
+  // or seven of twenty-one books look like all there is.
+  const taking = useStore(syncState, s => s.taking)
+  const arriving = taking ? ` · syncing ${Math.round((taking.done / taking.of) * 100)}%` : ''
+  const summary = total > 0 && `${docs.length} ${docs.length === 1 ? 'document' : 'documents'}${hours ? ` · ${fmtDur(hours)}` : ''}${arriving}`
 
   const order = useMemo(() => docs.map(d => d.id).join(), [docs])
   // the landing page: for an empty library, or asked for by its own address
+  // Signed in, nothing here yet, and the library is on its way: say so, not "welcome, add your first document".
+  if (!welcome && loaded && total === 0 && taking) {
+    return (
+      <div role="status" style={{ minHeight: '100%', display: 'grid', placeItems: 'center', padding: 24 }}>
+        <div style={{ display: 'grid', justifyItems: 'center', gap: 14, textAlign: 'center' }}>
+          <Spinner size={18} />
+          <div style={{ fontSize: 17, fontWeight: 600, color: T.text }}>Getting your library</div>
+          <div style={{ fontSize: 14, color: T.sub }}>From your Google Drive · {Math.round((taking.done / taking.of) * 100)}%</div>
+        </div>
+      </div>
+    )
+  }
   if (welcome || (loaded ? total === 0 : !hadDocs)) return loaded || welcome ? <Suspense fallback={null}><Landing wide={wide} hasLibrary={total > 0} /></Suspense> : null
   return (
     <div style={{ display: 'flex', minHeight: '100%' }}>

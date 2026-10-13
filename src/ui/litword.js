@@ -16,7 +16,9 @@ const UNTIMED_MS = 200 // the device's own voice says where a word starts, not h
 // text, dur and tail are the sentence, its audio length and the silence at its end. `on` false turns it off.
 // Returns the words, where each starts in the text, the index of the one being said (-1: none), how long
 // saying it takes on the clock (`ms`, for a light that crosses it), and whether there is anything to show.
-export function useLitWord(text, dur, tail, on = true) {
+// `view` is the window whose timers run it: the floating window passes its own, because the app's tab may be
+// hidden behind other work and a hidden tab's timers are slowed.
+export function useLitWord(text, dur, tail, on = true, view = globalThis) {
   const { ws, ends, says } = useMemo(() => wordWeights(text || ''), [text])
   const starts = useMemo(() => { let at = 0; return ws.map(x => { const s0 = at; at += x.length + 1; return s0 }) }, [ws])
   // The word is kept with the sentence it belongs to: a new sentence never shows the old one's count.
@@ -27,6 +29,7 @@ export function useLitWord(text, dur, tail, on = true) {
   const rate = useStore(player, s => s.rate) || 1
   const sysWord = sys ? Math.max(0, starts.findLastIndex(x => x <= spoken)) : -1
   const span = Math.max(SHORTEST, (dur || 0) - (tail || 0))
+  const clock = view || globalThis
   useEffect(() => {
     if (sys || !on || !dur) return undefined
     // The clock is looked at when the word being said ends, not on every frame: a look on every frame made the
@@ -40,11 +43,11 @@ export function useLitWord(text, dur, tail, on = true) {
       setAt(prev => (prev.of === text && prev.w === w ? prev : { of: text, w }))
       const left = w < 0 || t === last ? LOOK_MS : ((ends[w] * span - t) * 1000) / rate
       last = t
-      timer = setTimeout(tick, Math.max(LOOK_MIN_MS, Math.min(LOOK_MS, left + 1)))
+      timer = clock.setTimeout(tick, Math.max(LOOK_MIN_MS, Math.min(LOOK_MS, left + 1)))
     }
     tick()
-    return () => clearTimeout(timer)
-  }, [sys, on, dur, span, ends, text, rate])
+    return () => clock.clearTimeout(timer)
+  }, [sys, on, dur, span, ends, text, rate, clock])
   const lit = sys ? sysWord : at.of === text ? at.w : -1
   const ms = sys || !dur || lit < 0 ? UNTIMED_MS : Math.max(60, Math.round((says[lit] * span * 1000) / rate))
   return { ws, starts, lit, ms, shown: !!on && (sys || !!dur) }

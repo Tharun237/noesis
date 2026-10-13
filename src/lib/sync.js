@@ -24,7 +24,8 @@ import { takeShelf, leaveShelf } from './shelf.js'
 
 const store = openStore('noesis-sync', 'sync')
 export const account = createStore({ user: null, checked: false, google: false, dev: false, reachable: true })
-export const syncState = createStore({ status: 'idle', last: 0, error: null })
+// taking: { done, of } while a round is reading many records from the folder (a device new to the library), else null
+export const syncState = createStore({ status: 'idle', last: 0, error: null, taking: null })
 
 const te = new TextEncoder()
 const td = new TextDecoder()
@@ -32,6 +33,12 @@ const PART = 1_500_000
 const POLL_MS = 90_000
 const POS_THROTTLE_MS = 60_000 // while playing; pausing / leaving the app pushes immediately
 const QUICK_MAX = 60_000 // bytes the browser will finish sending by itself after the page is left
+// Records are read from the folder several at a time. One after another, each took about a second (measured on
+// Tharun's own folder, 13 October 2026: 30 records in 35 s), so a phone new to a library of 21 books showed 7
+// of them and no sign that more were coming: "pure chaos". The documents themselves are read first.
+const TAKE_AT_ONCE = 6
+const SAY_FROM = 8 // fewer records than this are taken without saying so: it is over before it could be read
+const FIRST = ['meta', 'cols', 'heard', 'marks', 'pos'] // a library is its documents; places and bookmarks follow
 const TEXT = 'doc:' // the prefix of a book-text part: fetched when a document is opened, never on a round
 
 let hooks = null // { snapshot(k), apply(k, value), content(id), allKeys() } — provided by library.js
@@ -94,6 +101,7 @@ async function pull() {
     ids = {}
     for (const k of Object.keys(clock)) if (!k.startsWith(TEXT) && !there.has(k)) dirty[k] = clock[k]
   }
+  const want = new Map() // k → the file to read: what the folder holds that is newer than ours
   for (const c of changed) {
     if (c.removed || !c.file) {
       for (const [k, f] of Object.entries(ids)) {
@@ -114,20 +122,33 @@ async function pull() {
     }
     ids[k] = seen
     if (k.startsWith(TEXT)) continue
-    if (seen.at > (clock[k] || 0)) {
+    if (seen.at > (clock[k] || 0)) want.set(k, seen) // a record changed twice since the last look is read once
+    else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
+  }
+  const rank = k => { const at = FIRST.indexOf(k.split(':')[0]); return at < 0 ? FIRST.length : at }
+  const list = [...want].sort((a, b) => rank(a[0]) - rank(b[0]))
+  const say = list.length >= SAY_FROM
+  let next = 0, done = 0, stop = null
+  if (say) syncState.set({ taking: { done: 0, of: list.length } })
+  const take = async () => {
+    while (next < list.length && !stop) {
+      const [k, seen] = list[next++]
       // One record that cannot be read or taken in must not stop the rest (it stopped everything after it,
       // every round, for as long as it stayed bad). It is left as not taken, and looked at again next round.
       try {
         const res = await drive.read(seen.id).catch(e => { if (!GONE.has(e.status)) throw e; delete ids[k]; return null }) // gone between the list and the reading
         if (res) await receive(k, seen.at, await res.json())
       } catch (e) {
-        if (e.signedOut || !navigator.onLine) throw e
+        if (e.signedOut || !navigator.onLine) { stop = e; return } // nothing more can be read: the round ends
         console.warn('Sync: could not take', k, e)
         missed = e
       }
+      done++
+      if (say) syncState.set({ taking: { done, of: list.length } })
     }
-    else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
   }
+  try { await Promise.all(Array.from({ length: Math.min(TAKE_AT_ONCE, list.length) }, take)) } finally { if (say) syncState.set({ taking: null }) }
+  if (stop) { cursor = from; throw stop }
   if (missed) { cursor = from; throw missed } // after everything else was taken: the round says it failed and comes back
 }
 
