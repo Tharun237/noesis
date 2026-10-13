@@ -291,5 +291,5 @@ ${urls.map(u => `  <url><loc>${SITE}/${u}</loc></url>`).join('\n')}
 </urlset>
 `)
 // the addresses the app's service worker must leave alone (vite.config.js reads this)
-export const PLAIN_PAGES = [...PAGES.map(p => p.slug), 'guides', 'support']
+export const PLAIN_PAGES = [...PAGES.map(p => p.slug), 'guides', 'support', 'voice-test'] // voice-test: a page for measuring a voice on a device, not linked from anywhere
 console.log(`${PAGES.length + 1} pages and the sitemap written:`, PLAIN_PAGES.join(', '))
