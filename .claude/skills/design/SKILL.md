@@ -155,3 +155,10 @@ controls stay black, white and lime. Colour is allowed where it IS the informati
   for each English word would be finger-spelt English, slower than reading, and wrong to a Deaf reader. What
   Noesis can truthfully give a reader who does not hear is in Focus and Text: the rhythm of the speech (the
   fill), its force (a word said with force is larger) and its mood (the light).
+- "Your listening" is one page, opened by tapping the glance above the library (the glance is its door, not
+  a second copy): how much, when (a bar a day or a month, split by document in that document's colour; tap a
+  bar to narrow everything above the cards to it), what, how steadily, at what hour, on which days, how much
+  of the library is left, on which devices. Every number is a sum or a count of the record (`lib/listening.js`,
+  tested); a part with nothing true to say yet is not shown; nothing is estimated.
+- Listening is the customer's, on all their devices: each device sends only its own record and every device
+  shows the sum (`heard:<device>:<year>` in their Drive). Never merge two devices' records by overwriting.

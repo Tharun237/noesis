@@ -1,7 +1,7 @@
 // The numbers behind the listening bars (heard.js).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS, mergeLogs, yearOf, yearsIn, newest } from './heard.js'
+import { dayKey, weekOf, docListening, docBar, listenedBetween, ASLEEP_MS, mergeLogs, yearOf, yearsIn, newest, addHour } from './heard.js'
 
 const now = new Date(2026, 9, 12, 15) // Monday 12 October 2026
 const day = n => dayKey(new Date(2026, 9, 12 - n))
@@ -73,9 +73,22 @@ test('listening on several devices is added together, and nothing is counted twi
 test('a record is sent a year at a time, with only what that year needs', () => {
   const log = { '2026-10-13': { a: 600 }, '2025-12-31': { b: 30 }, titles: { a: 'Alpha', b: 'Beta', z: 'Never heard' }, finished: [{ id: 'b', day: '2025-12-31' }] }
   assert.deepEqual(yearsIn(log), ['2025', '2026'])
-  assert.deepEqual(yearOf(log, '2025'), { '2025-12-31': { b: 30 }, titles: { b: 'Beta' }, finished: [{ id: 'b', day: '2025-12-31' }] })
+  assert.deepEqual(yearOf(log, '2025'), { '2025-12-31': { b: 30 }, titles: { b: 'Beta' }, finished: [{ id: 'b', day: '2025-12-31' }], hours: {} })
   // the years put back together are the record
   const back = mergeLogs(yearsIn(log).map(y => yearOf(log, y)))
   assert.deepEqual(back['2026-10-13'], { a: 600 })
   assert.deepEqual(back['2025-12-31'], { b: 30 })
+})
+
+test('the hour of the day is kept as 24 totals a year, and adds up across devices', () => {
+  let phone = addHour({ titles: {}, finished: [] }, '2026', 21, 600)
+  phone = addHour(phone, '2026', 21, 300)
+  phone = addHour(phone, '2026', 7, 120)
+  assert.equal(phone.hours['2026'][21], 900)
+  assert.equal(phone.hours['2026'].length, 24)
+  const laptop = addHour({ titles: {}, finished: [] }, '2026', 21, 100)
+  assert.equal(mergeLogs([phone, laptop]).hours['2026'][21], 1000)
+  assert.equal(mergeLogs([phone, laptop]).hours['2026'][7], 120)
+  assert.deepEqual(yearOf(phone, '2026').hours, { 2026: phone.hours['2026'] })
+  assert.equal(newest(phone, addHour({ titles: {}, finished: [] }, '2026', 21, 500)).hours['2026'][21], 900) // the same device twice: the larger, never the sum
 })

@@ -36,7 +36,7 @@ export function Sheets({ wide }) {
       <Sheet open={sheet === 'libraryask'} onClose={closeSheet} wide={wide} title="Ask your library"><LibraryAsk wide={wide} /></Sheet>
       <Sheet open={sheet === 'briefing'} onClose={closeSheet} wide={wide} title="Make a briefing"><Briefing wide={wide} /></Sheet>
       <Sheet open={sheet === 'conceptmap'} onClose={closeSheet} wide={wide} title="Concept map" width={720}>{sheet === 'conceptmap' && <ConceptMap wide={wide} />}</Sheet>
-      <Sheet open={sheet === 'listening'} onClose={closeSheet} wide={wide} title="Your listening"><Listening wide={wide} /></Sheet>
+      <Sheet open={sheet === 'listening'} onClose={closeSheet} wide={wide} width={640} title="Your listening"><Listening wide={wide} /></Sheet>
     </>
   )
 }

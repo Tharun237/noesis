@@ -1,50 +1,119 @@
+// Your listening, all of it: what the glance above the library opens.
+//
+// One page, read from the top: how much (the number), when (the chart, a bar a day or a month, each split by
+// document in that document's own colour), what (the documents), how steadily (streak, best day, days
+// listened, finished), at what hour, on which days (the calendar), how much is left in the library, and on
+// which devices. The switch at the top says which stretch of time the first four are about; tapping a bar
+// narrows them to that one day or month.
+//
+// Every number is a sum or a count of what was recorded (lib/listening.js, tested); nothing is estimated, and
+// a part with nothing true to say yet is not shown. Colour is data here: a document's colour is its own
+// (bookcolour.js), lime is today and how much. Bars grow once when they arrive (a transform); nothing runs
+// after that.
 import { useMemo, useRef, useState } from 'react'
-import { T } from '../theme.js'
+import { motion } from 'motion/react'
+import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
-import { useHistory, historyStore, summarise, makeRetrospective } from '../lib/history.js'
+import { library, docDuration } from '../lib/library.js'
+import { useHistory, historyStore, makeRetrospective, listeningPlaces } from '../lib/history.js'
+import { dayKey } from '../lib/heard.js'
+import { KINDS, stretch, summary, streaks, calendar, hours, hourName } from '../lib/listening.js'
 import { go, closeSheet } from '../lib/nav.js'
-import { motion } from 'motion/react'
-import { Button, IconButton, Pulse, Appear, Count, rowIn } from './kit.jsx'
+import { colours, colourOf, hueOf } from './bookcolour.js'
+import { Button, IconButton, Pulse, Appear, Count, Segmented, fmtDur } from './kit.jsx'
 
-function fmtListened(s) {
-  s = Math.max(0, Math.floor(s || 0))
-  if (s > 0 && s < 60) return 'under 1 min' // some listening is not none
-  if (s < 3600) return `${Math.floor(s / 60)} min`
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  return `${h} h ${m} min`
+const CHART_H = 132 // px: the tallest a bar stands
+const QUIET_S = 20 * 60 // a stretch of short listens is drawn against this, not blown up to full height
+const DOCS_SHOWN = 5 // documents listed before "Show all"
+const WEEKS = 17 // the calendar: about four months, and as many columns as a phone has room for
+const HOURS_MIN_S = 10 * 60 // less than this by the hour says nothing about when
+const PACE_DAYS = 14 // "your pace" is the last two weeks, days without listening included
+const FAR_DAYS = 999
+const BEFORE = { week: 'the 7 days before', month: 'the 30 days before', year: 'the 12 months before' }
+const SPAN = { week: 'The last 7 days', month: 'The last 30 days', year: 'The last 12 months', all: 'All of it' }
+
+const shortDay = key => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en', { day: 'numeric', month: 'short' }) }
+const longDay = key => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) }
+const days = n => (n === 1 ? '1 day' : `${n} days`)
+const shareOf = d => (d.finished ? 1 : d.total ? Math.min(1, d.pos / d.total) : 0)
+const sub = { fontSize: 13, color: T.sub, lineHeight: 1.5 }
+const mono = { fontFamily: T.mono, fontSize: 11, color: T.faint }
+const grow = i => ({ initial: { scaleY: 0 }, animate: { scaleY: 1 }, transition: { duration: T.dur.slow, ease: T.ease, delay: Math.min(i, 14) * 0.02 } })
+
+function Section({ title, children, aside }) {
+  return (
+    <section style={{ display: 'grid', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <div style={{ ...label, flex: 1 }}>{title}</div>
+        {aside && <div style={mono}>{aside}</div>}
+      </div>
+      {children}
+    </section>
+  )
 }
 
-const fmtWhole = n => String(Math.round(n))
-const fmtDays = n => (Math.round(n) === 1 ? '1 day' : `${Math.round(n)} days`)
-
-const fmtSince = since => {
-  const [y, m, d] = since.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })
+function Fact({ name, value, note }) {
+  return (
+    <div style={{ padding: '14px 14px 13px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface, minWidth: 0 }}>
+      <div style={label}>{name}</div>
+      <div style={{ marginTop: 8, fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: T.text }}>{value}</div>
+      <div style={{ marginTop: 5, fontSize: 12, color: T.sub, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{note}</div>
+    </div>
+  )
 }
 
 export function Listening({ wide }) {
   useStore(settings)
   const log = useHistory()
   const devices = useStore(historyStore, s => s.devices)
-  const summary = useMemo(() => summarise(log, new Date()), [log])
+  const docs = useStore(library, s => s.docs)
+  const known = useStore(colours)
+  const rate = useStore(settings, s => s.speed) || 1
+  const [kind, setKind] = useState('week')
+  const [picked, setPicked] = useState(null) // the key of the bar tapped, or null: the whole stretch
+  const [allDocs, setAllDocs] = useState(false)
+  const [cell, setCell] = useState(null) // the calendar day tapped
+  const now = useMemo(() => new Date(), [log]) // eslint-disable-line react-hooks/exhaustive-deps
+  const today = dayKey(now)
+
+  const st = useMemo(() => stretch(log, kind, now), [log, kind, now])
+  const whole = useMemo(() => summary(log, st.days), [log, st])
+  const before = useMemo(() => (st.before ? summary(log, st.before).total : null), [log, st])
+  const bar = picked ? st.bars.find(b => b.key === picked) : null
+  const shown = useMemo(() => (bar ? summary(log, bar.days) : whole), [log, bar, whole])
+  const run = useMemo(() => streaks(log, now), [log, now])
+  const cal = useMemo(() => calendar(log, now, WEEKS), [log, now])
+  const hrs = useMemo(() => hours(log), [log])
+  const places = useMemo(() => (devices > 1 ? listeningPlaces() : []), [log, devices]) // eslint-disable-line react-hooks/exhaustive-deps
+  const everyDay = useMemo(() => Object.keys(log).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort(), [log])
+  const all = useMemo(() => summary(log, everyDay), [log, everyDay])
+  const since = everyDay[0] || null
+
+  const byId = useMemo(() => new Map(docs.map(d => [d.id, d])), [docs])
+  const colourFor = id => (byId.has(id) ? colourOf(byId.get(id), known) : hueOf(log.titles?.[id] || id)) // a deleted document keeps a colour
+
+  // the library: how much there is, how much is done, and how long what is left takes at the customer's own pace
+  const shelf = useMemo(() => docs.filter(d => d.chars && !d.archived).map(d => ({ d, seconds: docDuration(d), share: shareOf(d) })), [docs])
+  const inAll = shelf.reduce((a, s) => a + s.seconds, 0)
+  const done = shelf.reduce((a, s) => a + s.seconds * s.share, 0)
+  const pace = useMemo(() => { let s = 0; for (let i = 0; i < PACE_DAYS; i++) { const d = new Date(now); d.setDate(d.getDate() - i); for (const v of Object.values(log[dayKey(d)] || {})) s += v || 0 } return s / PACE_DAYS }, [log, now])
+  const daysLeft = pace >= 60 && inAll > done ? Math.ceil((inAll - done) / rate / pace) : null
+
   const keyed = hasAiKey()
-  const enough = summary.month >= 600
+  const enough = summary(log, stretch(log, 'month', now).days).total >= 600
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const abort = useRef(null)
-
-  async function submit(period = 'month') {
+  async function hear(period) {
     if (busy || !keyed || !enough) return
     abort.current?.abort()
     abort.current = new AbortController()
     setBusy(true)
     setError(null)
     try {
-      const id = await makeRetrospective({ signal: abort.current.signal, period })
-      go('reader', id)
+      go('reader', await makeRetrospective({ signal: abort.current.signal, period }))
     } catch (err) {
       if (err?.name !== 'AbortError') setError(err?.message || "Couldn't make the retrospective. Try again.")
     } finally {
@@ -52,55 +121,189 @@ export function Listening({ wide }) {
     }
   }
 
-  const rows = [
-    ['Today', summary.today, fmtListened],
-    ['Last 7 days', summary.week, fmtListened],
-    ['This month', summary.month, fmtListened],
-    ['This year', summary.year, fmtListened],
-    ['Total', summary.total, fmtListened],
-    ['Finished this month', summary.finishedThisMonth, fmtWhole],
-    ['Day streak', summary.streak, fmtDays],
-  ]
+  const byDay = kind === 'week' || kind === 'month'
+  const tallest = Math.max(byDay ? QUIET_S : 1, ...st.bars.map(b => b.seconds))
+  const perBar = whole.total / st.bars.length
+  const change = before == null ? null : whole.total - before
+  const head = bar ? bar.name : SPAN[kind]
+  const under = bar
+    ? (shown.total ? `${shown.docs.length === 1 ? 'One document' : `${shown.docs.length} documents`}. Tap the bar again for ${SPAN[kind].toLowerCase()}.` : `Nothing was listened to. Tap the bar again for ${SPAN[kind].toLowerCase()}.`)
+    : [
+      st.span > 1 && whole.total > 0 && `${fmtDur(whole.total / st.span)} a day`,
+      change != null && (whole.total > 0 || before > 0) && (before === 0 ? `nothing in ${BEFORE[kind]}` : change === 0 ? `the same as ${BEFORE[kind]}` : `${fmtDur(Math.abs(change))} ${change > 0 ? 'more' : 'less'} than ${BEFORE[kind]}`),
+    ].filter(Boolean).join(' · ') || 'Nothing listened to yet. Time is counted while sound plays.'
+  const listed = allDocs ? shown.docs : shown.docs.slice(0, DOCS_SHOWN)
+  const calMax = Math.max(QUIET_S, ...cal.flat().map(c => c.seconds))
+  const calDays = cal.flat().filter(c => !c.ahead)
+  const calOn = calDays.filter(c => c.seconds >= 60).length
+  const picks = cell && cal.flat().find(c => c.key === cell)
+  const hourMax = Math.max(1, ...hrs.by)
 
   return (
-    <div style={{ padding: wide ? '28px 28px 30px' : '18px 20px 24px', display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, fontSize: 20, fontWeight: 700, color: T.text }}>Your listening</div>
-        <IconButton icon="close" label="Close" onClick={closeSheet} />
+    <div style={{ padding: wide ? '26px 28px 30px' : '16px 20px 26px', display: 'grid', gap: 30, minWidth: 0 }}>
+      <div style={{ display: 'grid', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, fontSize: 20, fontWeight: 700, color: T.text }}>Your listening</div>
+          <IconButton icon="close" label="Close" onClick={closeSheet} />
+        </div>
+        <Segmented value={kind} onChange={v => { setKind(v); setPicked(null); setAllDocs(false) }} options={KINDS} />
       </div>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {rows.map(([k, v, f], i) => (
-          <motion.div key={k} {...rowIn(i)} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <div style={{ flex: 1, fontSize: 14, color: T.sub }}>{k}</div>
-            <div style={{ fontFamily: T.mono, fontSize: 14, color: T.text }}><Count value={v} format={f} /></div>
-          </motion.div>
-        ))}
+
+      {/* how much, and when */}
+      <div style={{ display: 'grid', gap: 18, minWidth: 0 }}>
+        <div>
+          <div key={head} data-fade="" style={label}>{head}</div>
+          <div style={{ marginTop: 8, fontSize: wide ? 60 : 52, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}><Count value={shown.total} format={fmtDur} /></div>
+          <div key={under} data-fade="" style={{ ...sub, marginTop: 10 }}>{under}</div>
+        </div>
+        <div style={{ position: 'relative' }}>
+          <div key={kind} role="group" aria-label={`${SPAN[kind]}, a bar for each ${byDay ? 'day' : 'month'}`} style={{ display: 'grid', gridTemplateColumns: `repeat(${st.bars.length}, minmax(0, 1fr))`, gap: st.bars.length > 14 ? 3 : 8 }}>
+            {st.bars.map((b, i) => (
+              <button key={b.key} type="button" aria-pressed={picked === b.key} aria-label={`${b.name}: ${fmtDur(b.seconds)}`} onClick={() => setPicked(picked === b.key ? null : b.key)}
+                style={{ display: 'grid', gap: 7, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', minWidth: 0, opacity: picked && picked !== b.key ? 0.32 : 1, transition: `opacity ${T.dur.base}s linear` }}>
+                <div style={{ height: CHART_H, display: 'flex', alignItems: 'flex-end' }}>
+                  {b.seconds > 0 ? (
+                    <motion.div {...grow(i)} style={{ width: '100%', height: `${Math.max(3, (b.seconds / tallest) * 100)}%`, display: 'flex', flexDirection: 'column-reverse', gap: 1.5, borderRadius: st.bars.length > 14 ? 3 : 5, overflow: 'hidden', transformOrigin: '50% 100%' }}>
+                      {b.docs.map(([id, s]) => <div key={id} style={{ flex: `${s} 1 0`, minHeight: 2, background: colourFor(id) }} />)}
+                    </motion.div>
+                  ) : <div style={{ width: '100%', height: 3, borderRadius: 3, background: T.surfaceTop }} />}
+                </div>
+                <div style={{ ...mono, fontSize: 10, textAlign: 'center', color: b.now ? T.lime : T.faint, height: 12, whiteSpace: 'nowrap' }}>{b.label}</div>
+              </button>
+            ))}
+          </div>
+          {/* The amount a day that the line above the chart gives, drawn across the days: a bar over it was a
+              longer day than usual. (Only where a bar is a day: across months the line would mean something else.) */}
+          {!picked && whole.total > 0 && byDay && (
+            <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: CHART_H * (1 - perBar / tallest), borderTop: `1px dashed ${T.borderHi}`, pointerEvents: 'none' }} />
+          )}
+        </div>
       </div>
-      {summary.top.length > 0 && (
-        <div style={{ display: 'grid', gap: 10 }}>
-          <div style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.faint }}>Most listened this month</div>
-          {summary.top.map(t => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0 }}>
-              <div style={{ flex: 1, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
-              <div style={{ fontFamily: T.mono, fontSize: 13, color: T.sub, flexShrink: 0 }}>{fmtListened(t.seconds)}</div>
-            </div>
-          ))}
+
+      {/* what */}
+      {shown.docs.length > 0 && (
+        <Section title={bar ? 'What you listened to' : 'Most listened'} aside={shown.docs.length > 1 ? `${shown.docs.length} documents` : null}>
+          <div style={{ display: 'grid', gap: 14 }}>
+            {listed.map(d => {
+              const have = byId.has(d.id)
+              return (
+                <div key={d.id} role={have ? 'button' : undefined} tabIndex={have ? 0 : undefined} data-press={have ? '' : undefined}
+                  onClick={have ? () => go('reader', d.id) : undefined} onKeyDown={have ? e => { if (e.key === 'Enter') go('reader', d.id) } : undefined}
+                  style={{ '--press': T.tap.row, display: 'grid', gap: 7, minWidth: 0, cursor: have ? 'pointer' : 'default' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+                    <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 8, background: colourFor(d.id), flexShrink: 0, alignSelf: 'center' }} />
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: have ? T.text : T.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                    <div style={{ fontFamily: T.mono, fontSize: 12.5, color: T.sub, flexShrink: 0 }}>{fmtDur(d.seconds)}</div>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 4, background: T.surfaceHi, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.max(1.5, d.share * 100)}%`, height: '100%', borderRadius: 4, background: colourFor(d.id) }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {shown.docs.length > DOCS_SHOWN && <div><Button onClick={() => setAllDocs(!allDocs)}>{allDocs ? 'Show fewer' : `Show all ${shown.docs.length}`}</Button></div>}
+        </Section>
+      )}
+
+      {/* how steadily */}
+      {all.total > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+          <Fact name="Streak" value={days(run.current)} note={run.longest > run.current ? `longest ${days(run.longest)}, to ${shortDay(run.ended)}` : run.current ? 'your longest yet' : 'a minute a day keeps one going'} />
+          <Fact name="Best day" value={whole.best ? fmtDur(whole.best.seconds) : '0m'} note={whole.best ? `${shortDay(whole.best.key)}, in ${SPAN[kind].toLowerCase()}` : `in ${SPAN[kind].toLowerCase()}`} />
+          <Fact name="Days listened" value={`${whole.listened} of ${st.span}`} note="a minute or more counts" />
+          <Fact name="Finished" value={String(whole.finished.length)} note={whole.finished.length ? whole.finished.map(f => f.title).join(', ') : `in ${SPAN[kind].toLowerCase()}`} />
         </div>
       )}
-      <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>
-        {summary.since ? `Counted on ${devices > 1 ? `your ${devices} devices` : 'this device'} since ${fmtSince(summary.since)}.` : 'Nothing counted yet. Listening time is counted from now on.'}
+
+      {/* at what hour */}
+      {hrs.total >= HOURS_MIN_S && (
+        <Section title="When you listen" aside={`mostly around ${hourName(hrs.peak)}`}>
+          <div role="img" aria-label={`By the hour of the day: mostly around ${hourName(hrs.peak)}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(24, minmax(0, 1fr))', gap: 3, alignItems: 'end', height: 56 }}>
+            {hrs.by.map((s, h) => (
+              <motion.div key={h} {...grow(h)} style={{ height: `${Math.max(s > 0 ? 6 : 0, (s / hourMax) * 100)}%`, minHeight: 2, borderRadius: 2, background: h === hrs.peak ? T.lime : s > 0 ? T.text : T.surfaceTop, opacity: h === hrs.peak || !s ? 1 : 0.55, transformOrigin: '50% 100%' }} />
+            ))}
+          </div>
+          <div style={{ ...mono, fontSize: 10, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>{['12 am', '6 am', '12 pm', '6 pm'].map(t => <span key={t}>{t}</span>)}</div>
+        </Section>
+      )}
+
+      {/* on which days */}
+      {all.total > 0 && (
+        <Section title={`The last ${WEEKS} weeks`} aside={picks ? `${shortDay(picks.key)} · ${fmtDur(picks.seconds)}` : `${calOn} of ${calDays.length} days`}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${WEEKS}, minmax(0, 1fr))`, gap: 4 }}>
+            {cal.map((week, w) => (
+              <div key={w} style={{ display: 'grid', gap: 4 }}>
+                {week.map(c => {
+                  const level = c.seconds >= 60 ? 0.28 + 0.72 * Math.min(1, c.seconds / calMax) : 0
+                  return (
+                    <button key={c.key} type="button" disabled={c.ahead} aria-label={`${longDay(c.key)}: ${fmtDur(c.seconds)}`} onClick={() => setCell(cell === c.key ? null : c.key)}
+                      style={{ position: 'relative', aspectRatio: '1', padding: 0, border: 'none', borderRadius: 4, background: c.ahead ? 'transparent' : T.surfaceHi, cursor: c.ahead ? 'default' : 'pointer', overflow: 'hidden', outline: c.key === today || c.key === cell ? `1.5px solid ${c.key === cell ? T.text : T.borderHi}` : 'none', outlineOffset: 1 }}>
+                      {level > 0 && <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: T.lime, opacity: level }} />}
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+          <div style={{ ...mono, fontSize: 10, display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+            less {[0, 0.28, 0.52, 0.76, 1].map(o => <span key={o} aria-hidden="true" style={{ position: 'relative', width: 10, height: 10, borderRadius: 3, background: T.surfaceHi, overflow: 'hidden' }}><span style={{ position: 'absolute', inset: 0, background: T.lime, opacity: o }} /></span>)} more
+          </div>
+        </Section>
+      )}
+
+      {/* how much is left */}
+      {inAll > 0 && (
+        <Section title="Your library" aside={`${shelf.length} ${shelf.length === 1 ? 'document' : 'documents'}`}>
+          <div role="img" aria-label={`${fmtDur(done)} done of ${fmtDur(inAll)}`} style={{ display: 'flex', gap: 2, height: 12 }}>
+            {shelf.map(({ d, seconds, share }) => (
+              <div key={d.id} title={`${d.title} · ${Math.round(share * 100)}%`} style={{ position: 'relative', flex: `${seconds} 1 0`, minWidth: 3, borderRadius: 3, overflow: 'hidden', background: T.surfaceTop }}>
+                <div style={{ width: `${share * 100}%`, height: '100%', background: colourOf(d, known) }} />
+              </div>
+            ))}
+          </div>
+          <div style={sub}>
+            <span style={{ color: T.text }}>{fmtDur(inAll)}</span> to listen to, <span style={{ color: T.text }}>{fmtDur(done)}</span> done, <span style={{ color: T.text }}>{fmtDur(inAll - done)}</span> left.
+            {daysLeft != null && daysLeft <= FAR_DAYS && ` At your last two weeks' pace (${fmtDur(pace)} a day${rate !== 1 ? ` at ${rate}x` : ''}) that is ${days(daysLeft)}.`}
+          </div>
+        </Section>
+      )}
+
+      {/* on which devices */}
+      {places.length > 1 && (
+        <Section title="Where you listen">
+          <div style={{ display: 'grid', gap: 12 }}>
+            {places.map((p, i) => (
+              <div key={i} style={{ display: 'grid', gap: 7 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <div style={{ flex: 1, fontSize: 15, fontWeight: 600, color: T.text }}>{p.name}</div>
+                  <div style={{ fontFamily: T.mono, fontSize: 12.5, color: T.sub }}>{fmtDur(p.seconds)}</div>
+                </div>
+                <div style={{ height: 4, borderRadius: 4, background: T.surfaceHi, overflow: 'hidden' }}>
+                  <div style={{ width: `${all.total ? Math.max(1.5, (p.seconds / all.total) * 100) : 0}%`, height: '100%', borderRadius: 4, background: p.here ? T.lime : T.text }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {/* two buttons share the row: each takes half. (Each was "full" width, so the second sat wholly off the
+              side of the sheet on every phone: found by e2e/chaos.mjs, 2026-10-13.) */}
+          <Button kind="primary" onClick={() => hear('month')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15, flex: '1 1 0', minWidth: 0, padding: '0 10px' }}>Hear your month</Button>
+          <Button onClick={() => hear('year')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15, flex: '1 1 0', minWidth: 0, padding: '0 10px' }}>Hear your year</Button>
+          {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
+        </div>
+        {!keyed && <Appear style={sub}>A retrospective needs an AI key. Add one in Settings.</Appear>}
+        {keyed && !enough && <Appear style={sub}>Listen for a little longer first.</Appear>}
+        {busy && <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing your retrospective</Appear>}
+        {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
+        <div style={{ ...sub, color: T.faint }}>
+          {since ? `Counted on ${devices > 1 ? `your ${devices} devices` : 'this device'} since ${longDay(since)}, while sound was playing.` : 'Nothing counted yet. Listening time is counted from now on, while sound is playing.'}
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {/* two buttons share the row: each takes half. (Each was "full" width, so the second sat wholly off the
-            side of the sheet on every phone: found by e2e/chaos.mjs, 2026-10-13.) */}
-        <Button kind="primary" onClick={() => submit('month')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15, flex: '1 1 0', minWidth: 0, padding: '0 10px' }}>Hear your month</Button>
-        <Button onClick={() => submit('year')} disabled={!keyed || !enough || busy} style={{ height: 50, fontSize: 15, flex: '1 1 0', minWidth: 0, padding: '0 10px' }}>Hear your year</Button>
-        {busy && <Button onClick={() => abort.current?.abort()}>Stop</Button>}
-      </div>
-      {!keyed && <Appear style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>A retrospective needs an AI key. Add one in Settings.</Appear>}
-      {keyed && !enough && <Appear style={{ fontSize: 13, color: T.sub, lineHeight: 1.5 }}>Listen for a little longer first.</Appear>}
-      {busy && <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing your retrospective</Appear>}
-      {error && <Appear style={{ fontSize: 14, color: T.danger, lineHeight: 1.55 }}>{error}</Appear>}
     </div>
   )
 }

@@ -19,9 +19,9 @@ import { library, getDoc, addDocument, setHeardSync } from './library.js'
 import { touch, deviceName } from './sync.js'
 import { aiText } from './ai.js'
 import { onShelf } from './shelf.js'
-import { dayKey, listenedBetween, mergeLogs, yearOf, yearsIn, newest } from './heard.js'
+import { dayKey, listenedBetween, mergeLogs, yearOf, yearsIn, newest, addHour } from './heard.js'
 
-export const emptyLog = () => ({ titles: {}, finished: [] })
+export const emptyLog = () => ({ titles: {}, finished: [], hours: {} })
 
 export { dayKey }
 
@@ -220,10 +220,23 @@ setHeardSync({
     await load()
     if (!loaded) return
     if (dev === device) { own = newest(own, v.log); await db.putHistory(own) } // this device's own, from before its storage was cleared
-    else { elsewhere = { ...elsewhere, [`${dev}:${year}`]: v.log }; await db.putHeardElsewhere(elsewhere) }
+    else { elsewhere = { ...elsewhere, [`${dev}:${year}`]: { ...v.log, dev: v.dev } }; await db.putHeardElsewhere(elsewhere) } // `dev`: what kind of device it says it is
     show()
   },
 })
+
+// Where the listening was done: this device, then the customer's others (by the kind of device each says it
+// is), each with its total. For the "Your listening" page.
+const totalOf = log => Object.keys(log).reduce((a, k) => (/^\d{4}-/.test(k) ? a + Object.values(log[k] || {}).reduce((x, s) => x + (s || 0), 0) : a), 0)
+export function listeningPlaces() {
+  const others = new Map()
+  for (const [k, log] of Object.entries(elsewhere)) {
+    const dev = k.split(':')[0]
+    const had = others.get(dev) || { name: 'Another device', seconds: 0 }
+    others.set(dev, { name: log.dev || had.name, seconds: had.seconds + totalOf(log) })
+  }
+  return [{ name: `This ${deviceName().replace(/^\S+ /, '')}`, here: true, seconds: totalOf(own) }, ...others.values()]
+}
 
 let started = false
 
@@ -287,7 +300,8 @@ export function startHistory() {
     last = { at: now, id: sounding(), carry }
     if (!loaded || !seconds) return
     const title = getDoc(id)?.title || own.titles?.[id] || historyStore.get().log.titles?.[id] || 'Untitled'
-    record(log => addSeconds(log, dayKey(new Date(now)), id, seconds, title))
+    const when = new Date(now)
+    record(log => addHour(addSeconds(log, dayKey(when), id, seconds, title), String(when.getFullYear()), when.getHours(), seconds))
     // written down every 20 seconds while sound plays, and at once when it stops: closing the app straight
     // after a pause loses nothing (it lost up to 20 seconds)
     if (now - lastSave >= 20000 || !last.id) {

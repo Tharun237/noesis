@@ -28,13 +28,23 @@ export function listenedBetween({ at, id, carry = 0 }, now) {
 const isDay = k => /^\d{4}-\d{2}-\d{2}$/.test(k)
 const yearOfDay = day => String(day).slice(0, 4)
 
+// The hour of the day listening happens in: 24 totals for each year ({ hours: { '2026': [24 numbers] } }).
+// That is all "when do I listen" needs, and it is 24 numbers a year however much is listened to.
+export function addHour(log, year, hour, seconds) {
+  const row = [...(log?.hours?.[year] || Array(24).fill(0))]
+  row[hour] = (row[hour] || 0) + seconds
+  return { ...log, hours: { ...(log?.hours || {}), [year]: row } }
+}
+const eachHour = (a, b, f) => Array.from({ length: 24 }, (_, h) => f(a?.[h] || 0, b?.[h] || 0))
+
 // Records as one: seconds add up; a title or a finish known to any of them is known. Later records win a
 // title, so this device's own goes last.
 export function mergeLogs(logs) {
-  const out = { titles: {}, finished: [] }
+  const out = { titles: {}, finished: [], hours: {} }
   const seen = new Set()
   for (const log of logs) {
     if (!log) continue
+    for (const [y, row] of Object.entries(log.hours || {})) out.hours[y] = eachHour(out.hours[y], row, (a, b) => a + b)
     for (const k of Object.keys(log)) {
       if (!isDay(k)) continue
       const day = (out[k] ||= {})
@@ -52,7 +62,7 @@ export function mergeLogs(logs) {
 // One year of a record, with the titles it needs: what is sent (a year is a small file that stops growing
 // when the year ends, however many years someone listens for).
 export function yearOf(log, year) {
-  const out = { titles: {}, finished: (log?.finished || []).filter(f => yearOfDay(f.day) === year) }
+  const out = { titles: {}, finished: (log?.finished || []).filter(f => yearOfDay(f.day) === year), hours: log?.hours?.[year] ? { [year]: log.hours[year] } : {} }
   const ids = new Set(out.finished.map(f => f.id))
   for (const k of Object.keys(log || {})) {
     if (!isDay(k) || yearOfDay(k) !== year) continue
@@ -72,6 +82,7 @@ export function newest(a, b) {
     if (!isDay(k)) continue
     for (const id of Object.keys(out[k])) out[k][id] = Math.max(a?.[k]?.[id] || 0, b?.[k]?.[id] || 0)
   }
+  for (const y of Object.keys(out.hours)) out.hours[y] = eachHour(a?.hours?.[y], b?.hours?.[y], Math.max)
   return out
 }
 

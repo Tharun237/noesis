@@ -7,7 +7,8 @@
 //   DocInsight     the same document at the top of its reader, larger: and what is left is cut into the days
 //                  it will take at the customer's own pace, so "how do I finish this" is something seen
 //   LibraryGlance  above the library's list: today, the week (each day a column, split by document), and the
-//                  shelf (every document a block as wide as it is long, lit as far as it has been heard)
+//                  shelf (every document a block as wide as it is long, lit as far as it has been heard).
+//                  Tapping it opens all of it (Listening.jsx): the glance is the door, not a second copy
 //
 // One colour per document (bookcolour.js, from its cover) in all three, so the eye joins them up. In a bar,
 // what was heard before today is that colour dimmed and today's stretch is that colour at full strength.
@@ -21,6 +22,7 @@ import { historyStore } from '../lib/history.js'
 import { dayKey, weekOf, docListening, docBar } from '../lib/heard.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
 import { fmtDur } from './kit.jsx'
+import { openSheet } from '../lib/nav.js'
 
 const BEFORE = 0.5 // heard before today: the document's colour, dimmed
 const shareOf = d => (d.finished ? 1 : d.total ? Math.min(1, d.pos / d.total) : 0)
@@ -125,7 +127,7 @@ export function LibraryGlance({ docs, wide }) {
   const tallest = Math.max(QUIET_DAY_S, ...week.map(d => d.seconds))
   const today = week[6].seconds
   return (
-    <section data-rise="0" aria-label="Your listening" style={{ margin: wide ? '0 0 26px' : '2px 16px 14px', padding: wide ? '18px 22px' : 16, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gridTemplateColumns: wide ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)', columnGap: 40, rowGap: 16, alignItems: 'end' }}>
+    <section data-rise="0" role="button" tabIndex={0} data-press="" aria-label="Your listening: open all of it" onClick={() => openSheet('listening')} onKeyDown={e => { if (e.key === 'Enter') openSheet('listening') }} style={{ '--press': T.tap.card, cursor: 'pointer', margin: wide ? '0 0 26px' : '2px 16px 14px', padding: wide ? '18px 22px' : 16, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gridTemplateColumns: wide ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr)', columnGap: 40, rowGap: 16, alignItems: 'end' }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20 }}>
         <div style={{ flexShrink: 0, minWidth: 92 }}>
           <div style={label}>Today</div>
