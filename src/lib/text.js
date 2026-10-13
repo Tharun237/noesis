@@ -32,6 +32,7 @@ export function cleanText(s, lang = 'en') {
   if (!s) return ''
   s = s.replace(/[ﬀ-ﬆ]/g, c => LIGATURES[c]).replace(/­/g, '')
   for (const re of CITATIONS) s = s.replace(re, '')
+  s = s.replace(/[†‡]+|(?<=[\p{L}\p{P}])\*+(?=[\s\p{P}]|$)/gu, '') // a footnote's mark is for the eye
   s = s.replace(/\bhttps?\s?:\s?\/\/\S+|\bwww\.\S+|\bdoi:\s?\S+/gi, '') // OCR often writes "https ://"
   if (lang === 'en') for (const [re, to] of SPOKEN) s = s.replace(re, to)
   return s.replace(/\s+([,.;:!?])/g, '$1').replace(/\s+/g, ' ').trim()

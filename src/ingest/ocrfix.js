@@ -19,6 +19,10 @@ const WEAK = [
 // "1 didn't" → "I didn't": a lone 1 followed by a word that only follows the pronoun I.
 const AFTER_I = /(^|[\s"“(])1(?=\s+(?:am|was|have|had|did|didn't|don't|do|think|thought|know|knew|said|says|will|would|could|can|can't|cannot|shall|should|must|went|got|felt|saw|told|asked|mean|meant|guess|suppose|hope|wish|want|wanted|like|liked|love|believe|remember|see|hear|heard|found|began|tried|wrote|read|'m|'ve|'ll|'d)\b)/g
 
+// A scan often loses the space after a short word: "ifwe", "ofa", "isa". Split only where both halves are words
+// and one of them is one of these (so "today" or "into" can never be cut: they are known words to begin with).
+const SMALL = new Set('a an the of to in on at by is it if as we he be or so no do my us up and for but not was are has had can its his her our you all'.split(' '))
+
 const WORD = /[A-Za-z][A-Za-z'’]*[A-Za-z]|[A-Za-z]/g
 
 const caseLike = (src, out) =>
@@ -52,6 +56,19 @@ export function createRepair(speller) {
     return out
   }
 
+  function unglue(w) {
+    if (w.length < 3 || w.length > 14 || w !== w.toLowerCase()) return null
+    let found = null
+    for (let i = 1; i < w.length; i++) {
+      const a = w.slice(0, i), b = w.slice(i)
+      const ok = (SMALL.has(a) && (SMALL.has(b) || (b.length >= 3 && known(b)))) || (SMALL.has(b) && a.length >= 3 && known(a))
+      if (!ok) continue
+      if (found) return null // two ways to cut it: leave it
+      found = a + ' ' + b
+    }
+    return found
+  }
+
   const stats = { words: 0, unknown: 0, fixed: 0, dropped: 0 }
 
   // Fraction of words the dictionary doesn't know — the signal that a PDF is an OCR'd scan.
@@ -76,12 +93,17 @@ export function createRepair(speller) {
     t = t.replace(WORD, (w, at, all) => {
       stats.words++
       if (/[./@:]/.test(all[at - 1] || '') || /^[./@][A-Za-z]/.test(all.slice(at + w.length))) return w // Half.com’s, foo@bar, a/b
-      const fix = fixWord(w)
+      const fix = fixWord(w) || (known(w) ? null : unglue(w))
       if (fix) { stats.fixed++; real++; return fix }
       if (w.length >= 3) known(w) ? real++ : (unknown++, stats.unknown++)
       return w
     })
-    const junk = words.length <= 12 && unknown > 0 && (real === 0 || unknown / words.length >= 0.5)
+    // A picture, a dotted rule or a jacket set in fancy type comes out of a scan as letters that are not words:
+    // "SPO CO TSO O ESTEE EHO". Names are not words either, so a capitalised unknown ("Rovelli") is not held against it.
+    const tokens = words.filter(w => w.length >= 2)
+    const noise = tokens.filter(w => !known(w) && !/^[A-Z][a-z]+$/.test(w)).length
+    const junk = (words.length <= 12 && unknown > 0 && (real === 0 || unknown / words.length >= 0.5)) ||
+      (tokens.length >= 5 && noise / tokens.length >= 0.5)
     return { text: t.replace(/\s+/g, ' ').trim(), junk }
   }
 
@@ -89,13 +111,20 @@ export function createRepair(speller) {
     const out = []
     for (const b of blocks) {
       const r = repairText(b.text)
-      if (r.junk && b.k === 'p') { stats.dropped++; continue }
+      if (r.junk && (b.k === 'p' || b.k === 'h')) { stats.dropped++; continue }
       out.push({ ...b, text: r.text })
     }
     return out
   }
 
-  return { repair, repairText, unknownRate, fixWord, stats }
+  // The same, in slices: a whole book in one go held the screen still for a second on a phone.
+  async function repairAsync(blocks, rest, slice = 150) {
+    const out = []
+    for (let i = 0; i < blocks.length; i += slice) { out.push(...repair(blocks.slice(i, i + slice))); await rest() }
+    return out
+  }
+
+  return { repair, repairAsync, repairText, unknownRate, fixWord, stats }
 }
 
 // Browser loader: dictionary files are self-hosted under /dict (copied from dictionary-en on install).

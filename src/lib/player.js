@@ -7,7 +7,7 @@ import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { LANGS } from './lang.js'
 import { activeEngine, builtInOnly, pickSystemVoice } from './engine.js'
-import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches, ensureFresh } from './library.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches, ensureFresh, setSounding, onReread } from './library.js'
 import { toast, openSheet } from './nav.js'
 import { wordWeights } from './words.js'
 import { flushNow } from './sync.js'
@@ -380,6 +380,11 @@ export function pause() {
   savePosition(true)
   flushNow()
 }
+
+// A document is never read again while it is being heard (library.js rereadOld). One that is open here but
+// silent is: the player then holds sentences that no longer exist, so it takes the new ones, at the same words.
+setSounding(id => { const p = player.get(); return p.id === id && (p.playing || p.waiting) })
+onReread((id, pos) => { if (player.get().id === id) load(pos, { autoplay: false }) })
 
 // Another device moved ahead. Never yank audio that is playing here: offer a jump instead.
 onRemotePos((id, v) => {

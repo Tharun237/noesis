@@ -15,6 +15,8 @@ import { waitSeconds } from './readiness-math.js'
 import { parseSource, fetchUrl } from '../ingest/index.js'
 import { cleanMeta } from '../ingest/meta.js'
 import { bookStart } from '../ingest/front.js'
+import { READER } from '../ingest/pdftext.js'
+import { carrier } from './carry.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
 import { touch, configureSync, startSync, downloadContent, deviceName } from './sync.js'
 
@@ -420,7 +422,7 @@ async function prepare(id) {
       patch(id, { stage: 'Repairing scanned text', prep: 0 })
       const { loadRepair } = await import('../ingest/ocrfix.js')
       const fix = await loadRepair()
-      blocks = fix.repair(blocks)
+      blocks = await fix.repairAsync(blocks, pause)
       note = `Scanned book: Noesis fixed ${fix.stats.fixed.toLocaleString()} OCR errors and removed ${fix.stats.dropped.toLocaleString()} garbled lines on this device.`
     }
     patch(id, { scanned: !!parsed.scanned })
@@ -525,7 +527,7 @@ async function prepare(id) {
     }
     // contentVer changes → sync uploads this exact text once, so other devices never re-parse or re-run AI.
     // settings.voice stays an English voice and is never changed here; only the document's own voice follows its lang.
-    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, foreign, voice, contentVer: Date.now() })
+    patch(id, { status: voice == null ? 'ready' : 'voicing', stage: voice == null ? '' : 'Generating audio', total, chars, done: 0, vChars: 0, vSec: 0, prep: 1, pos, ...startPatch, note: langNote ?? note, lang, foreign, voice, contentVer: Date.now(), readVer: READER })
     kickVoice()
   } catch (e) {
     // Paused by the customer: not a failure. What was translated is kept, and Resume carries on from there.
@@ -534,6 +536,78 @@ async function prepare(id) {
     patch(id, { status: 'error', stage: 'Failed', error: e.message || String(e) })
   } finally {
     parsed?.pdf?.loadingTask.destroy() // pdf.js v6: the loading task owns the worker-side document
+  }
+}
+
+// ── a better reader reads the old documents again ─────────────────────────────────────────
+// Tharun, with 21 books in his library the day the reader was mended: "I'll not upload all those things again.
+// It has to auto do it." So it does: a PDF read by an older reader (readVer < READER) is read again from its
+// own file, which this device kept. Quietly: the document stays as it is, playable, until the new text is
+// whole, and then one changes into the other with the place and the bookmarks carried to the same words.
+// Not read again unasked: a document an AI narrated or a translator wrote (that is the customer's quota and
+// time), one that has versions made from it (their places are counted in its paragraphs), and the one that is
+// sounding right now (it is done the next time the app opens).
+let sounding = () => false // the player says which document is being heard
+export const setSounding = f => { sounding = f }
+const reread = new Set()
+export const onReread = f => { reread.add(f); return () => reread.delete(f) }
+const REREAD_AFTER_MS = 5000 // opening the app comes first
+
+async function rereadOld() {
+  for (const { id } of [...library.get().docs]) {
+    const d = getDoc(id)
+    if (!d || d.kind !== 'pdf' || !d.total || (d.readVer || 1) >= READER || (d.status !== 'ready' && d.status !== 'voicing')) continue
+    if (d.mode !== 'full' || d.target || (d.ai && hasAiKey()) || sounding(id) || library.get().docs.some(x => x.from === id)) continue
+    await readAgain(id).catch(e => console.warn('Could not read again:', d.title, e?.message || e))
+    await pause()
+  }
+}
+
+async function readAgain(id) {
+  const d = getDoc(id)
+  const src = await db.getSource(id)
+  if (src?.kind !== 'pdf') return // the file is on another device: that one reads it again, and sends the text
+  let parsed = null
+  try {
+    parsed = await parseSource(src, null, { cover: false })
+    let blocks = parsed.blocks
+    let refs = parsed.refs || []
+    const taken = takeRefs(blocks)
+    if (taken.refs.length) { blocks = taken.blocks; if (!refs.length) refs = taken.refs }
+    if (refs.length) blocks = withoutEmptyRefHeading(blocks)
+    let note = d.note
+    if (parsed.scanned) {
+      const { loadRepair } = await import('../ingest/ocrfix.js')
+      const fix = await loadRepair()
+      blocks = await fix.repairAsync(blocks, pause)
+      note = `Scanned book: Noesis fixed ${fix.stats.fixed.toLocaleString()} OCR errors and removed ${fix.stats.dropped.toLocaleString()} garbled lines on this device.`
+    }
+    const listening = await toListeningAsync(blocks, d.lang || 'en')
+    const old = await db.getDoc(id)
+    const was = (old?.blocks || []).flatMap(b => b.s), now = listening.flatMap(b => b.s)
+    const cur = getDoc(id)
+    // deleted, re-processed, or begun to play while this was read: leave it, it is looked at again next time
+    if (!cur || cur.contentVer !== d.contentVer || (cur.status !== 'ready' && cur.status !== 'voicing') || sounding(id)) return
+    if (!now.length || (was.length === now.length && was.every((t, i) => t === now[i]))) return patch(id, { readVer: READER }, true)
+    const to = carrier(was, now)
+    const pos = cur.pos ? to(cur.pos) : listening.slice(0, bookStart(listening)).reduce((a, b) => a + b.s.length, 0)
+    const seen = new Set()
+    const marks = (cur.marks || []).map(m => ({ ...m, i: to(m.i) })).filter(m => !seen.has(m.i) && seen.add(m.i))
+    await db.delAudio(id)
+    await db.putDoc(id, refs.length ? { blocks: listening, refs } : { blocks: listening })
+    await db.putDurs(id, { durs: new Array(now.length).fill(0), tails: new Array(now.length).fill(0) })
+    cache.delete(id)
+    voiced.set(id, new Set())
+    const chars = now.reduce((a, t) => a + t.length, 0)
+    patch(id, {
+      status: cur.voice == null ? 'ready' : 'voicing', stage: cur.voice == null ? '' : 'Generating audio',
+      total: now.length, chars, done: 0, vChars: 0, vSec: 0, pos, posF: 0, marks, note, scanned: !!parsed.scanned,
+      contentVer: Date.now(), readVer: READER,
+    })
+    reread.forEach(f => f(id, pos))
+    kickVoice()
+  } finally {
+    parsed?.pdf?.loadingTask.destroy()
   }
 }
 
@@ -574,6 +648,7 @@ export async function boot() {
     else if (d.total && !d.contentVer) patch(d.id, { contentVer: d.createdAt })
   }
   startSync().catch(e => console.warn('Sync failed to start:', e))
+  setTimeout(() => void rereadOld(), REREAD_AFTER_MS)
 }
 
 // Documents already in the library may carry junk PDF metadata titles/authors. Repair them

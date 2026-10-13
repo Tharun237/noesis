@@ -52,12 +52,12 @@ export async function fetchUrl(url) {
   return { kind, name, url: finalUrl, blob: await res.blob() }
 }
 
-export async function parseSource(src, onProgress) {
+export async function parseSource(src, onProgress, opts) {
   const name = src.name || 'Untitled'
   switch (src.kind) {
     case 'pdf': {
       const { readPdf } = await import('./pdf.js')
-      return readPdf(new Uint8Array(await src.blob.arrayBuffer()), name, onProgress)
+      return readPdf(new Uint8Array(await src.blob.arrayBuffer()), name, onProgress, opts)
     }
     case 'epub': {
       const { readEpub } = await import('./epub.js')

@@ -70,6 +70,25 @@ FUNCS=1 node e2e/feel.mjs    # also the slowest functions (build with --minify f
 Run it before and after any change to motion, lists or the reader, and put both sets of numbers in the commit
 or the report. The first run after a new build updates the installed app and reloads: run it twice.
 
+## The text itself: read real books, then read what came out
+
+Tharun, the day he put 21 of his own books in: "our text extraction and OCR is not that great". He was right,
+and no screen test had seen it: a crooked scan was losing whole sentences, and every novel came out as one
+block a page. What is heard is the product, so it is judged on real books, in words, not on a status of "ready".
+```
+node tools/extract.mjs <out-dir> <book.pdf> [more.pdf ...]
+```
+It reads PDFs with exactly the app's code (`src/ingest/pdftext.js`, `ocrfix.js`, `lib/text.js`) and writes the
+text as heard, with one line of numbers per book. Before and after any change to the reader: run it on a dozen
+real books (a crooked scan, a novel with dialogue, a textbook), compare the word and paragraph counts, and READ
+a page from the start, the middle and a chapter opening of each. A count that moves by more than a few per
+cent is words lost or found: find out which. Then raise `READER` in `pdftext.js`: that is what makes every
+customer's old documents read themselves again from the file their device kept (`library.js` rereadOld), with
+the place and the bookmarks carried to the same words. Nobody is asked to add a book twice.
+
+Known, and not yet done: a PDF that is only pictures of pages (no text in it at all) cannot be read without an
+AI key; tables in a textbook are read out cell by cell.
+
 ## What this cannot see (say so; do not claim it)
 
 How it feels in the hand: whether motion is smooth on Tharun's phone, real touch latency, sound. For motion
