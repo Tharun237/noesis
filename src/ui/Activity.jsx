@@ -112,7 +112,7 @@ export function ActivityStrip({ activity, bottom }) {
               borderRadius: wide ? T.r.md : 17, background: T.bg, border: `1px solid ${activity.error ? T.danger : T.borderHi}`,
               boxShadow: '0 12px 32px rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', gap: wide ? 10 : 8, padding: wide ? '0 8px 0 14px' : '0 14px 0 12px',
             }}>
-            <motion.span layout="position" layoutDependency={shape} style={{ display: 'inline-flex', flexShrink: 0 }}><Pulse color={activity.error ? T.danger : T.lime} /></motion.span>
+            <motion.span layout="position" layoutDependency={shape} style={{ display: 'inline-flex', flexShrink: 0 }}><Pulse color={activity.error ? T.danger : undefined} /></motion.span>
             <motion.div layout="position" layoutDependency={shape} style={{ flex: wide ? 1 : '0 1 auto', minWidth: 0, display: 'grid', gap: 1 }}>
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div key={activity.text} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: T.dur.fast }}
@@ -133,14 +133,13 @@ export function ActivityStrip({ activity, bottom }) {
                 {activity.action.label}
               </button>
             )}
-            {/* Progress line: known → fills; unknown → a soft sweep. Transform only. */}
-            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: T.surfaceHi, overflow: 'hidden' }}>
-              {activity.progress != null
-                ? <motion.div initial={false} animate={{ scaleX: Math.max(0.02, Math.min(1, activity.progress)) }} transition={{ duration: T.dur.base, ease: T.ease }}
-                    style={{ height: '100%', background: T.text, transformOrigin: '0 50%' }} />
-                : !activity.error && <motion.div animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                    style={{ height: '100%', width: '34%', background: T.text }} />}
-            </div>
+            {/* how far, when it is known: a line that fills. When it is not known there is no line: the spinner says it is going. */}
+            {activity.progress != null && (
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: T.surfaceHi, overflow: 'hidden' }}>
+                <motion.div initial={false} animate={{ scaleX: Math.max(0.02, Math.min(1, activity.progress)) }} transition={{ duration: T.dur.base, ease: T.ease }}
+                  style={{ height: '100%', background: T.text, transformOrigin: '0 50%' }} />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

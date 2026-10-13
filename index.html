@@ -38,7 +38,7 @@
       * { box-sizing: border-box; }
       /* A spinner says "working". */
       @keyframes noesis-spin { to { transform: rotate(360deg); } }
-      [data-spin] { animation: noesis-spin 1s linear infinite; }
+      [data-spin] { animation: noesis-spin 0.8s steps(8) infinite; } /* a spoke at a time */
       ::selection { background: rgba(110, 231, 255, 0.28); }
       :focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
       ::-webkit-scrollbar { width: 10px; height: 10px; }

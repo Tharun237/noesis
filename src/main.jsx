@@ -7,7 +7,8 @@ import App from './App.jsx'
 import { useStore } from './lib/store.js'
 import { account } from './lib/sync.js'
 import { T } from './theme.js'
-import { Pulse } from './ui/kit.jsx'
+import { Spinner } from './ui/kit.jsx'
+import { Wordmark } from './ui/Library.jsx'
 import { ui, openSheet, toast } from './lib/nav.js'
 import './lib/ready.js'
 
@@ -58,7 +59,13 @@ function Start() {
   const [waited, setWaited] = useState(false)
   useEffect(() => { const t = setTimeout(() => setWaited(true), 8000); return () => clearTimeout(t) }, [])
   if (arriving() && !checked && !waited) {
-    return <div role="status" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: T.bg, color: T.sub, fontFamily: T.font, fontSize: 15 }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Pulse />Opening your library</span></div>
+    // the name where it always is when the app opens, and the one sign of work under it: what a launch looks like
+    return (
+      <div role="status" aria-label="Opening your library" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 26, background: T.bg, color: T.sub }}>
+        <Wordmark size={34} />
+        <Spinner size={18} />
+      </div>
+    )
   }
   return <App />
 }

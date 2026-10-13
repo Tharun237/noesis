@@ -494,7 +494,7 @@ await step('natural voice: readiness gate instead of stalling', async () => {
   await until(() => page.getByText(/Play starts by itself/).first().isVisible(), 5000, 'gate message')
   const s1 = await playerState()
   expect(!s1.playing && s1.gate > 0, `expected gated, got playing=${s1.playing} gate=${s1.gate}`)
-  await page.getByRole('button', { name: 'Use built-in voice now' }).click()
+  await page.getByRole('button', { name: 'Use built-in voice' }).click()
   await until(async () => (await playerState()).playing && await page.evaluate(() => speechSynthesis.speaking), 8000, 'built-in voice to take over')
   await click('button', 'Pause')
   return `gated with ~${Math.round(s1.gate / 60)} min to wait, switched to built-in instantly`

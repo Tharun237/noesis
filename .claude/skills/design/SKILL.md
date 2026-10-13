@@ -184,3 +184,11 @@ Kept on purpose, though the lists flag them: the pure black page and the lime ac
 rule), and the welcome page exactly as it is ("Landing Page is fine", Tharun, same day): it has its OWN small
 type and entrances, written in Landing.jsx, so the app can change without changing it.
 The concept map was removed the same day ("it's useless at Noesis").
+- **One sign of work.** Everything that is being worked on shows the same thing: the spinner of eight spokes
+  (`Spinner`, kit.jsx), in the colour of the words beside it. No pulsing dot (a beacon says "live", not "being
+  made"), no ring with a gap, no light sweeping along a bar. A bar appears only when how far is KNOWN, and
+  fills. A thing waiting its turn shows nothing turning. A thing that failed shows a still red dot. The Play
+  button holds the spinner where its symbol was, not a ring round its outside as well.
+- **Opening the app is the name and the spinner**, not a sentence in the middle of a black page.
+- **A toast beside a page that already explains says only what the page does not** (the offer), and is never
+  cut off.

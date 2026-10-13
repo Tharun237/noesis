@@ -358,8 +358,9 @@ export async function play() {
     kickVoice()
     const wait = player.get().gate
     const voice = voiceWait() // a voice still on its way is the wait: no "ready in 10 seconds" before a download
-    toast(voice ? `${voice.text}. Play starts by itself.` : `Making the audio: ready in ${waitWords(wait)}. Play starts by itself.`,
-      typeof speechSynthesis !== 'undefined' ? { label: 'Use built-in voice now', run: () => settings.set({ voiceEngine: 'system' }) } : null)
+    // short: the page already says the rest ("Play starts by itself"); this is only the offer beside it
+    toast(voice ? voice.text : `Making the audio: ready in ${waitWords(wait)}`,
+      typeof speechSynthesis !== 'undefined' ? { label: 'Use built-in voice', run: () => settings.set({ voiceEngine: 'system' }) } : null)
     return
   }
   pendingStart = false

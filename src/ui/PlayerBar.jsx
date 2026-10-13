@@ -19,7 +19,7 @@ function useVoiceLabel(d) {
   return sys ? systemVoiceLabel(pickSystemVoice()) : voiceName(d.voice)
 }
 import { Icon } from './icons.jsx'
-import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap, useBusy } from './kit.jsx'
+import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap, useBusy, Spinner } from './kit.jsx'
 import { Cover } from './Library.jsx'
 import { ArcScrubber } from './ArcScrubber.jsx'
 
@@ -55,7 +55,7 @@ export function PlayerBar({ wide, full }) {
 
   const scrubber = (
     <div style={{ display: 'grid', gap: 2 }}>
-      {waiting && <div style={{ fontSize: 12, color: T.sub }}>Waiting for the next sentence to generate</div>}
+      {waiting && <div style={{ fontSize: 12, color: T.sub }}>Making the audio</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
       <span style={{ minWidth: 52, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtTime(shown)}</span>
       <ArcScrubber d={d} value={shown} max={total} disabled={!c} onChange={setDrag} onCommit={v => { if (drag !== null) { seekTime(v); setDrag(null) } }} />
@@ -114,12 +114,13 @@ function PlayButton({ playing, waiting, size }) {
   return (
     <button type="button" aria-label={playing ? 'Pause' : 'Play'} onClick={run} aria-busy={waiting || busy || undefined} data-press=""
       style={{ '--press': T.tap.icon, width: size, height: size, borderRadius: T.r.pill, border: 'none', background: T.text, color: T.bg, display: 'grid', placeItems: 'center', cursor: 'pointer', position: 'relative', flexShrink: 0 }}>
-      {(waiting || busy) && (
-        <span data-spin style={{ position: 'absolute', inset: -4, borderRadius: T.r.pill, border: '2px solid transparent', borderTopColor: T.accent }} />
+      {/* while the sound is not ready the button holds the one sign of work, where its symbol was (it had a
+          ring turning round its outside as well as its symbol: two things saying one thing) */}
+      {waiting || busy ? <Spinner size={Math.round(size * 0.42)} /> : (
+        <motion.span key={playing ? 'pause' : 'play'} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.spring} style={{ display: 'grid' }}>
+          <Icon name={playing ? 'pause' : 'play'} size={size * 0.4} stroke={playing ? 2.6 : 1.6} fill={!playing} style={{ marginLeft: playing ? 0 : 2 }} />
+        </motion.span>
       )}
-      <motion.span key={playing ? 'pause' : 'play'} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={T.spring} style={{ display: 'grid' }}>
-        <Icon name={playing ? 'pause' : 'play'} size={size * 0.4} stroke={playing ? 2.6 : 1.6} fill={!playing} style={{ marginLeft: playing ? 0 : 2 }} />
-      </motion.span>
     </button>
   )
 }
@@ -209,7 +210,7 @@ function MiniPlayer({ d, progress, voiceLabel, gate, waiting, left, sleepLine })
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting ? 'waiting for the next sentence' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting ? 'making the audio' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
           </span>
         </button>
         <MiniTransport />

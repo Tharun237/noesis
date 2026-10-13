@@ -55,9 +55,20 @@ export function useBusy(onClick) {
   return [busy, run]
 }
 // The sign itself: a ring that turns, in the colour of the text around it.
-export function Working({ size = 16 }) {
-  return <span data-spin aria-hidden style={{ width: size, height: size, boxSizing: 'border-box', borderRadius: T.r.pill, border: '2px solid currentColor', borderTopColor: 'transparent', opacity: 0.85, flexShrink: 0 }} />
+// The ONE sign that something is being worked on, everywhere in the app: eight spokes, each a little fainter
+// than the last, turning a spoke at a time. It takes the colour of the words it stands beside.
+// (There were three: a lime dot that pulsed like a beacon beside every status line, a ring with a gap inside
+// buttons, and a bar with a light sweeping along it. "That beacon icon... all loading things are AI slop",
+// Tharun, 2026-10-13. A dot that pulses says "live"; a thing being made is not live, it is being made.)
+const SPOKES = [0, 1, 2, 3, 4, 5, 6, 7]
+export function Spinner({ size = 14, color }) {
+  return (
+    <svg data-spin="" aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', color }}>
+      {SPOKES.map(k => <line key={k} x1="12" y1="2.6" x2="12" y2="7.2" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" opacity={0.14 + 0.86 * (k / 7)} transform={`rotate(${k * 45} 12 12)`} />)}
+    </svg>
+  )
 }
+export const Working = Spinner
 
 export function Button({ children, onClick, kind = 'ghost', icon, disabled, full, type = 'button', style, title, busy: told }) {
   const [own, run] = useBusy(onClick)
@@ -164,12 +175,11 @@ export const inputStyle = {
 
 // `unknown`: the work has no known length, so the bar sweeps instead of showing a made-up amount.
 export function Progress({ value, height = 3, color = T.accent, track = T.surfaceHi, unknown }) {
+  if (unknown) return null // how far is not known: no bar pretends to measure it. The spinner beside the words says it is going.
   return (
     <div style={{ height, borderRadius: height, background: track, overflow: 'hidden' }}>
-      {unknown
-        ? <motion.div key="sweep" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ height: '100%', width: '34%', background: color }} />
-        : <motion.div key="fill" initial={false} animate={{ scaleX: Math.max(0, Math.min(1, value || 0)) }} transition={{ duration: T.dur.base, ease: T.ease }}
-        style={{ height: '100%', background: color, transformOrigin: '0 50%' }} />}
+      <motion.div key="fill" initial={false} animate={{ scaleX: Math.max(0, Math.min(1, value || 0)) }} transition={{ duration: T.dur.base, ease: T.ease }}
+        style={{ height: '100%', background: color, transformOrigin: '0 50%' }} />
     </div>
   )
 }
@@ -194,10 +204,11 @@ export function Count({ value, format = Math.round }) {
   return <motion.span>{text}</motion.span>
 }
 
-// The dot beside something that is still working. It pulses for as long as it is on screen, so it is the
-// style sheet's job (press.js), not a script's on every frame.
-export function Pulse({ color = T.lime }) {
-  return <span data-pulse="" style={{ width: 6, height: 6, borderRadius: 6, background: color, display: 'inline-block', flexShrink: 0 }} />
+// What stands beside a line that says what is happening: the spinner while it is being worked on; a still red
+// dot when it has failed (nothing is turning: it has stopped).
+export function Pulse({ color }) {
+  if (color === T.danger) return <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 6, background: T.danger, display: 'inline-block', flexShrink: 0 }} />
+  return <Spinner size={13} />
 }
 
 // Bottom sheet on phones, centred dialog on wide screens. Escape and backdrop close it.

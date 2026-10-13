@@ -369,11 +369,11 @@ export function StatusLine({ d }) {
     if (d.id !== playId || gate == null) return null
     return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Making the audio · ready in {waitWords(gate)}</span>
   }
-  if (d.status === 'queued') return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> {queuedText(d.id, qkey)}</span>
+  if (d.status === 'queued') return <span style={{ color: T.sub }}>{queuedText(d.id, qkey)}</span> // waiting its turn: nothing is turning
   const pct = d.prep || 0
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}>
-      <Pulse /> {d.stage || 'Waiting'}{pct >= 0.01 ? ` · ${Math.floor(pct * 100)}%` : ''}
+      {!(d.status === 'syncing' && !d.contentVer) && <Pulse />} {d.stage || 'Waiting'}{pct >= 0.01 ? ` · ${Math.floor(pct * 100)}%` : ''}
     </span>
   )
 }

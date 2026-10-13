@@ -124,7 +124,7 @@ function PreviewLine({ busy }) {
     : `Making ${name}'s sample`
   return (
     <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 12px 10px 42px', fontSize: 12.5, color: busy.phase === 'playing' ? T.lime : T.sub }}>
-      <Pulse color={busy.phase === 'playing' ? T.lime : T.accent} />{text}
+      {busy.phase === 'playing' ? <Icon name="speaker" size={14} /> : <Pulse />}{text}
     </div>
   )
 }

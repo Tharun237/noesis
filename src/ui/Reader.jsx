@@ -696,7 +696,7 @@ function Preparing({ d, doc, pos }) {
   if (ready?.wait != null) longest.current = Math.max(longest.current, ready.wait)
   const slow = speed > 0 && speed < 1 && hasSystemVoice()
   const translating = d.status === 'narrating' && !!d.target && /^Translating/.test(d.stage || '')
-  const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : T.lime} />{text}</span>
+  const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : undefined} />{text}</span>
   // head: what is being waited for · bar: null (none), undefined (no known length) or 0..1 · next: what happens then
   const [head, bar, next] = d.status === 'error' ? [<StatusLine d={d} />, null, null]
     : failed ? [said(voiceOff ? "You're offline" : `The ${voiceName(engVoice)} voice couldn't start`), null, voiceOff ? `The ${voiceName(engVoice)} voice downloads when you are back online.` : null]

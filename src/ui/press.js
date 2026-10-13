@@ -69,8 +69,6 @@ const rules = [
   `[data-rise^="m"]{animation:noesis-drop 280ms ${EASE} backwards}`,
   ...Array.from({ length: MENU_HELD + 1 }, (_, i) => `[data-rise="m${i}"]{animation-delay:${i * MENU_STEP}ms}`),
   // the dot beside something that is still working
-  '@keyframes noesis-pulse{50%{opacity:0.25}}',
-  '[data-pulse]{animation:noesis-pulse 1.4s ease-in-out infinite}',
   // Tied to the page's own scrolling by the browser (no script runs as it scrolls): the reading line fills
   // from start to end of the page; the shelf name comes into the bar as the big title scrolls away. A browser
   // without scroll timelines shows neither, and loses nothing it needs.

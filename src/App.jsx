@@ -125,7 +125,7 @@ export default function App() {
               display: 'flex', alignItems: 'center', gap: 12, boxSizing: 'border-box',
             }}>
             {/* A message is never cut off mid-sentence: it may run to two lines. */}
-            <span style={{ minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.4 }}>{toastMsg}</span>
+            <span style={{ minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', lineHeight: 1.4 }}>{toastMsg}</span>
             {toastAction && (
               <button type="button" onClick={() => { toastAction.run(); ui.set({ toast: null, toastAction: null }) }}
                 style={{ height: 32, padding: '0 14px', borderRadius: T.r.pill, border: 'none', background: T.bg, color: T.text, fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
