@@ -329,10 +329,22 @@ export async function startSync() {
   if (!me.user) return
   if (mine(me.user.id)) ({ uid, cursor, clock, dirty, ids } = saved)
   else await resetFor(me.user.id)
+  // Every time the app is opened it looks at the WHOLE folder, not only at what changed since its mark. The
+  // mark is a convenience for the rounds in between; it is not to be believed across a launch. A version of
+  // this app moved the mark past records it then failed to take, and that device never saw them again:
+  // Tharun's phone, 13 October 2026, 7 of 21 books however often it synced. Looking at everything is one
+  // request, and only what is newer than ours is then read.
+  cursor = null
   for (const [k, at] of Object.entries(early)) { clock[k] = Math.max(clock[k] || 0, at); dirty[k] = clock[k] }
   early = {}
   wire()
   await flush()
+}
+
+// "Sync now": the customer is saying something is not right. Look at the whole folder, not at the changes.
+export function syncAll() {
+  cursor = null
+  return flush()
 }
 
 export const signInWithGoogle = () => location.assign('/api/auth/google')

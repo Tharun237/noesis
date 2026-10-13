@@ -123,6 +123,32 @@ try {
   await b.until('the long document to reach device B with its text', async () => { await b.sync(); return b.lib(`m.library.loadDoc(${JSON.stringify(slow)}).then(c => c?.segs?.length > 100)`) }, 60000)
   const stuck = await b.lib("m.library.library.get().docs.filter(d => d.status === 'syncing' && !d.contentVer).length")
   check('once prepared it arrives, text and all, and nothing is left waiting', stuck === 0, `${stuck} waiting`)
+
+  // (c) A device that has lost its place. An older version moved its mark in the folder's list of changes past
+  // records it then failed to take, and never looked at them again: Tharun's phone showed 7 of his 21 books for
+  // good, however often it synced. Here B's mark is moved past a document it has not taken, as that version
+  // left it; opened again, B must still get the document.
+  const missed = await addText(a, 'The one that was passed over', 'It was sent while the other device was not looking. It is still in the folder.')
+  await a.until('that document to be prepared', () => a.lib(`m.library.getDoc(${JSON.stringify(missed)})?.total > 0`))
+  await sleep(2500); await a.sync()
+  await b.page.evaluate(async () => {
+    const at = path => performance.getEntriesByType('resource').map(e => e.name).find(n => n.includes(path)) || path
+    const drive = await import(at('/src/lib/drive.js'))
+    const ahead = await drive.startToken() // the folder's newest mark: everything A just sent lies before it
+    for (const { name } of (await indexedDB.databases()).filter(d => d.name.startsWith('noesis-sync'))) {
+      await new Promise(done => {
+        const open = indexedDB.open(name)
+        open.onsuccess = () => {
+          const store = open.result.transaction('sync', 'readwrite').objectStore('sync')
+          const got = store.get('state')
+          got.onsuccess = () => { if (got.result?.uid) store.put({ ...got.result, cursor: ahead }, 'state'); store.transaction.oncomplete = done }
+        }
+      })
+    }
+  })
+  await b.page.reload(); await b.page.waitForLoadState('domcontentloaded'); await sleep(2000)
+  const found = await b.until('the passed-over document to appear on device B', async () => (await b.titles()).includes('The one that was passed over'), 25000).then(() => true, () => false)
+  check('a device that had lost its place still gets what it missed, when it is opened again', found)
   check('no errors were thrown on either device', a.errors.length + b.errors.length === 0, [...a.errors, ...b.errors].join(' | '))
 } catch (e) {
   check(String(e.message).split('\n')[0], false)

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { toast } from '../lib/nav.js'
-import { account, syncState, flush, signOut, devSignIn, deviceName } from '../lib/sync.js'
+import { account, syncState, syncAll, signOut, devSignIn, deviceName } from '../lib/sync.js'
 import { Button, inputStyle } from './kit.jsx'
 import { Avatar, GoogleButton, SyncStatus } from './SyncStatus.jsx'
 
@@ -52,7 +52,7 @@ export function AccountCard({ Card }) {
       </div>
       {st.status === 'error' && <div style={{ fontSize: 12.5, color: T.danger }}>{st.error}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button icon="refresh" disabled={st.status === 'syncing'} onClick={() => flush()}>Sync now</Button>
+        <Button icon="refresh" disabled={st.status === 'syncing'} onClick={() => syncAll()}>Sync now</Button>
         <span style={{ flex: 1 }} />
         <span style={{ ...label, textTransform: 'none', letterSpacing: 0, fontSize: 12 }}>This device: {deviceName()}</span>
         <Button kind="danger" onClick={() => (confirm('Sign out? Noesis opens fresh and empty on this device. Your library stays in your Google Drive, and is back the moment you sign in again.') ? signOut().catch(e => toast(e.message)) : undefined)}>Sign out</Button>
