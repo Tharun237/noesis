@@ -236,9 +236,18 @@ function recordSpeed(voice, x) {
 }
 // → { x: speed to plan with (1 when never measured: assume it keeps up, and correct after the first sentences),
 //     sure: measured in this session, so a wait worked out from it may be told to the customer, kept: last measured }
+export const docPace = d => voicePace(isVoice(d.voice) ? d.voice : fromKokoro(d.voice)) // the voice this document is made in
 export function voicePace(voice) {
   const m = measured.get(voice), kept = settings.get().voiceSpeeds?.[voice] || 0
   return { x: m?.x || kept || 1, sure: (m?.n || 0) >= SURE_AFTER, kept }
+}
+
+// Seconds of audio made without a gap from sentence `from`, and the first sentence not made (i).
+export function madeAhead(d, c, from) {
+  const made = voicedSet(d.id), n = c.segs.length
+  let i = from, ahead = 0
+  while (i < n && (c.durs[i] > 0 || made.has(i))) ahead += c.durs[i++]
+  return { ahead, i }
 }
 
 // Paper2Audio-style readiness for the natural voice: can playback from sentence `from` run to the end
@@ -251,16 +260,14 @@ export function readiness(d, c, from = 0) {
   // made: its audio is kept. A sentence that could not be made is kept as silence (length 0) and is made too:
   // counted as still to come, a book stopped at it and waited for ever, since nothing would ever make it.
   const made = voicedSet(d.id)
-  let i = from
-  let ahead = 0
-  while (i < n && (c.durs[i] > 0 || made.has(i))) ahead += c.durs[i++]
+  const { ahead, i } = madeAhead(d, c, from)
   if (i >= n) return { ready: true, wait: 0 }
   const est = secPerChar(d)
   let rest = 0
   for (let k = i; k < n; k++) rest += c.durs[k] || (made.has(k) ? 0 : c.segs[k].t.length * est)
   // Safety margin is a fixed buffer, not a speed discount: discounting would turn a device that is
   // just faster than real time (1.06×) into a "slow" one and make long books wait for nothing.
-  const pace = voicePace(isVoice(d.voice) ? d.voice : fromKokoro(d.voice))
+  const pace = docPace(d)
   const wait = waitSeconds(ahead, rest, Math.max(0.02, pace.x))
   return { ready: wait <= 0, wait, sure: pace.sure } // sure: false = say no time, it is a guess
 }
@@ -316,10 +323,22 @@ async function resetAudio(id) {
 const later = new Map()
 const AGAIN_MS = 5000
 
+// The book in the player goes first until this much is made ahead of the listener; then the other documents are
+// made too, the one with least left first (an article added now is ready in moments, not after the whole book).
+// The book takes the line back as soon as its lead is shorter. It went first for every sentence it had: a short
+// article added beside an open book waited hours on a phone.
+const LEAD_S = 600
+
 async function nextVoiceJob() {
   const p = priority()
+  const pd = p && getDoc(p.id)
+  const pc = pd?.status === 'voicing' ? await loadDoc(p.id) : null
+  const ahead = !!pc && madeAhead(pd, pc, p.i)
+  const enough = !!ahead && (ahead.ahead >= LEAD_S || ahead.i >= pc.segs.length) // ahead.i: made to the end from here
+  const rank = d => (d.id === p?.id ? (enough ? 2 : 0) : 1)
+  const left = d => (d.total || 0) - (d.done || 0)
   const docs = library.get().docs.filter(d => d.status === 'voicing' && !rewriting.has(d.id))
-    .sort((a, b) => (b.id === p?.id) - (a.id === p?.id) || a.createdAt - b.createdAt)
+    .sort((a, b) => rank(a) - rank(b) || left(a) - left(b) || a.createdAt - b.createdAt)
   for (const d of docs) {
     if (d.voice == null) continue // no natural voice for this language: the built-in voice speaks it, no generation
     if (later.get(d.id) > Date.now()) continue // its online voice could not be reached a moment ago: the others go first

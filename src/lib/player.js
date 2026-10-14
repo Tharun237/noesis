@@ -6,7 +6,7 @@ import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { LANGS } from './lang.js'
 import { activeEngine, builtInOnly, pickSystemVoice } from './engine.js'
-import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches, ensureFresh, setSounding, onReread } from './library.js'
+import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, secPerChar, onRemotePos, readiness, nextInQueue, audioMatches, ensureFresh, setSounding, onReread, isVoiced, madeAhead, docPace } from './library.js'
 import { toast, openSheet } from './nav.js'
 import { wordWeights } from './words.js'
 import { flushNow } from './sync.js'
@@ -20,7 +20,9 @@ import { flushNow } from './sync.js'
 // `word` = character offset of the word being spoken (built-in voice reports exact word boundaries).
 // `gateSure` = that wait was worked out from this voice's speed measured since the app opened; if not, it is a
 // guess, and no time is said (library.js voicePace).
-export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null, gate: null, gateSure: false, word: 0 })
+// `goOn` = caught up with the voice while playing: seconds until it goes on (null = not known yet).
+// `now` = the listener chose to start this book before it could play to the end without stopping (startNow).
+export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null, gate: null, gateSure: false, now: false, goOn: null, word: 0 })
 
 const audio = new Audio()
 audio.preload = 'auto'
@@ -37,6 +39,10 @@ let token = 0
 let utter = 0
 let posTimer = null
 let pendingStart = false // play was pressed while the natural voice was still preparing
+const eager = new Set() // books the listener chose to start now, while their audio is still being made (this session)
+// Caught up with the voice, it goes on with this much made ahead (or what plays to the end). Longer stops are
+// fewer, but a minute and a half of silence (a minute, on a phone at 0.7×) reads as broken; this is about 40 s.
+const CATCH_UP_S = 30
 let playError = null // name of the last refused play(), for the diagnostics report
 
 // A refused play() has to say so: a tap that does nothing is the worst status there is.
@@ -180,7 +186,7 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
   if (i >= c.segs.length) { if (!given) return finish(); i = c.segs.length - 1 }
   const my = ++token
   cancelSpeech()
-  player.set({ i, t: offset, waiting: false, word: from })
+  player.set({ i, t: offset, waiting: false, goOn: null, word: from })
   refreshMedia()
   if (!given) mine()
   savePosition()
@@ -327,8 +333,11 @@ async function gateCheck() {
 onSegment(async (id, i) => {
   const p = player.get()
   if (p.id !== id) return
-  if (p.waiting && p.i === i) { // the sentence it waited for is made: not a move
-    await load(i, { autoplay: p.playing, given: true })
+  if (p.waiting && isVoiced(id, p.i)) { // the sentence it waited for is made: not a move
+    // Playing, it goes on only with enough made ahead to keep going for a while: what plays to the end without
+    // stopping, or a minute. Going on after every sentence stuttered on a phone slower than listening.
+    if (p.playing) { const wait = await goOnIn(id, p.i); if (wait !== 0) return player.set({ goOn: wait }) }
+    await load(p.i, { autoplay: p.playing, given: true })
     if (!pendingStart) return // Play was pressed while it waited: that still stands (it was dropped here, for ever if this was the last sentence to make)
   }
   if (pendingStart && await gateCheck()) {
@@ -336,6 +345,16 @@ onSegment(async (id, i) => {
     play()
   }
 })
+
+// 0: it can go on now; else the seconds until it can (null while this voice is not measured: no time is said)
+async function goOnIn(id, i) {
+  const d = getDoc(id), c = await loadDoc(id)
+  if (!d || !c || readiness(d, c, i).ready) return 0
+  const { ahead } = madeAhead(d, c, i)
+  if (ahead >= CATCH_UP_S) return 0
+  const pace = docPace(d)
+  return pace.sure ? (CATCH_UP_S - ahead) / pace.x : null
+}
 
 // ── public controls ──────────────────────────────────────────────────────────────
 export async function open(id, { at, autoplay = true } = {}) {
@@ -345,7 +364,7 @@ export async function open(id, { at, autoplay = true } = {}) {
   pendingStart = false
   const same = player.get().id === id
   if (!same) here = false // another book: its place is what its record says until the customer moves it here
-  player.set({ id, playing: false, gate: null })
+  player.set({ id, playing: false, gate: null, now: eager.has(id) })
   heard = { id, voice: d.voice, sys: settings.get().systemVoice, engine: activeEngine() }
   setSession(d)
   await ensureFresh(id) // audio made in another voice or tone is remade, not played
@@ -375,7 +394,7 @@ export async function play() {
   // comes after an await, and nothing here needs to wait.
   if (!system() && !p.waiting && p.gate == null && audio.src && covers(current, p.id, p.i)) audio.play().catch(playFailed)
   maybeLockTip()
-  if (!(await gateCheck())) {
+  if (!eager.has(p.id) && !(await gateCheck())) {
     audio.pause()
     pendingStart = true
     player.set({ playing: false })
@@ -392,6 +411,16 @@ export async function play() {
   if (p.waiting) return kickVoice()
   if (!audio.src || !covers(current, p.id, p.i)) return load(p.i, { autoplay: true })
   audio.play().catch(playFailed)
+}
+
+// Start a book now, before all of it can play without stopping (a phone slower than listening): it plays what is
+// made and, when it catches up, stops until it can go on for a while (enoughToGoOn), by itself.
+export async function startNow(id = player.get().id) {
+  if (!id) return
+  eager.add(id)
+  if (player.get().id !== id) await open(id, { autoplay: false })
+  player.set({ now: true, gate: null })
+  return play()
 }
 
 export function pause() {

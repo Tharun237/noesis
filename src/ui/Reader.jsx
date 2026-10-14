@@ -6,7 +6,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet, tab as showTab } from '../lib/nav.js'
 import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation } from '../lib/library.js'
-import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate } from '../lib/player.js'
+import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate, startNow } from '../lib/player.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
 import { parseCommand, isEcho, speechSupported } from '../lib/voicecmd.js'
@@ -679,6 +679,7 @@ function Preparing({ d, doc, pos }) {
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const playId = useStore(player, s => s.id)
   const gate = useStore(player, s => s.gate)
+  const started = useStore(player, s => s.id === d.id && s.now) // started before it could play to the end (startNow)
   const textReady = d.status === 'voicing' || d.status === 'ready'
   const [asked, setAsked] = useState(notifyAsked)
   const longest = useRef(0) // the longest wait seen here: what "ready in" is measured against
@@ -697,7 +698,7 @@ function Preparing({ d, doc, pos }) {
   const voice = voicing && !failed && eng.voice === d.voice ? voiceWait(eng) : null
   const behind = voicing && !failed && eng.voice !== d.voice && eng.status === 'loading'
   if (ready?.wait != null && ready.sure) longest.current = Math.max(longest.current, ready.wait) // a guessed wait is no yardstick
-  const slow = ready?.sure && ready.wait > LONG_WAIT_S && hasSystemVoice() // a real wait, measured: worth another voice
+  const slow = !started && ready?.sure && ready.wait > LONG_WAIT_S // a real wait, measured: worth a way out
   const translating = d.status === 'narrating' && !!d.target && /^Translating/.test(d.stage || '')
   const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : undefined} />{text}</span>
   // head: what is being waited for · bar: null (none), undefined (no known length) or 0..1 · next: what happens then
@@ -705,6 +706,8 @@ function Preparing({ d, doc, pos }) {
     : failed ? [said(voiceOff ? "You're offline" : `The ${voiceName(engVoice)} voice couldn't start`), null, voiceOff ? `The ${voiceName(engVoice)} voice downloads when you are back online.` : null]
     : voice ? [said(voice.progress != null ? `${voice.text} · ${Math.floor(voice.progress * 100)}%` : voice.text), voice.progress, [voice.detail, gated && 'Play starts by itself.'].filter(Boolean).join(' ') || null]
     : behind ? [said('Waiting for another document'), undefined, gated ? 'Its audio is being made first. This one is next, and starts by itself.' : 'Its audio is being made first. Press Play and this one goes first.']
+    : started && ready ? [said('Playing while the audio is made'), // the player bar says when a stop ends: once, on every screen d.total ? (d.done || 0) / d.total : undefined,
+        'It may stop now and then to catch up, and goes on by itself.']
     : !voice && ready ? [
         said(ready.wait == null || !ready.sure ? 'Making the audio' : `Making the audio · ready in ${waitWords(ready.wait)}`),
         ready.wait == null || !ready.sure || !longest.current ? undefined : 1 - ready.wait / longest.current,
@@ -730,11 +733,12 @@ function Preparing({ d, doc, pos }) {
       )}
       {!voice && ready && slow && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Don't want to wait? Your device's built-in voice starts instantly.</span>
-          <Button kind="accent" onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>
+          <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Don't want to wait? Start now, and it stops now and then to catch up{hasSystemVoice() ? ", or use your device's built-in voice, which never stops" : ''}.</span>
+          <Button kind="accent" icon="play" onClick={() => startNow(d.id)}>Start now</Button>
+          {hasSystemVoice() && <Button onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>}
         </div>
       )}
-      {!asked && d.status !== 'error' && d.status !== 'paused' && !failed && !voice && !(ready && !(ready.sure && ready.wait > NOTIFY_OVER_S)) && !(translating && !(d.eta > NOTIFY_OVER_S)) && (
+      {!asked && d.status !== 'error' && d.status !== 'paused' && !failed && !voice && !started && !(ready && !(ready.sure && ready.wait > NOTIFY_OVER_S)) && !(translating && !(d.eta > NOTIFY_OVER_S)) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Leave it running and get a notification when it's ready.</span>
           <Button icon="bell" onClick={async () => { await askNotify(); setAsked(true) }}>Notify me</Button>

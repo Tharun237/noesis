@@ -4,9 +4,9 @@ import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go } from '../lib/nav.js'
 import { library, kickVoice } from '../lib/library.js'
-import { player } from '../lib/player.js'
+import { player, startNow } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
-import { activeEngine, hasSystemVoice } from '../lib/engine.js'
+import { activeEngine } from '../lib/engine.js'
 import { engine, loadEngine, voiceWait } from '../lib/tts.js'
 import { waitWords, LONG_WAIT_S } from '../lib/readiness-math.js'
 import { Pulse } from './kit.jsx'
@@ -72,7 +72,7 @@ export function useActivity() {
   // (2) the listener's own wait comes before everything else.
   if (gate != null && playId && !onReaderOf(playId)) {
     // the one place this wait is said off the book's own page, so the way out of a real (measured) wait is here too
-    const out = gateSure && gate > LONG_WAIT_S && hasSystemVoice() ? { label: 'Use built-in voice', run: () => settings.set({ voiceEngine: 'system' }) } : undefined
+    const out = gateSure && gate > LONG_WAIT_S ? { label: 'Start now', run: () => startNow(playId) } : undefined
     return { key: 'gate', text: 'Making the audio', detail: gateSure ? `Ready in ${waitWords(gate)}. Play starts by itself.` : 'Play starts by itself.', open: playId, action: out }
   }
   // (3) a real voice download. A load from this device's storage (every launch) is routine: silent.

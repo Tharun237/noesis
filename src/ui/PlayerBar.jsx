@@ -7,6 +7,7 @@ import { settings } from '../lib/settings.js'
 import { library, loadDoc, toggleMark } from '../lib/library.js'
 import { player, toggle, nextSentence, prevSentence, setRate, hearRate, setSleep, seekTime, timeline } from '../lib/player.js'
 import { speedLabel } from '../lib/speed.js'
+import { waitWords } from '../lib/readiness-math.js'
 import { SpeedSlider } from './SpeedSlider.jsx'
 import { voiceName } from '../lib/voices.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel, systemVoices } from '../lib/engine.js'
@@ -45,6 +46,7 @@ export function PlayerBar({ wide, full }) {
   const [drag, setDrag] = useState(null)
   const gate = useStore(player, s => s.gate)
   const gateSure = useStore(player, s => s.gateSure) // a time is said only when measured (library.js voicePace)
+  const goOn = useStore(player, s => s.goOn) // caught up with the voice: when it goes on
   const waiting = useStore(player, s => s.waiting)
   const sleep = useStore(player, s => s.sleep)
   const voiceLabel = useVoiceLabel(d || {})
@@ -63,7 +65,7 @@ export function PlayerBar({ wide, full }) {
 
   const scrubber = (
     <div style={{ display: 'grid', gap: 2 }}>
-      {waiting && <div style={{ fontSize: 12, color: T.sub }}>Making the audio</div>}
+      {waiting && <div style={{ fontSize: 12, color: T.sub }}>{goOn != null ? `Catching up with the voice · going on in ${waitWords(goOn)}` : 'Making the audio'}</div>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: T.mono, fontSize: 11.5, color: T.sub }}>
       <span style={{ minWidth: 52, whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtTime(elapsed)}</span>
       <ArcScrubber d={d} value={shown} max={total} disabled={!c} onChange={setDrag} onCommit={v => { if (drag !== null) { seekTime(v); setDrag(null) } }} />
@@ -72,7 +74,7 @@ export function PlayerBar({ wide, full }) {
     </div>
   )
 
-  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} gateSure={gateSure} waiting={waiting} left={left} sleepLine={sleepLine} />
+  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} gateSure={gateSure} goOn={goOn} waiting={waiting} left={left} sleepLine={sleepLine} />
 
   return (
     <motion.div layoutRoot {...playerEnter()}
@@ -214,7 +216,7 @@ function PlayerLeft() {
   return null
 }
 
-function MiniPlayer({ d, progress, voiceLabel, gate, gateSure, waiting, left, sleepLine }) {
+function MiniPlayer({ d, progress, voiceLabel, gate, gateSure, goOn, waiting, left, sleepLine }) {
   return (
     <motion.div layoutRoot {...playerEnter()}
       style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
@@ -226,7 +228,7 @@ function MiniPlayer({ d, progress, voiceLabel, gate, gateSure, waiting, left, sl
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting || (gate != null && !gateSure) ? 'making the audio' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting && goOn != null ? `going on in ${waitWords(goOn)}` : waiting || (gate != null && !gateSure) ? 'making the audio' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
           </span>
         </button>
         <MiniTransport />
