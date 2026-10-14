@@ -41,7 +41,12 @@ first.
    update. A fix that only makes new mistakes impossible leaves the old ones in place. *The mark a device kept
    in the folder's list of changes had been moved past records it never took; no later version looked back.*
 4. **What if it is opened and not used, half done, or interrupted?** Closing the app, a call, the screen
-   locking, the network going, the tab hidden.
+   locking, the network going, the tab hidden. A phone ends a hidden app whenever it likes, without a word:
+   ask it of every WRITE, not only of screens. Two records that must agree are written together, or the
+   second can be rebuilt from the first. A delayed write is "at most every N seconds, always", never "after
+   N seconds of quiet" (a busy device is never quiet). The test closes the app in the middle of the work and
+   opens it again, as a person does; one long unbroken session is how a robot uses an app. *A sentence's sound
+   was kept and its length lost; Play then waited for ever (14 October).*
 5. **What if the thing underneath changed?** A place and a bookmark are a sentence's number: when the text is
    read again the numbers mean other sentences. Anything counted in one version of a text is carried to the
    same words in the next (`src/lib/carry.js`), on every device that holds it.
