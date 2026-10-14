@@ -101,7 +101,24 @@ await check('only the sentence at the place still to make', async () => {
   return pressPlayOnce('Play test: one left', 60000)
 })
 
-for (const t of ['Play test: half made', 'Play test: one silent', 'Play test: one left']) { const d = await doc(t); if (d) await app(`m.lib.deleteDoc(${JSON.stringify(d.id)})`) }
+// 4. A slow speed kept from an earlier day (an old voice, a busy moment) while the phone is fast today. On
+// 14 October this said "ready in about 7.6 hours" and offered another voice, and the book played 5 s later. A
+// time may only be said once it is measured since the app opened; until then the page says no time.
+await check('an old slow measurement says no time, and Play starts', async () => {
+  const id = await add('Play test: old speed')
+  await until(async () => (await doc('Play test: old speed')).done >= 2, 120000, 'a little audio')
+  await app(`(async () => { m.lib.patch(${JSON.stringify(id)}, { pos: 30, posF: 0 }); await m.db.db.putMeta(m.lib.getDoc(${JSON.stringify(id)})) })()`)
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('noesis.settings.v1')); s.voiceSpeeds = { [s.voice]: 0.05 }; localStorage.setItem('noesis.settings.v1', JSON.stringify(s)) })
+  await fresh()
+  // everything the page says while it waits, read every 100 ms
+  await page.evaluate(() => { window.__said = new Set(); window.__look = setInterval(() => { for (const l of document.body.innerText.split(String.fromCharCode(10))) if (/ready in|hour/i.test(l)) window.__said.add(l) }, 100) })
+  const r = await pressPlayOnce('Play test: old speed', 60000)
+  r.saidTime = await page.evaluate(() => { clearInterval(window.__look); return [...window.__said] })
+  if (r.saidTime.length) r.started = false
+  return r
+})
+
+for (const t of ['Play test: half made', 'Play test: one silent', 'Play test: one left', 'Play test: old speed']) { const d = await doc(t); if (d) await app(`m.lib.deleteDoc(${JSON.stringify(d.id)})`) }
 if (errors.length) console.log('page errors:', errors.slice(0, 5))
 await ctx.close()
 console.log(results.every(Boolean) ? 'ALL STARTED BY THEMSELVES' : `${results.filter(x => !x).length} of ${results.length} DID NOT START`)

@@ -1,8 +1,7 @@
-import { waitWords } from './readiness-math.js'
 import { createStore } from './store.js'
 import { settings } from './settings.js'
 import { db } from './db.js'
-import { recordToBlob, voiceWait } from './tts.js'
+import { recordToBlob } from './tts.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { VISUAL_KINDS } from './text.js'
 import { LANGS } from './lang.js'
@@ -19,7 +18,9 @@ import { flushNow } from './sync.js'
 // `playing` is the listener's intent. `waiting` = natural audio for the next sentence isn't generated yet.
 // `gate` = seconds until the natural voice can play to the end without stalling (null = no gate).
 // `word` = character offset of the word being spoken (built-in voice reports exact word boundaries).
-export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null, gate: null, word: 0 })
+// `gateSure` = that wait was worked out from this voice's speed measured since the app opened; if not, it is a
+// guess, and no time is said (library.js voicePace).
+export const player = createStore({ id: null, i: 0, playing: false, waiting: false, rate: settings.get().speed, t: 0, sleep: null, gate: null, gateSure: false, word: 0 })
 
 const audio = new Audio()
 audio.preload = 'auto'
@@ -318,7 +319,7 @@ async function gateCheck() {
   const d = getDoc(p.id)
   const c = await loadDoc(p.id)
   const r = readiness(d, c, p.i)
-  player.set({ gate: r.ready ? null : r.wait })
+  player.set({ gate: r.ready ? null : r.wait, gateSure: !!r.sure })
   return r.ready
 }
 
@@ -379,11 +380,9 @@ export async function play() {
     pendingStart = true
     player.set({ playing: false })
     kickVoice()
-    const wait = player.get().gate
-    const voice = voiceWait() // a voice still on its way is the wait: no "ready in 10 seconds" before a download
-    // short: the page already says the rest ("Play starts by itself"); this is only the offer beside it
-    toast(voice ? voice.text : `Making the audio: ready in ${waitWords(wait)}`,
-      typeof speechSynthesis !== 'undefined' ? { label: 'Use built-in voice', run: () => settings.set({ voiceEngine: 'system' }) } : null)
+    // Nothing more is said here: the book's page (Reader.jsx Preparing) or, elsewhere, the island (Activity.jsx)
+    // already says what is being waited for, with a time only once it is measured, and the built-in voice for a
+    // real wait. A message here as well said it twice at once, and "ready in about 7.6 hours" from a guess.
     return
   }
   pendingStart = false

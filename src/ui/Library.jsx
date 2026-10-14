@@ -377,6 +377,7 @@ export function StatusLine({ d }) {
   const sys = useStore(settings, s => activeEngine(s) === 'system')
   const playId = useStore(player, s => s.id)
   const gate = useStore(player, s => s.gate)
+  const gateSure = useStore(player, s => s.gateSure)
   const engStatus = useStore(engine, s => s.status)
   // Queue order as a stable string: re-renders only when the queue's membership changes, not on progress ticks.
   const qkey = useStore(library, s => s.docs.filter(x => x.status === 'queued' || x.status === 'reading' || x.status === 'narrating' || (x.status === 'syncing' && x.contentVer)).sort((a, b) => a.createdAt - b.createdAt).map(x => x.id).join(','))
@@ -387,7 +388,7 @@ export function StatusLine({ d }) {
     if (sys) return null // built-in voice: playable as soon as the text is ready
     if (engStatus === 'error' && d.id === playId) return <span style={{ color: T.danger }}>The voice didn't load</span>
     if (d.id !== playId || gate == null) return null
-    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Making the audio · ready in {waitWords(gate)}</span>
+    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: T.text }}><Pulse /> Making the audio{gateSure ? ` · ready in ${waitWords(gate)}` : ''}</span>
   }
   if (d.status === 'queued') return <span style={{ color: T.sub }}>{queuedText(d.id, qkey)}</span> // waiting its turn: nothing is turning
   const pct = d.prep || 0

@@ -6,9 +6,9 @@ import { ui, go } from '../lib/nav.js'
 import { library, kickVoice } from '../lib/library.js'
 import { player } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
-import { activeEngine } from '../lib/engine.js'
+import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine, voiceWait } from '../lib/tts.js'
-import { waitWords } from '../lib/readiness-math.js'
+import { waitWords, LONG_WAIT_S } from '../lib/readiness-math.js'
 import { Pulse } from './kit.jsx'
 
 // One place, on every screen, that says what Noesis is doing in the background and how far along it is:
@@ -52,6 +52,7 @@ export function useActivity() {
   // it is always FOR a document whose audio is still being made, so the island says which.
   const voiceFor = useStore(library, s => s.docs.find(d => d.status === 'voicing' && d.voice === eng.voice) || null)
   const gate = useStore(player, s => s.gate)
+  const gateSure = useStore(player, s => s.gateSure)
   const playId = useStore(player, s => s.id)
   const noRoom = useStore(library, s => !!s.noRoom)
   const view = useStore(ui, s => s.view)
@@ -70,7 +71,9 @@ export function useActivity() {
   }
   // (2) the listener's own wait comes before everything else.
   if (gate != null && playId && !onReaderOf(playId)) {
-    return { key: 'gate', text: 'Making the audio', detail: `Ready in ${waitWords(gate)}. Play starts by itself.`, open: playId }
+    // the one place this wait is said off the book's own page, so the way out of a real (measured) wait is here too
+    const out = gateSure && gate > LONG_WAIT_S && hasSystemVoice() ? { label: 'Use built-in voice', run: () => settings.set({ voiceEngine: 'system' }) } : undefined
+    return { key: 'gate', text: 'Making the audio', detail: gateSure ? `Ready in ${waitWords(gate)}. Play starts by itself.` : 'Play starts by itself.', open: playId, action: out }
   }
   // (3) a real voice download. A load from this device's storage (every launch) is routine: silent.
   // `total` is only set when the voice really comes from the network.

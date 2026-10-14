@@ -109,7 +109,7 @@ await step('add sample → reader opens', async () => {
 await step('voice engine loads and voices the sample', async () => {
   await until(async () => (await docBy('On Listening'))?.status === 'ready', 240_000, 'sample to be fully voiced')
   const d = await docBy('On Listening')
-  return `${d.total} sentences, ${d.vSec.toFixed(1)} s audio, voice ${(await app('m.tts.engine.get().voice'))}, ${(await app('m.settings.settings.get().voiceSpeed'))}× real time`
+  return `${d.total} sentences, ${d.vSec.toFixed(1)} s audio, voice ${(await app('m.tts.engine.get().voice'))}, ${JSON.stringify(await app('m.settings.settings.get().voiceSpeeds'))}× real time`
 })
 
 await step('play starts audio and highlights the sentence', async () => {
@@ -495,18 +495,24 @@ await step('back from a reader restored with no page behind it', async () => {
   await until(() => page.evaluate(() => history.state?.view === 'library' && document.body.innerText.includes('Queue')), 4000, 'library after back')
 })
 
-await step('natural voice: readiness gate instead of stalling', async () => {
-  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('noesis.settings.v1')); s.voiceEngine = 'natural'; s.voiceSpeed = 0.05; localStorage.setItem('noesis.settings.v1', JSON.stringify(s)) })
+await step('natural voice: readiness gate instead of stalling, and no guessed time', async () => {
+  // a slow speed kept from an earlier day: it holds Play, but it is a guess, so no time is said (14 October:
+  // "ready in about 7.6 hours" on a phone that played 5 s later), and Play starts once this session has measured
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('noesis.settings.v1')); s.voiceEngine = 'natural'; s.voiceSpeeds = { [s.voice]: 0.05 }; localStorage.setItem('noesis.settings.v1', JSON.stringify(s)) })
   await page.reload()
   await openDoc('Traction')
+  await app('m.lib.kickVoice()')
   await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
-  await until(() => page.getByText(/Play starts by itself/).first().isVisible(), 5000, 'gate message')
   const s1 = await playerState()
-  expect(!s1.playing && s1.gate > 0, `expected gated, got playing=${s1.playing} gate=${s1.gate}`)
-  await page.getByRole('button', { name: 'Use built-in voice' }).click()
-  await until(async () => (await playerState()).playing && await page.evaluate(() => speechSynthesis.speaking), 8000, 'built-in voice to take over')
+  if (!s1.playing) {
+    expect(s1.gate > 0 && !s1.gateSure, `expected a guessed gate, got gate=${s1.gate} sure=${s1.gateSure}`)
+    const said = await page.evaluate(() => document.body.innerText)
+    expect(!/ready in/i.test(said), 'a guessed wait was said as a time')
+  }
+  await until(async () => { const s = await playerState(); return s.playing && s.clock > 0.3 }, 60000, 'Play to start by itself once measured')
   await click('button', 'Pause')
-  return `gated with ~${Math.round(s1.gate / 60)} min to wait, switched to built-in instantly`
+  await app("m.settings.settings.set({ voiceEngine: 'system' })") // as before: the steps after this one run on the built-in voice
+  return s1.playing ? 'played at once' : `held by a guess (no time said), started by itself`
 })
 
 const cardTitles = async () => {

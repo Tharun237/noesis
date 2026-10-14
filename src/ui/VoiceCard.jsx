@@ -8,7 +8,7 @@ import { voicesFor, voiceKind } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth, parseVoiceNames, fetchOwnSpeech, encodeWav, explainVoiceError, ownHost } from '../lib/cloudvoice.js'
 import { Field, Segmented, Button, inputStyle, IconButton, Appear } from './kit.jsx'
 import { toast } from '../lib/nav.js'
-import { getDoc, changeVoice } from '../lib/library.js'
+import { getDoc, changeVoice, voicePace } from '../lib/library.js'
 import { player } from '../lib/player.js'
 
 export function speakSample(voice) {
@@ -107,7 +107,7 @@ export function VoiceCard({ Card }) {
   const s = useStore(settings)
   const engineNow = activeEngine(s)
   const canSystem = hasSystemVoice()
-  const speed = s.voiceSpeed
+  const speed = voicePace(s.voice).kept // the usual voice, as last measured on this device
   return (
     <Card title="Voice">
       <Segmented value={engineNow} onChange={v => settings.set({ voiceEngine: v })} size="sm" disabled={canSystem ? [] : ['system']}

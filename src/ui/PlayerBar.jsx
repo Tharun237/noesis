@@ -44,6 +44,7 @@ export function PlayerBar({ wide, full }) {
   const { d, c, offs } = useTimeline(id)
   const [drag, setDrag] = useState(null)
   const gate = useStore(player, s => s.gate)
+  const gateSure = useStore(player, s => s.gateSure) // a time is said only when measured (library.js voicePace)
   const waiting = useStore(player, s => s.waiting)
   const sleep = useStore(player, s => s.sleep)
   const voiceLabel = useVoiceLabel(d || {})
@@ -71,7 +72,7 @@ export function PlayerBar({ wide, full }) {
     </div>
   )
 
-  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} waiting={waiting} left={left} sleepLine={sleepLine} />
+  if (!wide && !full) return <MiniPlayer d={d} progress={total ? pos / total : 0} voiceLabel={voiceLabel} gate={gate} gateSure={gateSure} waiting={waiting} left={left} sleepLine={sleepLine} />
 
   return (
     <motion.div layoutRoot {...playerEnter()}
@@ -94,7 +95,7 @@ export function PlayerBar({ wide, full }) {
         ) : <SpeedMenu />}
         <Transport />
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 2 }}>
-          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{gate != null ? `Ready in ${fmtWait(gate)}` : left}{sleepLine ? ` · ${sleepLine}` : ''}</span>}
+          {wide && total > 0 && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.sub, marginRight: 8, whiteSpace: 'nowrap' }}>{gate != null ? (gateSure ? `Ready in ${fmtWait(gate)}` : 'Making the audio') : left}{sleepLine ? ` · ${sleepLine}` : ''}</span>}
           <BookmarkButton d={d} i={i} />
           {wide && <SpeedMenu />}
           <SleepMenu />
@@ -213,7 +214,7 @@ function PlayerLeft() {
   return null
 }
 
-function MiniPlayer({ d, progress, voiceLabel, gate, waiting, left, sleepLine }) {
+function MiniPlayer({ d, progress, voiceLabel, gate, gateSure, waiting, left, sleepLine }) {
   return (
     <motion.div layoutRoot {...playerEnter()}
       style={{ position: 'fixed', left: 8, right: 8, bottom: `calc(env(safe-area-inset-bottom) + ${T.tabH + 6}px)`, zIndex: 31, borderRadius: T.r.lg, background: T.bg, border: `1px solid ${T.borderHi}`, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.9)' }}>
@@ -225,7 +226,7 @@ function MiniPlayer({ d, progress, voiceLabel, gate, waiting, left, sleepLine })
           <Cover d={d} w={36} h={46} />
           <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: T.font }}>{d.title}</span>
-            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting ? 'making the audio' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
+            <span style={{ fontSize: 11.5, color: T.faint, fontFamily: T.mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[voiceLabel, waiting || (gate != null && !gateSure) ? 'making the audio' : gate != null ? `ready in ${fmtWait(gate)}` : left, sleepLine].filter(Boolean).join(' · ')}</span>
           </span>
         </button>
         <MiniTransport />

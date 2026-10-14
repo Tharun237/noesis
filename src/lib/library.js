@@ -217,14 +217,28 @@ export const kickPrep = makeLoop(async () => {
   return true
 })
 
-// How fast THIS device generates natural voice: seconds of audio per second of work (moving average).
-// Measured per compute device: the graphics chip and the processor differ by 10× or more, so a
-// processor measurement must never stand in for the GPU (or vice versa) after switching.
-function recordSpeed(x) {
-  const prev = settings.get().voiceSpeed
+// How fast THIS device makes a voice: seconds of audio per second of work. One number for every voice and every
+// day told a phone that makes Piper at 2× "ready in about 7.6 hours" (an old slow voice, or a busy moment, was
+// still in it), and it played 5 seconds later. So it is kept per voice (a small voice and a large or online one
+// differ by 10× and more), a phone's hidden app (slowed by the phone) is not measured, and a wait is only SAID
+// once this voice has been measured since the app opened: before that it is a guess, and a guess is not a time.
+const SURE_AFTER = 2 // sentences made in this session
+const measured = new Map() // voice → { x, n } measured since the app opened
+function recordSpeed(voice, x) {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+  const m = measured.get(voice)
+  measured.set(voice, m ? { x: m.x * 0.7 + x * 0.3, n: m.n + 1 } : { x, n: 1 })
+  const all = settings.get().voiceSpeeds || {}
+  const prev = all[voice]
   const next = Math.round((prev ? prev * 0.8 + x * 0.2 : x) * 100) / 100
   // Saving a setting rewrites localStorage and re-renders everything that reads settings: skip the noise.
-  if (!prev || Math.abs(next - prev) / prev > 0.03) settings.set({ voiceSpeed: next })
+  if (!prev || Math.abs(next - prev) / prev > 0.03) settings.set({ voiceSpeeds: { ...all, [voice]: next } })
+}
+// → { x: speed to plan with (1 when never measured: assume it keeps up, and correct after the first sentences),
+//     sure: measured in this session, so a wait worked out from it may be told to the customer, kept: last measured }
+export function voicePace(voice) {
+  const m = measured.get(voice), kept = settings.get().voiceSpeeds?.[voice] || 0
+  return { x: m?.x || kept || 1, sure: (m?.n || 0) >= SURE_AFTER, kept }
 }
 
 // Paper2Audio-style readiness for the natural voice: can playback from sentence `from` run to the end
@@ -246,8 +260,9 @@ export function readiness(d, c, from = 0) {
   for (let k = i; k < n; k++) rest += c.durs[k] || (made.has(k) ? 0 : c.segs[k].t.length * est)
   // Safety margin is a fixed buffer, not a speed discount: discounting would turn a device that is
   // just faster than real time (1.06×) into a "slow" one and make long books wait for nothing.
-  const wait = waitSeconds(ahead, rest, Math.max(0.02, settings.get().voiceSpeed || 1))
-  return { ready: wait <= 0, wait }
+  const pace = voicePace(isVoice(d.voice) ? d.voice : fromKokoro(d.voice))
+  const wait = waitSeconds(ahead, rest, Math.max(0.02, pace.x))
+  return { ready: wait <= 0, wait, sure: pace.sure } // sure: false = say no time, it is a guess
 }
 
 let lastEngine = activeEngine()
@@ -370,7 +385,7 @@ async function voiceOne(id, i) {
     } else {
       rec = await synthesize(seg.t, voice, pauseKind, tone)
     }
-    if (warm && rec.dur > 0.5) recordSpeed(rec.dur / ((performance.now() - t0) / 1000))
+    if (warm && rec.dur > 0.5) recordSpeed(voice, rec.dur / ((performance.now() - t0) / 1000))
   } catch (e) {
     if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
     console.warn('Sentence failed, skipping:', seg.t, e)

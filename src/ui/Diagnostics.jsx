@@ -29,7 +29,7 @@ function collect() {
     ['Voice', [
       ['Engine in use', activeEngine(s)],
       ['Voice', s.voice],
-      ['Measured speed', String(s.voiceSpeed)],
+      ['Measured speed', JSON.stringify(s.voiceSpeeds || {})],
       ['Voice engine status', engine.get().status],
     ]],
     ['Playback', [

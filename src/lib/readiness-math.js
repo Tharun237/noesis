@@ -3,6 +3,7 @@
 // r ≥ 1: just fill a small buffer, (BUFFER − ahead)/r. r < 1: w = rest(1−r)/r + BUFFER − ahead (wall-clock seconds;
 // derivation in library.js readiness). Pure, so the gate is tested by simulation (readiness.test.js).
 export const BUFFER_S = 8
+export const LONG_WAIT_S = 60 // a measured wait this long is worth offering the built-in voice for
 
 // A wait, in words a person would use. One formatter: the reader, the island and the library card said
 // "under 2 minutes" for a ten-second wait, each from its own copy.

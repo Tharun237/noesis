@@ -19,7 +19,7 @@ import { pushPanel, popPanel } from '../lib/nav.js'
 import { scrollBehavior, whenIdle } from '../lib/motion.js'
 import { activeEngine, hasSystemVoice } from '../lib/engine.js'
 import { engine, loadEngine, voiceWait } from '../lib/tts.js'
-import { waitWords } from '../lib/readiness-math.js'
+import { waitWords, LONG_WAIT_S } from '../lib/readiness-math.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
 import { VISUAL_KINDS } from '../lib/text.js'
 import { useLitWord } from './litword.js'
@@ -677,7 +677,6 @@ const NOTIFY_OVER_S = 60 // a shorter wait is over before a notification would b
 function Preparing({ d, doc, pos }) {
   const eng = useStore(engine)
   const sys = useStore(settings, s => activeEngine(s) === 'system')
-  const speed = useStore(settings, s => s.voiceSpeed)
   const playId = useStore(player, s => s.id)
   const gate = useStore(player, s => s.gate)
   const textReady = d.status === 'voicing' || d.status === 'ready'
@@ -697,8 +696,8 @@ function Preparing({ d, doc, pos }) {
   // this one is behind it in the line: saying "Downloading the Alba voice" on a Telugu document was wrong.
   const voice = voicing && !failed && eng.voice === d.voice ? voiceWait(eng) : null
   const behind = voicing && !failed && eng.voice !== d.voice && eng.status === 'loading'
-  if (ready?.wait != null) longest.current = Math.max(longest.current, ready.wait)
-  const slow = speed > 0 && speed < 1 && hasSystemVoice()
+  if (ready?.wait != null && ready.sure) longest.current = Math.max(longest.current, ready.wait) // a guessed wait is no yardstick
+  const slow = ready?.sure && ready.wait > LONG_WAIT_S && hasSystemVoice() // a real wait, measured: worth another voice
   const translating = d.status === 'narrating' && !!d.target && /^Translating/.test(d.stage || '')
   const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : undefined} />{text}</span>
   // head: what is being waited for · bar: null (none), undefined (no known length) or 0..1 · next: what happens then
@@ -707,8 +706,8 @@ function Preparing({ d, doc, pos }) {
     : voice ? [said(voice.progress != null ? `${voice.text} · ${Math.floor(voice.progress * 100)}%` : voice.text), voice.progress, [voice.detail, gated && 'Play starts by itself.'].filter(Boolean).join(' ') || null]
     : behind ? [said('Waiting for another document'), undefined, gated ? 'Its audio is being made first. This one is next, and starts by itself.' : 'Its audio is being made first. Press Play and this one goes first.']
     : !voice && ready ? [
-        said(ready.wait == null ? 'Making the audio' : `Making the audio · ready in ${waitWords(ready.wait)}`),
-        ready.wait == null || !longest.current ? undefined : 1 - ready.wait / longest.current,
+        said(ready.wait == null || !ready.sure ? 'Making the audio' : `Making the audio · ready in ${waitWords(ready.wait)}`),
+        ready.wait == null || !ready.sure || !longest.current ? undefined : 1 - ready.wait / longest.current,
         gated ? 'It is made on your device. Play starts by itself.' : 'It is made on your device. Press Play and it starts by itself when ready.',
       ]
     : d.status === 'paused' ? [<StatusLine d={d} />, d.prep || 0, 'What is translated so far is kept. Resume carries on from there.']
@@ -735,7 +734,7 @@ function Preparing({ d, doc, pos }) {
           <Button kind="accent" onClick={() => settings.set({ voiceEngine: 'system' })}>Use built-in voice</Button>
         </div>
       )}
-      {!asked && d.status !== 'error' && d.status !== 'paused' && !failed && !voice && !(ready && !(ready.wait > NOTIFY_OVER_S)) && !(translating && !(d.eta > NOTIFY_OVER_S)) && (
+      {!asked && d.status !== 'error' && d.status !== 'paused' && !failed && !voice && !(ready && !(ready.sure && ready.wait > NOTIFY_OVER_S)) && !(translating && !(d.eta > NOTIFY_OVER_S)) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: T.sub }}>Leave it running and get a notification when it's ready.</span>
           <Button icon="bell" onClick={async () => { await askNotify(); setAsked(true) }}>Notify me</Button>
