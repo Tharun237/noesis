@@ -326,7 +326,10 @@ async function gateCheck() {
 onSegment(async (id, i) => {
   const p = player.get()
   if (p.id !== id) return
-  if (p.waiting && p.i === i) return load(i, { autoplay: p.playing, given: true }) // the sentence it waited for is made: not a move
+  if (p.waiting && p.i === i) { // the sentence it waited for is made: not a move
+    await load(i, { autoplay: p.playing, given: true })
+    if (!pendingStart) return // Play was pressed while it waited: that still stands (it was dropped here, for ever if this was the last sentence to make)
+  }
   if (pendingStart && await gateCheck()) {
     pendingStart = false
     play()

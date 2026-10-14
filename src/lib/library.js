@@ -152,6 +152,16 @@ export function loadDoc(id) {
         durs = stored?.length === segs.length ? stored : new Array(segs.length).fill(0)
         tails = new Array(segs.length).fill(0)
       }
+      // A sentence's length is kept apart from its audio, and a little later: an app closed in between (a phone
+      // ends it at will) kept the audio and lost the length. The audio record carries its own length, so it is
+      // taken from there. Without it "ready" waited for ever for sentences that were made (readiness).
+      const lost = [...voicedSet(id)].filter(i => i < segs.length && !(durs[i] > 0))
+      if (lost.length) { // ponytail: a silent sentence (dur 0) is looked up again on each load; few in a book
+        const recs = await Promise.all(lost.map(i => db.getAudio(id, i)))
+        let found = 0
+        recs.forEach((r, k) => { if (r?.dur > 0) { durs[lost[k]] = r.dur; tails[lost[k]] = r.tail || 0; found++ } })
+        if (found) db.putDurs(id, { durs, tails })
+      }
       const c = { blocks: doc.blocks, segs, starts, durs, tails, refs: doc.refs || [] }
       cache.set(id, c)
       return c
@@ -161,9 +171,11 @@ export function loadDoc(id) {
 }
 
 const durTimers = new Map()
+// At most one write in 1.5 s, and always one. (It waited for 1.5 s of quiet, which a device making sentences
+// faster than that never gave it: nothing was written until the whole book was made.)
 function saveDurs(id) {
-  clearTimeout(durTimers.get(id))
-  durTimers.set(id, setTimeout(() => { const c = cache.get(id); if (c) db.putDurs(id, { durs: c.durs, tails: c.tails }) }, 1500))
+  if (durTimers.has(id)) return // the write already planned takes the newest lengths
+  durTimers.set(id, setTimeout(() => { durTimers.delete(id); const c = cache.get(id); if (c) db.putDurs(id, { durs: c.durs, tails: c.tails }) }, 1500))
 }
 
 // ── loops ─────────────────────────────────────────────────────────────────────────────
@@ -222,13 +234,16 @@ function recordSpeed(x) {
 export function readiness(d, c, from = 0) {
   if (!d || !c) return { ready: false, wait: null }
   const n = c.segs.length
+  // made: its audio is kept. A sentence that could not be made is kept as silence (length 0) and is made too:
+  // counted as still to come, a book stopped at it and waited for ever, since nothing would ever make it.
+  const made = voicedSet(d.id)
   let i = from
   let ahead = 0
-  while (i < n && c.durs[i] > 0) ahead += c.durs[i++]
+  while (i < n && (c.durs[i] > 0 || made.has(i))) ahead += c.durs[i++]
   if (i >= n) return { ready: true, wait: 0 }
   const est = secPerChar(d)
   let rest = 0
-  for (let k = i; k < n; k++) rest += c.durs[k] || c.segs[k].t.length * est
+  for (let k = i; k < n; k++) rest += c.durs[k] || (made.has(k) ? 0 : c.segs[k].t.length * est)
   // Safety margin is a fixed buffer, not a speed discount: discounting would turn a device that is
   // just faster than real time (1.06×) into a "slow" one and make long books wait for nothing.
   const wait = waitSeconds(ahead, rest, Math.max(0.02, settings.get().voiceSpeed || 1))

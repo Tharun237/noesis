@@ -89,6 +89,7 @@ Tharun when it matters, do not round it up.
 | The app I open is the newest, or it tells me a newer one is ready and lets me take it | `e2e/update.mjs` (7 checks): switches by itself at launch and in the background; "Check for updates" in Settings gets it while the app is in use; with the service worker's own file blocked, the new build is loaded directly; nothing newer, it says so. `/version.json` is the truth about the newest build | Kept on a computer's Chrome. **Not proved on a phone or in Safari**, and the launch that mends a stuck update by itself has no test |
 | An option I switch on shows at once that it is on, or says why it cannot be | Operated on a phone-sized screen, 14 October (not an automatic test): vibration is felt the moment it is switched on, and a phone that will not vibrate is told so and the option stays off; changing the usual voice says what that changes and offers the book in hand; AI narration with no key says why it is dimmed | Kept for those. **Not proved on a phone**: that the pulses are felt (they were 8 ms, now 25 and more), the microphone options (slow down, pause, clearer), the lock screen's words, spoken commands, word-following with the built-in voice |
 | Bookmarks made on two devices are all kept | `marks.test.js`; `e2e/sync.mjs`: one made on each device at the same time | Kept |
+| I press Play once; if the audio is not ready it starts by itself when it is ("Play starts by itself") | `e2e/play-starts.mjs`, fresh launch each time: the app closed while making a book's audio; a sentence that could not be made at the place; only the place left to make. All three stayed "ready in 2 seconds" for ever before 14 October | Kept on a computer's Chrome. **Not proved on his phone** |
 
 ## The first sweep (13 October 2026): question 1 asked of every record, question 6 of every number
 
@@ -156,3 +157,16 @@ Still able to differ, and why (say so if asked; none is a contradiction a custom
 - "N in your queue" leaves out a document still being prepared; the sidebar's Queue count includes it.
 - "Finished only where the listening ended" rests on the player stopping and marking the book in one step
   (`player.js` finish): if that is ever made to wait in between, a finish is not logged. **No test guards it.**
+
+## Play pressed once never started (14 October 2026, his report: "it says it is gathering but it never does")
+
+The broken promise: "Play starts by itself". Question that would have found it: what if the app is closed in the
+middle of something (a phone ends an app at will)? Three faults, one class (the wait counted made audio as unmade,
+or the news that ended the wait was dropped), each with a failing case first in `e2e/play-starts.mjs`:
+- A sentence's length was written 1.5 s after its audio and every new sentence restarted that timer, so a device
+  making sentences quickly wrote no lengths at all until the book was done. Closed in between, the audio stayed
+  and the lengths were lost; "ready" waited for those sentences for ever and nothing remade them. Now written at
+  most every 1.5 s but always, and lost lengths are taken back from the audio records when a book is opened
+  (this mends books already damaged on customers' devices).
+- A sentence kept as silence (it could not be made) counted as still to come: a book stopped at it for ever.
+- The sentence the player sat waiting on was made, loaded silently, and the pressed Play was forgotten.
