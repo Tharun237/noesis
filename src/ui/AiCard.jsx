@@ -6,6 +6,7 @@ import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels, chooseModel, canSee, chooseVisionModel, provider } from '../lib/ai.js'
 import { loadCloudVoices } from '../lib/cloudvoice.js'
+import { nvidiaUse, useOver } from '../lib/usage.js'
 import { Button, IconButton, Segmented, Toggle, Field, inputStyle, Appear } from './kit.jsx'
 
 const KEY = { gemini: 'geminiKey', nvidia: 'nvidiaKey', custom: 'customKey' }
@@ -194,6 +195,31 @@ export function AiCard({ Card }) {
         hint={!connectedNow ? 'Needs your own AI key, set up above. It is then used for the PDFs you add, not the ones already in your library.' : id === 'gemini'
           ? 'Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests.'
           : sees ? `Each page goes to ${sees.split('/').pop()}, which can see it. One request per 2 pages: a 700-page book is 350 requests.` : "Needs a model that can see pages, and none of your key's models can: PDFs are read without it."} />
+      <NvidiaUse />
     </Card>
+  )
+}
+
+// What this device has asked of the NVIDIA key, and how often NVIDIA asked it to wait (usage.js): is the free key
+// enough? Counted, not estimated; shown only once there is something to count.
+const n = x => x.toLocaleString()
+const secs = ms => (ms < 90_000 ? `${Math.round(ms / 1000)} s` : `${Math.round(ms / 60_000)} min`)
+function NvidiaUse() {
+  const days = useStore(nvidiaUse, u => u.days)
+  const u = useOver(days, 7)
+  if (!u.voice.made && !u.text.made) return null
+  const asked = [u.voice.made && `${n(u.voice.made)} sentences spoken`, u.text.made && `${n(u.text.made)} AI requests`].filter(Boolean).join(' · ')
+  const limited = u.voice.limited + u.text.limited
+  const waited = u.voice.waitedMs + u.text.waitedMs
+  const busy = u.voice.failed + u.text.failed
+  return (
+    <div style={small}>
+      <div style={{ color: T.text, fontWeight: 600, marginBottom: 2 }}>Your NVIDIA key on this device, {u.days === 1 ? 'today' : `the last ${u.days} days`}</div>
+      <div style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {asked}{u.voice.peak ? ` · at most ${n(u.voice.peak)} sentences in a minute` : ''}.{' '}
+        {limited ? `NVIDIA asked it to slow down ${n(limited)} ${limited === 1 ? 'time' : 'times'}, ${secs(waited)} of waiting in all.` : 'NVIDIA never asked it to slow down.'}
+        {busy ? ` NVIDIA was busy ${n(busy)} ${busy === 1 ? 'time' : 'times'}; each was asked again.` : ''}
+      </div>
+    </div>
   )
 }

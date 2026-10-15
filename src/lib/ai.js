@@ -7,6 +7,7 @@
 //             relay, because NVIDIA refuses browser requests); "Other" is any address the customer types
 //             (OpenRouter, Groq, OpenAI, a local Ollama…), called straight from the browser.
 import { settings } from './settings.js'
+import { countUse } from './usage.js'
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -135,13 +136,15 @@ export function hasAiKey(s = settings.get()) {
 
 // ── requests ──────────────────────────────────────────────────────────────────
 // Retries 429 and 5xx with backoff, telling the caller how long the wait is (null when clear).
-async function withRetry(send, { tries, onRetry, delayOf }) {
+// `tally`: an NVIDIA request, counted on this device (usage.js).
+async function withRetry(send, { tries, onRetry, delayOf, tally }) {
   for (let attempt = 0; ; attempt++) {
     const res = await send()
-    if (res.ok) { onRetry?.(null); return res }
+    if (res.ok) { onRetry?.(null); if (tally) countUse('text', 'made'); return res }
     const err = await res.json().catch(() => ({})) // an error body that is not JSON still has a status
     if ((res.status === 429 || res.status >= 500) && attempt < tries) {
       const ms = delayOf?.(err) ?? Math.min(60_000, 2000 * 2 ** attempt)
+      if (tally) countUse('text', res.status === 429 ? 'limited' : 'failed', res.status === 429 ? ms : 0)
       onRetry?.(Math.max(1, Math.round(ms / 1000)))
       await sleep(ms)
       // The wait is over and the question goes again: the countdown is no longer true. It stayed on screen ("retrying
@@ -211,7 +214,7 @@ export async function aiText({ prompt, parts, system, json, schema, shape, signa
   const body = JSON.stringify({ model, temperature: 0.2, stream: true, ...quick(p, model), messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
   let whole = ''
   for (let again = 0; ; again++) {
-    const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
+    const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry, tally: p.id === 'nvidia' })
       .catch(e => { throw openaiFail(e, p) })
     if (!/event-stream/i.test(res.headers.get('content-type') || '')) { whole = (await res.json()).choices?.[0]?.message?.content || ''; break } // one piece anyway
     whole = ''
@@ -257,7 +260,7 @@ export async function aiStream({ system, messages, onText, signal, onRetry }) {
     return
   }
   const body = JSON.stringify({ model: p.model, temperature: 0.4, stream: true, ...quick(p), messages: [{ role: 'system', content: system }, ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))] })
-  const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 3, onRetry })
+  const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 3, onRetry, tally: p.id === 'nvidia' })
     .catch(e => { throw openaiFail(e, p) })
   const visible = thinkFilter() // a reasoning model streams <think>…</think> first: not for the listener
   // Part of the answer is already on screen: a stalled one is said, not asked again from the start.

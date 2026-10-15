@@ -2,6 +2,7 @@
 // OpenAI-protocol voice service (M11, called straight from the browser).
 // A cloud voice produces the same stored audio as a Piper voice; only where the samples come from differs.
 import { LANGS } from './lang.js'
+import { countUse } from './usage.js'
 import { settings } from './settings.js'
 import { isNvidiaKey, cleanBase, hostOf } from './ai.js'
 
@@ -297,6 +298,7 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
     }
     if (res.ok) {
       onRetry?.(null)
+      countUse('voice', 'made')
       return parseWav(await res.arrayBuffer())
     }
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -306,6 +308,7 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
     }
     if ((res.status === 429 || res.status >= 500) && attempt < 8) {
       const ms = retryMs(attempt)
+      countUse('voice', res.status === 429 ? 'limited' : 'failed', res.status === 429 ? ms : 0) // how often NVIDIA asks for patience (usage.js)
       onRetry?.(Math.max(1, Math.round(ms / 1000)))
       await sleep(ms)
       continue
