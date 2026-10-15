@@ -7,7 +7,7 @@ import { motion } from 'motion/react'
 import { T } from '../theme.js'
 import { db } from '../lib/db.js'
 import { locatePage, sentenceAt } from '../lib/locate.js'
-import { MARK, MARK_INK, WordOnPage } from './PageView.jsx'
+import { SentenceOnPage, WordOnPage } from './PageView.jsx'
 
 const FALLBACK_RATIO = 1.4142 // A4-ish until the page reports its true size
 const TURN = { duration: 0.2, ease: T.ease }
@@ -105,7 +105,6 @@ function PageSheet({ pdf, page, size, invert, current, sentences, spoken, active
 
   const width = Math.floor(Math.min(size.w, size.h / ratio))
   const hit = current && located ? located.find(e => e.i === activeSentence) : null
-  const ink = MARK_INK[invert ? 'dark' : 'light']
   const onTap = e => {
     if (located?.length && onTapSentence) {
       const r = e.currentTarget.getBoundingClientRect()
@@ -123,14 +122,7 @@ function PageSheet({ pdf, page, size, invert, current, sentences, spoken, active
       }}>
       <canvas ref={canvas} style={{ width: '100%', height: 'auto', display: 'block', filter: invert ? 'invert(1) hue-rotate(180deg)' : 'none' }} />
       {failed && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center', fontSize: 13, color: T.sub }}>This page could not be drawn.</div>}
-      {hit && (
-        <motion.div key={activeSentence} data-testid="sentence-mark" initial={{ opacity: 0 }} animate={{ opacity: ink.opacity }} transition={{ duration: 0.16 }}
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', mixBlendMode: ink.mixBlendMode }}>
-          {hit.rects.map((rc, k) => (
-            <div key={k} style={{ ...MARK, left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` }} />
-          ))}
-        </motion.div>
-      )}
+      {hit && <SentenceOnPage i={activeSentence} rects={hit.rects} invert={invert} />}
       {hit && <WordOnPage rects={hit.rects} spoken={spoken} invert={invert} />}
     </motion.div>
   )

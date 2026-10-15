@@ -78,6 +78,10 @@ export async function paintPage(pdf, n, canvas, cssWidth, dpr, onTask) {
   const viewport = page.getViewport({ scale: px / base.width })
   canvas.width = Math.round(viewport.width)
   canvas.height = Math.round(viewport.height)
+  // pdf.js asks for an opaque canvas, and on an opaque canvas a computer's Chrome draws text with coloured
+  // (sub-pixel) edges: inverted for a dark page they showed as orange and blue fringes on every letter. A canvas
+  // that may be transparent gets plain grey edges. The first request decides; pdf.js's own is then the same one.
+  canvas.getContext('2d', { alpha: true })
   const task = page.render({ canvas, viewport })
   onTask?.(task)
   try {

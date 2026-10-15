@@ -346,7 +346,9 @@ export function Reader({ wide }) {
   // Where "now" is on the original pages: the first marked line of the sentence (not the mark's holder, which
   // is as large as the page: a page half on screen is not the sentence on screen), or its page while the mark
   // is not found yet.
-  const nowOnPage = () => document.querySelector('[data-testid="page-view"] [data-testid="sentence-mark"] > div') || document.querySelector(`[data-testid="page-view"] [data-page="${activePage}"]`)
+  // the mark of the sentence being read, not the one fading out beside it while they hand over (taken first, it was
+  // removed a moment later, and a removed mark counts as off screen: "Back to now" rose at every sentence)
+  const nowOnPage = () => document.querySelector(`[data-testid="page-view"] [data-testid="sentence-mark"][data-sentence="${active}"] > div`) || document.querySelector(`[data-testid="page-view"] [data-page="${activePage}"]`)
   const showPane = sideBySide && !askDocked && !!doc // Ask takes the same side of the screen: one at a time
   const pageFor = i => (i == null || i < 0 || !doc || i >= doc.segs.length ? null : doc.blocks[doc.segs[i].b].p ?? null)
   const reading = isPlaying && playId === id

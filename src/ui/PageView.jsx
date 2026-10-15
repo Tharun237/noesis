@@ -4,8 +4,8 @@
 // right height; ONE IntersectionObserver (about a screen of margin) tracks which
 // pages are near; pages are painted one at a time through pdf.js's worker, and at
 // most 6 canvases stay drawn (the farthest is released by zeroing its size).
-import { useEffect, useRef, useState } from 'react'
-import { motion } from 'motion/react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import { T } from '../theme.js'
 import { db } from '../lib/db.js'
 import { locatePage, sentenceAt, partOf } from '../lib/locate.js'
@@ -13,6 +13,8 @@ import { useLitWord } from './litword.js'
 import { scrollBehavior } from '../lib/motion.js'
 
 const MAX_DRAWN = 6
+const FOLLOW_AT = 0.38 // where on the screen the line being read is kept
+const FOLLOW_SLACK = 0.06 // how far it may drift before the page glides it back
 const FALLBACK_RATIO = 1.4142 // A4-ish until the first page reports its true size
 // The sentence being spoken, marked like a highlighter pen: on a white page the ink multiplies (the text
 // stays black); on an inverted page it is a lime wash. The ink (opacity, blend) is on ONE layer and the
@@ -21,21 +23,64 @@ const FALLBACK_RATIO = 1.4142 // A4-ish until the first page reports its true si
 export const MARK = { position: 'absolute', background: T.lime, borderRadius: 3 }
 export const MARK_INK = { light: { opacity: 0.5, mixBlendMode: 'multiply' }, dark: { opacity: 0.32, mixBlendMode: 'normal' } }
 
-// The word being said, on the page: a second, stronger stroke of the pen inside the marked sentence. Its
-// place is worked out from the word's share of the sentence's length (the page gives lines, not words).
+// The sentence being spoken, on the page. Handed over, never blinked: the mark of the sentence before fades as this
+// one's comes, so no frame is without one (it was taken away at once and the new one rose from nothing).
+export function SentenceOnPage({ i, rects, invert }) {
+  const ink = MARK_INK[invert ? 'dark' : 'light']
+  return (
+    <AnimatePresence initial={false}>
+      <motion.div key={i} data-testid="sentence-mark" data-sentence={i} initial={{ opacity: 0 }} animate={{ opacity: ink.opacity }}
+        exit={{ opacity: 0, transition: { duration: 0.24, ease: 'easeOut' } }} transition={{ duration: 0.2, ease: 'easeOut' }}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none', mixBlendMode: ink.mixBlendMode }}>
+        {rects.map((rc, k) => <div key={k} style={{ ...MARK, left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` }} />)}
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+// The word being said, on the page: it fills with lime from its first letter to its last in the time the voice
+// takes to say it, as in Text and Focus (Spoken.jsx): one language for the voice in every view. It was a box that
+// appeared at each word and vanished at the next, three times a second. Now ONE pen stays on the page: at each word
+// it is placed there and its fill started again (the browser's own animation, run by the compositor). New elements
+// and a second fade for every word cost a phone's main thread three times what the old box did (measured,
+// 16 October 2026); one element moved costs what the box did. Its place is worked out from the word's share of the
+// sentence's length (the page gives lines, not words); a word broken over two lines fills both pieces at once.
 const WORD_INK = { light: { opacity: 0.55, mixBlendMode: 'multiply' }, dark: { opacity: 0.5, mixBlendMode: 'normal' } }
+const PIECES = 2 // a word is on one line, or broken over two
+// Where in a sentence a character falls, as a share of the sentence's WIDTH when set in type. Letters are not equally
+// wide (an "M" is three "i"s): a share by count put the word a letter late on the page ("S|equence" filled from its
+// "e", 16 October 2026). Measured with a serif face, as most books and papers are set, so wide and narrow letters
+// count as they should whatever the face; the page's own line widths do the rest (partOf).
+let ruler = null
+function shareOf(text) {
+  ruler ??= new OffscreenCanvas(1, 1).getContext('2d')
+  ruler.font = '100px serif'
+  const total = ruler.measureText(text).width || 1
+  return i => ruler.measureText(text.slice(0, i)).width / total
+}
+const FILL = [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }]
 export function WordOnPage({ rects, spoken, invert }) {
-  const { ws, starts, lit, shown } = useLitWord(spoken?.text, spoken?.dur, spoken?.tail, !!spoken?.words)
-  if (!shown || lit < 0 || lit >= ws.length) return null
-  const length = spoken.text.length || 1
+  const { ws, starts, lit, ms, shown } = useLitWord(spoken?.text, spoken?.dur, spoken?.tail, !!spoken?.words)
+  const pens = useRef([])
+  const fills = useRef([]) // the fill under way on each piece: cancelled before the next starts, or they pile up on the element
+  const on = shown && lit >= 0 && lit < ws.length
+  const share = useMemo(() => (spoken?.text ? shareOf(spoken.text) : null), [spoken?.text])
+  const parts = on ? partOf(rects, share(starts[lit]), share(starts[lit] + ws[lit].length)).slice(0, PIECES) : []
+  const key = on ? `${spoken.text.length}:${lit}` : ''
+  useLayoutEffect(() => {
+    if (!key) return
+    fills.current.forEach(f => f?.cancel())
+    // no fill mode: once said, the piece rests in its own style, full; nothing is left holding on to it
+    fills.current = pens.current.map(el => (el && el.style.display !== 'none' ? el.animate(FILL, { duration: Math.max(1, ms), easing: 'linear' }) : null))
+  }, [key, ms])
   const ink = WORD_INK[invert ? 'dark' : 'light']
   return (
-    <motion.div key={lit} data-testid="word-mark" initial={{ opacity: 0 }} animate={{ opacity: ink.opacity }} transition={{ duration: 0.08 }}
-      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', mixBlendMode: ink.mixBlendMode }}>
-      {partOf(rects, starts[lit] / length, (starts[lit] + ws[lit].length) / length).map((rc, k) => (
-        <div key={k} style={{ ...MARK, left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` }} />
-      ))}
-    </motion.div>
+    <div data-testid="word-mark" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: ink.opacity, mixBlendMode: ink.mixBlendMode, display: on ? 'block' : 'none' }}>
+      {Array.from({ length: PIECES }, (_, k) => {
+        const rc = parts[k]
+        return <div key={k} ref={el => { pens.current[k] = el }} style={rc ? { ...MARK, transformOrigin: '0 50%', left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` } : { display: 'none' }} />
+      })}
+    </div>
   )
 }
 
@@ -267,10 +312,8 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
     }
   }
 
-  // Follow the sentence: when it changes and it has rects, and the listener has
-  // not scrolled by hand in the last 4 s, and its first rect is outside the
-  // middle band of the screen, scroll so it sits about 35% from the top. When
-  // the active sentence has no rects, the page-level follow above stays as is.
+  // Follow the sentence: when it changes and it has rects, and the listener has not scrolled by hand in the last
+  // 4 s, glide it to FOLLOW_AT. When the active sentence has no rects, the page-level follow above stays as is.
   useEffect(() => {
     if (typeof activeSentence !== 'number' || activeSentence < 0) return
     const loc = located.current.get(activeLocPage)
@@ -286,8 +329,10 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
     const r = el.getBoundingClientRect()
     if (!r.height) return
     const top = r.top + hit.rects[0].y * r.height
-    if (top > window.innerHeight * 0.2 && top < window.innerHeight * 0.7) return
-    const dy = top - window.innerHeight * 0.35
+    // The line being read stays where the eye already is, like lyrics: a short glide at each sentence, not a jump
+    // of half a screen each time it had sunk out of the middle (it waited until 70% down, then went to 35%).
+    const dy = top - window.innerHeight * FOLLOW_AT
+    if (Math.abs(dy) < window.innerHeight * FOLLOW_SLACK) return
     window.scrollTo({ top: window.scrollY + dy, behavior: Math.abs(dy) < window.innerHeight * 1.5 ? scrollBehavior() : 'auto' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSentence, tick, userScroll])
@@ -322,15 +367,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
                 width: '100%', height: 'auto', display: isDrawn ? 'block' : 'none',
                 filter: invert ? 'invert(1) hue-rotate(180deg)' : 'none',
               }} />
-            {p === activeLocPage && activeRects && (
-              <motion.div key={activeSentence} data-testid="sentence-mark" initial={{ opacity: 0 }} animate={{ opacity: MARK_INK[invert ? 'dark' : 'light'].opacity }}
-                transition={{ duration: 0.16 }}
-                style={{ position: 'absolute', inset: 0, pointerEvents: 'none', mixBlendMode: MARK_INK[invert ? 'dark' : 'light'].mixBlendMode }}>
-                {activeRects.map((rc, k) => (
-                  <div key={k} style={{ ...MARK, left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` }} />
-                ))}
-              </motion.div>
-            )}
+            {p === activeLocPage && activeRects && <SentenceOnPage i={activeSentence} rects={activeRects} invert={invert} />}
             {p === activeLocPage && activeRects && <WordOnPage rects={activeRects} spoken={spoken} invert={invert} />}
           </div>
         )
