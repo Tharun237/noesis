@@ -144,6 +144,9 @@ async function withRetry(send, { tries, onRetry, delayOf }) {
       const ms = delayOf?.(err) ?? Math.min(60_000, 2000 * 2 ** attempt)
       onRetry?.(Math.max(1, Math.round(ms / 1000)))
       await sleep(ms)
+      // The wait is over and the question goes again: the countdown is no longer true. It stayed on screen ("retrying
+      // in about 2 s") for the whole of the next request, a minute and more on a busy free account (15 October 2026).
+      onRetry?.(null)
       continue
     }
     throw Object.assign(new Error('request failed'), { status: res.status, body: err })
@@ -187,10 +190,24 @@ export async function aiText({ prompt, parts, system, json, schema, shape, signa
     return text
   }
   const sys = [system, json ? `Reply with JSON only${shape ? `, in exactly this shape: ${shape}` : ''}. No explanation, no code fence.` : ''].filter(Boolean).join('\n\n')
-  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: false, messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
+  // Streamed, as Ask is: the answer starts flowing at once. Waited for whole, a long answer from a busy free
+  // account took more than the 100 s the site's relay (Cloudflare) holds a silent line open: cut off (HTTP 524),
+  // asked again, cut off again, while the screen blamed the quota (15 October 2026).
+  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: true, messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
   const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
     .catch(e => { throw openaiFail(e, p) })
-  const text = stripThinking((await res.json()).choices?.[0]?.message?.content || '')
+  let whole = ''
+  if (/event-stream/i.test(res.headers.get('content-type') || '')) {
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+    for (let buf = ''; ;) {
+      const { done, value } = await reader.read()
+      const r = parseSse(buf + (value || '') + (done ? '\n' : ''))
+      buf = r.rest
+      whole += r.texts.join('')
+      if (r.done || done) break
+    }
+  } else whole = (await res.json()).choices?.[0]?.message?.content || '' // a provider that answers in one piece anyway
+  const text = stripThinking(whole)
   if (!text) throw new Error(`${p.name} returned no text`)
   return text
 }

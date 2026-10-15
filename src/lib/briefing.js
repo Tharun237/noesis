@@ -71,8 +71,10 @@ export async function makeBriefing(ids, { onStage, signal } = {}) {
       const parts = splitText(text, Math.floor(max * 0.8))
       const words = Math.max(80, Math.floor(((max * 0.7) / parts.length / 6)))
       const bits = []
-      for (const part of parts) {
+      // a whole book is many requests, minutes on a free account: how far through it is said as it goes
+      for (const [k, part] of parts.entries()) {
         signal?.throwIfAborted?.()
+        onStage?.({ step: 'reading', n: i + 1, total: ids.length, title, part: k + 1, parts: parts.length })
         bits.push(await aiText({ prompt: notesPrompt(title, part, words), signal, onRetry: wait }))
       }
       notes = bits.join('\n\n')

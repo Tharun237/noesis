@@ -488,7 +488,7 @@ async function prepare(id) {
       const r = await narratePdf({
         pdf: parsed.pdf, pageText: parsed.pageText, key: s.geminiKey, model: s.geminiModel,
         onProgress: stepped(id),
-        onRetry: secs => patch(id, { stage: secs == null ? 'AI is reading the pages' : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }),
+        onRetry: secs => patch(id, { stage: secs == null ? 'AI is reading the pages' : `${providerName()} is busy. Trying again in about ${secs} s.` }),
       })
       blocks = r.blocks.flatMap(b => (b.k === 'gap' ? parsed.blocks.filter(x => x.page >= b.from && x.page <= b.to) : [b]))
       if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
@@ -512,7 +512,7 @@ async function prepare(id) {
       const text = blocks.map(b => (b.k === 'h' ? `\n## ${b.text}\n` : b.text)).join('\n')
       const stage = d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary'
       blocks = await summarize({ text, title: getDoc(id).title, mode: d.mode,
-        onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }) })
+        onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()} is busy. Trying again in about ${secs} s.` }) })
     }
 
     // Already in the wanted language? Script tells Telugu and Hindi apart; for English the words must agree
@@ -559,7 +559,7 @@ async function prepare(id) {
           if (p?.cps > 0 && at.done - startedDone > 20000 && onDevice) rememberTranslateSpeed(p.cps)
           progress(f)
         },
-        onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()}'s free quota is limiting requests. Retrying in about ${secs} s.` }),
+        onRetry: secs => patch(id, { stage: secs == null ? stage : `${providerName()} is busy. Trying again in about ${secs} s.` }),
         saved,
         onChunk: (index, strings) => { saved.set(index, strings); return db.putTranslation(id, saved) },
       })

@@ -64,10 +64,12 @@ export function Briefing({ wide }) {
       {docs.length === 0 ? (
         <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>No documents with text yet.</div>
       ) : (
-        <div style={{ display: 'grid', gap: 2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 2 }}>
           {docs.map(d => (
+            // minWidth 0: a row as wide as its title ran past the sheet, cut off without "…" and slid sideways
+            // when moved through with the keyboard (15 October 2026)
             <label key={d.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderRadius: T.r.sm, background: checked.includes(d.id) ? T.surfaceHi : 'transparent', color: T.text, cursor: 'pointer', fontSize: 15 }}>
+              style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', borderRadius: T.r.sm, background: checked.includes(d.id) ? T.surfaceHi : 'transparent', color: T.text, cursor: 'pointer', fontSize: 15 }}>
               <input type="checkbox" checked={checked.includes(d.id)} onChange={() => toggle(d.id)}
                 aria-label={d.title} style={{ width: 18, height: 18, accentColor: T.lime, flexShrink: 0 }} />
               <span style={{ flex: 1, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
@@ -86,7 +88,7 @@ export function Briefing({ wide }) {
         <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Retrying in about {wait} s</Appear>
       )}
       {busy && wait == null && stage?.step === 'reading' && (
-        <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Reading {stage.n} of {stage.total}: {stage.title}</Appear>
+        <Appear style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Reading {stage.n} of {stage.total}: {stage.title}{stage.parts > 1 ? ` · part ${stage.part} of ${stage.parts}` : ''}</span></Appear>
       )}
       {busy && wait == null && stage?.step === 'writing' && (
         <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing the briefing</Appear>
