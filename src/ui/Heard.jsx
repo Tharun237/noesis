@@ -25,7 +25,7 @@ import { usePace, useLength } from './usePace.js'
 import { openSheet } from '../lib/nav.js'
 import { player } from '../lib/player.js'
 import { settings } from '../lib/settings.js'
-import { ringOf, streaks, GOAL_USUAL_MIN } from '../lib/listening.js'
+import { ringOf, streaks, goalOf, goalLabel } from '../lib/listening.js'
 
 const BEFORE = 0.5 // heard before today: the document's colour, dimmed
 const grow = { initial: { scaleX: 0 }, animate: { scaleX: 1 }, transition: { duration: T.dur.slow, ease: T.ease } }
@@ -191,7 +191,7 @@ export function LibraryGlance({ wide }) {
   const { shelf, all, heard } = useMemo(() => shelfOf(docs, length), [docs, length])
   const byId = useMemo(() => new Map(docs.map(d => [d.id, d])), [docs])
   const colourFor = id => (byId.has(id) ? colourOf(byId.get(id), known) : hueOf(log.titles?.[id] || id)) // a deleted document keeps a colour
-  const goalMin = useStore(settings, s => s.listenGoal) || GOAL_USUAL_MIN
+  const goalMin = useStore(settings, goalOf)
   const ring = useMemo(() => ringOf(log, now, goalMin), [log, goalMin, dayKey(now)]) // eslint-disable-line react-hooks/exhaustive-deps
   const run = useMemo(() => streaks(log, now, goalMin * 60).current, [log, goalMin, dayKey(now)]) // eslint-disable-line react-hooks/exhaustive-deps
   const going = shelf.filter(x => !x.d.finished && x.share > 0 && x.share < 1)
@@ -205,8 +205,8 @@ export function LibraryGlance({ wide }) {
   const own = book && colourOf(book.d, known)
   const bookColour = own && own !== T.ring.today && own !== T.ring.week ? own : T.mood.dark // never the colour of another ring
   const rings = [
-    { share: ring.share, colour: T.ring.today, name: 'Today', value: `${fmtDur(today)} of ${goalMin}m` },
-    { share: Math.min(1, weekSeconds / weekGoal), colour: T.ring.week, name: '7 days', value: `${fmtDur(weekSeconds)} of ${fmtDur(weekGoal)}` },
+    { share: ring.share, colour: T.ring.today, name: 'Today', value: `${fmtDur(today)} of ${goalLabel(goalMin)}` },
+    { share: Math.min(1, weekSeconds / weekGoal), colour: T.ring.week, name: '7 days', value: `${fmtDur(weekSeconds)} of ${goalLabel(weekGoal / 60)}` },
     ...(book ? [{ share: book.share, colour: bookColour, name: book.d.title, value: `${Math.floor(book.share * 100)}% · ${fmtDur(book.seconds * (1 - book.share))} left` }] : []),
   ]
   const nudge = nudgeOf(ring, near, run)

@@ -23,7 +23,7 @@ import { dayKey, listenedBetween, mergeLogs, yearOf, yearsIn, newest, addHour, j
 import { settings } from './settings.js'
 import { toast } from './nav.js'
 import { haptic, CHEER } from './haptics.js'
-import { streaks } from './listening.js'
+import { streaks, goalOf } from './listening.js'
 
 export const emptyLog = () => ({ titles: {}, finished: [], hours: {} })
 
@@ -325,7 +325,7 @@ export function startHistory() {
     if (!loaded || !seconds) return
     const title = getDoc(id)?.title || own.titles?.[id] || historyStore.get().log.titles?.[id] || 'Untitled'
     const when = new Date(now)
-    const goal = (settings.get().listenGoal || 0) * 60
+    const goal = goalOf(settings.get()) * 60
     const before = dayTotal(historyStore.get().log, dayKey(when))
     record(log => addHour(addSeconds(log, dayKey(when), id, seconds, title), String(when.getFullYear()), when.getHours(), seconds))
     // the listening here just closed today's ring: said once, the moment it happens (Apple Watch's "closed")

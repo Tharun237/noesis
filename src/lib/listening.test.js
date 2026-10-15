@@ -1,7 +1,7 @@
 // What the "Your listening" page says (listening.js): every number a sum or a count of the record.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stretch, summary, streaks, calendar, hours, hourName, ringOf, GOAL_USUAL_MIN } from './listening.js'
+import { stretch, summary, streaks, calendar, hours, hourName, ringOf, GOAL_USUAL_MIN, goalOf, goalLabel, GOAL } from './listening.js'
 import { dayKey } from './heard.js'
 
 const now = new Date(2026, 9, 13, 21, 30) // Tuesday 13 October 2026, in the evening
@@ -93,4 +93,16 @@ test('the ring: today against the goal, and the streak of days it closed', () =>
   assert.equal(streaks(log, now, 15 * 60).current, 2) // today and yesterday both reached 15 min
   assert.equal(streaks(log, now, 20 * 60).current, 1) // yesterday's 15 min did not reach 20
   assert.equal(streaks(log, now, 40 * 60).current, 0) // today (30 min) not closed yet, yesterday not either
+})
+
+test('the daily goal: hours, chosen freely in quarter hours, never below an hour', () => {
+  assert.equal(GOAL_USUAL_MIN, 60)
+  assert.equal(goalOf({ listenGoal: 20 }), 60) // the old minute goals (and an old device's) become an hour
+  assert.equal(goalOf({ listenGoal: 600 }), 480)
+  assert.equal(goalOf({}), 60)
+  assert.equal(goalOf({ listenGoal: 150 }), 150)
+  assert.deepEqual([60, 90, 135, 480].map(goalLabel), ['1h', '1h 30m', '2h 15m', '8h'])
+  assert.equal(GOAL.fromPlace(0), 60)
+  assert.equal(GOAL.fromPlace(1), 480)
+  assert.equal(GOAL.fromPlace(GOAL.toPlace(97)), 90) // to the quarter hour
 })

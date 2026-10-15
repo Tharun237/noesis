@@ -44,7 +44,10 @@ await page.screenshot({ path: new URL('0-rings-filling.png', OUT).pathname.repla
 
 // 1. close the ring by listening
 const today = await app('Object.values(m.history.historyStore.get().log[m.heard.dayKey(new Date())] || {}).reduce((a, b) => a + b, 0)')
-const goalMin = Math.ceil((today + 45) / 60) // closes after about a minute of listening
+// The least goal is an hour: today is brought to 45 s short of it in the record shown (as listening on another
+// device would), and real listening here has to close it.
+const goalMin = 60
+await app(`m.history.historyStore.set(s => { const k = m.heard.dayKey(new Date()), had = Object.values(s.log[k] || {}).reduce((a, b) => a + b, 0); return { log: { ...s.log, [k]: { ...(s.log[k] || {}), elsewhere: Math.max(0, 3600 - 45 - had) } } } })`)
 console.log(`  (today ${today} s before, goal ${goalMin} min)`)
 await app(`m.settings.settings.set({ listenGoal: ${goalMin} })`)
 // the document with the most audio made: a minute of real sound (Start now plays what is made, whatever the rest)

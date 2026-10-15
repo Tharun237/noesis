@@ -121,8 +121,20 @@ export const hourName = h => `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`
 // The daily ring (Apple Watch's Move ring, for listening): today's listening against the customer's goal.
 // The goal is the same for every day it is asked about (settings.listenGoal): a goal changed today also
 // re-reads the days before it. ponytail: a goal kept per day, when a changed goal must not rewrite past streaks.
-export const GOAL_USUAL_MIN = 20
-export const GOAL_MINUTES = [10, 15, 20, 30, 45, 60]
+// In hours, chosen freely on a slider ("listening for minutes is amateur; the least should be hours", Tharun,
+// 15 October 2026): an hour to eight, by the quarter hour. Kept in minutes (settings.listenGoal, which follows
+// the account), and read through goalOf: a goal saved in minutes before, or sent by a device not yet updated,
+// is brought into the range instead of drawing a ring that closes in ten minutes.
+export const GOAL_USUAL_MIN = 60
+const GOAL_LEAST = 60, GOAL_MOST = 480, GOAL_STEP = 15
+export const goalOf = s => Math.min(GOAL_MOST, Math.max(GOAL_LEAST, Math.round((+s?.listenGoal || GOAL_USUAL_MIN) / GOAL_STEP) * GOAL_STEP))
+export const goalLabel = m => `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`
+// the slider's scale (ui/SpeedSlider.jsx): even, quarter hours, a few hours named under it
+export const GOAL = {
+  min: GOAL_LEAST, max: GOAL_MOST, step: GOAL_STEP, marks: [60, 120, 240, 360, 480], label: goalLabel, name: 'Daily listening goal',
+  toPlace: m => (Math.min(GOAL_MOST, Math.max(GOAL_LEAST, m)) - GOAL_LEAST) / (GOAL_MOST - GOAL_LEAST),
+  fromPlace: f => GOAL_LEAST + Math.round((Math.min(1, Math.max(0, f)) * (GOAL_MOST - GOAL_LEAST)) / GOAL_STEP) * GOAL_STEP,
+}
 export function ringOf(log, now, goalMin) {
   const goal = goalMin * 60, today = sum(log?.[dayKey(now)])
   return { today, goal, share: Math.min(1, today / goal), closed: today >= goal, left: Math.max(0, goal - today) }

@@ -3,6 +3,10 @@ import { T } from '../theme.js'
 import { haptic } from '../lib/haptics.js'
 import { SPEED_MARKS, SPEED_MIN, SPEED_MAX, SPEED_STEP, speedToPlace, placeToSpeed, speedLabel } from '../lib/speed.js'
 
+// What the bar measures. The listening speed is the first; the daily goal (lib/listening.js GOAL) is drawn and
+// moved by the same bar, so the two feel the same under the finger. felt: a value given a small tap as it is passed.
+const SPEED = { min: SPEED_MIN, max: SPEED_MAX, step: SPEED_STEP, marks: SPEED_MARKS, toPlace: speedToPlace, fromPlace: placeToSpeed, label: speedLabel, name: 'Listening speed', felt: 1 }
+
 // The listening speed as one thing to drag: a bar that fills, like the brightness of a phone. It was a list
 // of eight fixed speeds and two "a little slower / faster" rows.
 //   the bar     as tall as a finger, filled to where the speed is; a touch anywhere on it puts the speed there
@@ -28,28 +32,28 @@ const SWELL = `transform 180ms ${EASE}`
 const HELD = 'scale(1.015, 1.09)'
 
 // value: the speed. onChange: while it is dragged. onSettle: when the finger or the key is let go.
-export function SpeedSlider({ value, onChange, onSettle }) {
+export function SpeedSlider({ value, onChange, onSettle, scale = SPEED }) {
   const last = useRef(value)
   last.current = value // the speed may be set from elsewhere (Settings, another device): what is shown is what is compared
   // finger: where the finger is along the bar (0..1) while it is down, else null. follows: it has moved since
   // it came down, so the fill is under it and no longer gliding to it.
   const [touch, setTouch] = useState({ finger: null, follows: false })
-  const place = speedToPlace(value)
+  const place = scale.toPlace(value)
   const set = speed => {
     if (speed === last.current) return
-    if (speed === 1) haptic(8) // the voice's own pace: felt as it is passed
+    if (speed === scale.felt) haptic(8) // the voice's own pace: felt as it is passed
     last.current = speed
     onChange(speed)
   }
-  const move = e => set(placeToSpeed(+e.target.value / STEPS))
+  const move = e => set(scale.fromPlace(+e.target.value / STEPS))
   // A key moves it by one speed, not by one of the control's own thousand steps (a step that small is no
   // change of speed at all, and the keys did nothing).
-  const KEYS = { ArrowLeft: -SPEED_STEP, ArrowDown: -SPEED_STEP, ArrowRight: SPEED_STEP, ArrowUp: SPEED_STEP, PageDown: -SPEED_STEP * 5, PageUp: SPEED_STEP * 5 }
+  const KEYS = { ArrowLeft: -scale.step, ArrowDown: -scale.step, ArrowRight: scale.step, ArrowUp: scale.step, PageDown: -scale.step * 5, PageUp: scale.step * 5 }
   const key = e => {
-    const to = e.key === 'Home' ? SPEED_MIN : e.key === 'End' ? SPEED_MAX : e.key in KEYS ? last.current + KEYS[e.key] : null
+    const to = e.key === 'Home' ? scale.min : e.key === 'End' ? scale.max : e.key in KEYS ? last.current + KEYS[e.key] : null
     if (to == null) return
     e.preventDefault()
-    set(placeToSpeed(speedToPlace(to)))
+    set(scale.fromPlace(scale.toPlace(to)))
   }
   const settle = () => onSettle?.(last.current)
   // Taken away while it is being moved (its popover closed by a key): what it stood at is still told.
@@ -68,17 +72,17 @@ export function SpeedSlider({ value, onChange, onSettle }) {
           position: 'absolute', inset: 0, background: T.text, transformOrigin: 'left center', willChange: 'transform',
           transform: `scaleX(${held ? touch.finger : place})`, transition: held && touch.follows ? 'none' : GLIDE,
         }} />
-        <input type="range" min={0} max={STEPS} step={1} value={Math.round(place * STEPS)} aria-label="Listening speed" aria-valuetext={speedLabel(value)}
+        <input type="range" min={0} max={STEPS} step={1} value={Math.round(place * STEPS)} aria-label={scale.name} aria-valuetext={scale.label(value)}
           onChange={move} onKeyDown={key} onKeyUp={settle} onBlur={settle}
           onPointerDown={down} onPointerMove={drag} onPointerUp={up} onPointerCancel={up}
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', margin: 0, opacity: 0, cursor: 'pointer', touchAction: 'none' }} />
       </div>
       <div aria-hidden="true" style={{ position: 'relative', height: 14, fontSize: 11.5, color: T.faint, fontVariantNumeric: 'tabular-nums' }}>
-        {SPEED_MARKS.map((s, k) => {
-          const at = speedToPlace(s)
+        {scale.marks.map((s, k) => {
+          const at = scale.toPlace(s)
           // the first and the last sit inside the bar's ends; the others are centred under their place
-          const edge = k === 0 ? { left: 0 } : k === SPEED_MARKS.length - 1 ? { right: 0 } : { left: `${at * 100}%`, transform: 'translateX(-50%)' }
-          return <span key={s} style={{ position: 'absolute', top: 0, ...edge, color: s === value ? T.text : T.faint, transition: 'color 160ms linear' }}>{speedLabel(s)}</span>
+          const edge = k === 0 ? { left: 0 } : k === scale.marks.length - 1 ? { right: 0 } : { left: `${at * 100}%`, transform: 'translateX(-50%)' }
+          return <span key={s} style={{ position: 'absolute', top: 0, ...edge, color: s === value ? T.text : T.faint, transition: 'color 160ms linear' }}>{scale.label(s)}</span>
         })}
       </div>
     </div>

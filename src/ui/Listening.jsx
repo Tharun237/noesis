@@ -27,7 +27,7 @@ import { hasAiKey } from '../lib/ai.js'
 import { library } from '../lib/library.js'
 import { useHistory, historyStore, makeRetrospective, listeningPlaces } from '../lib/history.js'
 import { dayKey, shelfOf } from '../lib/heard.js'
-import { KINDS, stretch, summary, streaks, calendar, hours, hourName, GOAL_USUAL_MIN } from '../lib/listening.js'
+import { KINDS, stretch, summary, streaks, calendar, hours, hourName, goalOf, goalLabel } from '../lib/listening.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
 import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur } from './kit.jsx'
@@ -212,12 +212,12 @@ export function Listening({ wide }) {
 
 const Steadily = memo(function Steadily({ log, now, whole, span, kind }) {
   // the ring's streak: days in a row the daily goal was reached (the one streak Noesis keeps)
-  const goal = useStore(settings, s => s.listenGoal) || GOAL_USUAL_MIN
+  const goal = useStore(settings, goalOf)
   const run = useMemo(() => streaks(log, now, goal * 60), [log, now, goal])
   const within = `in ${SPAN[kind].toLowerCase()}`
   return (
     <div data-fade="" style={{ display: 'grid', borderTop: `1px solid ${T.border}` }}>
-      <Fact name="Ring streak" value={days(run.current)} note={run.longest > run.current ? `longest ${days(run.longest)}, to ${shortDay(run.ended)}` : run.current ? 'your longest yet' : `${goal}m a day closes the ring`} />
+      <Fact name="Ring streak" value={days(run.current)} note={run.longest > run.current ? `longest ${days(run.longest)}, to ${shortDay(run.ended)}` : run.current ? 'your longest yet' : `${goalLabel(goal)} a day closes the ring`} />
       <Fact name="Best day" value={whole.best ? fmtDur(whole.best.seconds) : '0m'} note={whole.best ? `${shortDay(whole.best.key)}, ${within}` : within} />
       <Fact name="Days listened" value={`${whole.listened} of ${span}`} note="a minute or more counts" />
       <Fact name="Finished" value={String(whole.finished.length)} note={whole.finished.length ? whole.finished.map(f => f.title).join(', ') : within} />
@@ -272,7 +272,7 @@ const Below = memo(function Below({ log, now }) {
 
   const flat = useMemo(() => cal.flat(), [cal])
   const calDays = flat.filter(c => !c.ahead)
-  const goalS = (settings.get().listenGoal || GOAL_USUAL_MIN) * 60 // a day that reached it closed its ring: full lime
+  const goalS = goalOf(settings.get()) * 60 // a day that reached it closed its ring: full lime
   const calOn = calDays.filter(c => c.seconds >= goalS).length
   const picks = cell && flat.find(c => c.key === cell)
   const hourMax = Math.max(1, ...hrs.by)
