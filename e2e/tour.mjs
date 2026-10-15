@@ -35,7 +35,7 @@ async function tour(size) {
   const shot = async name => { n++; await page.screenshot({ path: `${OUT}/tour-${size}-${String(n).padStart(2, '0')}-${name}.png` }) }
   const btn = name => page.getByRole('button', { name, exact: true }).first()
   const item = text => page.locator('[role=menu]').getByText(text, { exact: false }).first()
-  const card = text => page.locator('[role=button]').filter({ hasText: text }).first()
+  const card = text => page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: text }).first()
   const home = async () => {
     for (let k = 0; k < 5; k++) {
       const s = await page.evaluate(() => history.state || {})

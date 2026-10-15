@@ -13,6 +13,8 @@ export function pulseFor({ kind, text, last }) {
 }
 // What is felt the moment the option is switched on: the proof that it works on this phone.
 export const HELLO = [30, 50, 30]
+// A ring closed, a book finished: felt as a small fanfare, longer than anything the text gives.
+export const CHEER = [40, 70, 40, 70, 120]
 
 export function hapticsSupported() {
   return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'

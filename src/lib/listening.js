@@ -85,8 +85,9 @@ export function summary(log, days) {
 
 // Days in a row with real listening: the run that is still going (today need not have happened yet), and the
 // longest there has ever been, with the day it ended.
-export function streaks(log, now) {
-  const on = k => sum(log?.[k]) >= A_DAY_OF_LISTENING_S
+// `least`: the seconds that make a day count. With the daily goal it is the ring's streak (days it closed).
+export function streaks(log, now, least = A_DAY_OF_LISTENING_S) {
+  const on = k => sum(log?.[k]) >= least
   let current = 0
   for (let i = on(dayKey(now)) ? 0 : 1; on(dayKey(back(now, i))); i++) current++
   let longest = 0, run = 0, prev = null, ended = null
@@ -116,3 +117,13 @@ export function hours(log) {
   return { by, total, peak: total ? by.indexOf(Math.max(...by)) : null }
 }
 export const hourName = h => `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`
+
+// The daily ring (Apple Watch's Move ring, for listening): today's listening against the customer's goal.
+// The goal is the same for every day it is asked about (settings.listenGoal): a goal changed today also
+// re-reads the days before it. ponytail: a goal kept per day, when a changed goal must not rewrite past streaks.
+export const GOAL_USUAL_MIN = 20
+export const GOAL_MINUTES = [10, 15, 20, 30, 45, 60]
+export function ringOf(log, now, goalMin) {
+  const goal = goalMin * 60, today = sum(log?.[dayKey(now)])
+  return { today, goal, share: Math.min(1, today / goal), closed: today >= goal, left: Math.max(0, goal - today) }
+}

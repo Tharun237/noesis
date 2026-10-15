@@ -25,6 +25,7 @@ import { askAware } from '../lib/extras.js'
 import SUPPORT from '../lib/support.json'
 import { speedLabel } from '../lib/speed.js'
 import { SpeedSlider } from './SpeedSlider.jsx'
+import { GOAL_MINUTES } from '../lib/listening.js'
 import { updateState, updateNow } from '../lib/updates.js'
 
 const SOUND_NAMES = { off: 'Off', focus: 'Focus', calm: 'Calm', brown: 'Brown noise' }
@@ -34,7 +35,7 @@ const SOUND_NAMES = { off: 'Off', focus: 'Focus', calm: 'Calm', brown: 'Brown no
 const SECTIONS = [
   { id: 'account', group: 0, icon: 'person', title: 'Account', now: (s, user) => (user ? user.name || user.email : 'Sign in') },
   { id: 'voice', group: 1, icon: 'speaker', title: 'Voice', now: s => (activeEngine(s) === 'system' ? 'Built-in' : 'Natural') },
-  { id: 'listening', group: 1, icon: 'play', title: 'Listening', now: s => `${s.speed}x` },
+  { id: 'listening', group: 1, icon: 'play', title: 'Listening', now: s => `${s.speed}x · ${s.listenGoal} min a day` },
   { id: 'sound', group: 1, icon: 'waves', title: 'Sounds and haptics', now: s => SOUND_NAMES[s.ambientMode || 'off'] },
   { id: 'ai', group: 2, icon: 'sparkle', title: 'AI', now: s => (hasAiKey(s) ? providerName() : 'Not set up') },
   { id: 'storage', group: 3, icon: 'archive', title: 'Storage', now: () => null },
@@ -152,6 +153,10 @@ function SectionBody({ id, s }) {
         <Group title="Playback">
           <Field title={`Speed · ${speedLabel(s.speed)}`}>
             <SpeedSlider value={s.speed} onChange={speed => settings.set({ speed })} />
+          </Field>
+          <Field title="Daily goal" hint="The ring above your library closes when you have listened this long in a day.">
+            <Segmented value={s.listenGoal} onChange={listenGoal => settings.set({ listenGoal })} size="sm"
+              options={GOAL_MINUTES.map(m => ({ value: m, label: `${m}m` }))} />
           </Field>
           <Toggle checked={s.autoplayNext} onChange={v => settings.set({ autoplayNext: v })} labelText="Play the next document automatically"
             hint="When a document ends, the next unfinished one in your queue starts." />

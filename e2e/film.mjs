@@ -41,7 +41,7 @@ async function film(size) {
   await mod('/src/lib/nav.js', "m.ui.set({ filter: 'all' })")
   const btn = name => page.getByRole('button', { name, exact: true }).first()
   const tab = name => page.getByRole('tab', { name, exact: true }).first()
-  const card = text => page.locator('[role=button]').filter({ hasText: text }).first()
+  const card = text => page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: text }).first()
   let n = 0
   const missed = []
 

@@ -10,6 +10,7 @@ import { library, getDoc, loadDoc, patch, onSegment, setPriority, kickVoice, sec
 import { toast, openSheet } from './nav.js'
 import { wordWeights } from './words.js'
 import { flushNow } from './sync.js'
+import { finishedWords, cheer } from './history.js' // each only reads the other inside functions: no cycle at load
 
 // Two ways to speak, chosen per device (engine.js):
 //   natural — pre-generated Piper audio, played through an <audio> element in continuous stretches of sentences
@@ -270,11 +271,13 @@ function finish() {
   refreshMedia(true)
   if (!id) return
   const s = settings.get()
-  patch(id, { finished: true, pos: 0, posF: 0, ...(s.archiveFinished && { archived: true }) })
+  patch(id, { finished: true, pos: 0, posF: 0, ...(s.archiveFinished && { archived: true }) }) // history records the finish here
   const up = !sleep?.doc && s.autoplayNext && nextInQueue(id, s.sort)
-  if (!up) return
-  toast(`Playing next: ${up.title}`)
-  open(up.id)
+  // A finished book is a moment (Apple Watch's award): said, and felt, once. What plays next is in the same words,
+  // not a second message on top of it.
+  toast(up ? `${finishedWords(id)}. Playing next: ${up.title}` : finishedWords(id))
+  cheer()
+  if (up) open(up.id)
 }
 
 // End of a stretch: carry on with the next one (or stop for the sleep timer / the end of the document).

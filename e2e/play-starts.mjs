@@ -44,7 +44,7 @@ async function add(title) {
 async function pressPlayOnce(title, ms) {
   await page.evaluate(() => document.querySelector('button[aria-label="Back to library"]')?.click()) // a launch may reopen the last book
   await sleep(600)
-  await page.locator('[role=button]').filter({ hasText: title }).first().click()
+  await page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: title }).first().click()
   await until(() => page.evaluate(() => history.state?.view === 'reader'), 8000, 'reader')
   await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
   const t0 = Date.now()

@@ -8,7 +8,7 @@ import { settings, DEFAULTS } from './settings.js'
 import { onShelf } from './shelf.js'
 import { touch, touchAfter } from './sync.js'
 
-export const FOLLOW = ['speed', 'voice', 'sort', 'autoplayNext', 'archiveFinished']
+export const FOLLOW = ['speed', 'voice', 'sort', 'autoplayNext', 'archiveFinished', 'listenGoal']
 const OFFERED = onShelf('noesis.prefs.offered')
 const only = s => Object.fromEntries(FOLLOW.filter(k => s[k] !== undefined).map(k => [k, s[k]]))
 

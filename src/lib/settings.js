@@ -26,6 +26,7 @@ export const DEFAULTS = {
   voice: 'en_GB-alba-medium', // default voice for new documents (voices.js)
   voiceTone: 'natural', // natural | clear | warm | bright — generation-time equalizer (tone.js)
   speed: SPEED_USUAL, // 0.9x: about the pace a person talks at (lib/speed.js)
+  listenGoal: 20, // minutes a day: the daily ring (listening.js ringOf, GOAL_USUAL_MIN)
   paced: 1, // this device knows 0.9x is the usual speed (see load)
   voiceEngine: 'natural', // natural (Piper, generated on the device) | system (built-in TTS) — see engine.js
   systemVoice: '', // voiceURI of the built-in voice ('' = device default)

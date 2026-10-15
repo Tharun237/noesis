@@ -27,7 +27,7 @@ import { hasAiKey } from '../lib/ai.js'
 import { library } from '../lib/library.js'
 import { useHistory, historyStore, makeRetrospective, listeningPlaces } from '../lib/history.js'
 import { dayKey, shelfOf } from '../lib/heard.js'
-import { KINDS, stretch, summary, streaks, calendar, hours, hourName } from '../lib/listening.js'
+import { KINDS, stretch, summary, streaks, calendar, hours, hourName, GOAL_USUAL_MIN } from '../lib/listening.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
 import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur } from './kit.jsx'
@@ -211,11 +211,13 @@ export function Listening({ wide }) {
 }
 
 const Steadily = memo(function Steadily({ log, now, whole, span, kind }) {
-  const run = useMemo(() => streaks(log, now), [log, now])
+  // the ring's streak: days in a row the daily goal was reached (the one streak Noesis keeps)
+  const goal = useStore(settings, s => s.listenGoal) || GOAL_USUAL_MIN
+  const run = useMemo(() => streaks(log, now, goal * 60), [log, now, goal])
   const within = `in ${SPAN[kind].toLowerCase()}`
   return (
     <div data-fade="" style={{ display: 'grid', borderTop: `1px solid ${T.border}` }}>
-      <Fact name="Streak" value={days(run.current)} note={run.longest > run.current ? `longest ${days(run.longest)}, to ${shortDay(run.ended)}` : run.current ? 'your longest yet' : 'a minute a day keeps one going'} />
+      <Fact name="Ring streak" value={days(run.current)} note={run.longest > run.current ? `longest ${days(run.longest)}, to ${shortDay(run.ended)}` : run.current ? 'your longest yet' : `${goal}m a day closes the ring`} />
       <Fact name="Best day" value={whole.best ? fmtDur(whole.best.seconds) : '0m'} note={whole.best ? `${shortDay(whole.best.key)}, ${within}` : within} />
       <Fact name="Days listened" value={`${whole.listened} of ${span}`} note="a minute or more counts" />
       <Fact name="Finished" value={String(whole.finished.length)} note={whole.finished.length ? whole.finished.map(f => f.title).join(', ') : within} />
@@ -269,9 +271,9 @@ const Below = memo(function Below({ log, now }) {
   }
 
   const flat = useMemo(() => cal.flat(), [cal])
-  const calMax = Math.max(QUIET_S, ...flat.map(c => c.seconds))
   const calDays = flat.filter(c => !c.ahead)
-  const calOn = calDays.filter(c => c.seconds >= 60).length
+  const goalS = (settings.get().listenGoal || GOAL_USUAL_MIN) * 60 // a day that reached it closed its ring: full lime
+  const calOn = calDays.filter(c => c.seconds >= goalS).length
   const picks = cell && flat.find(c => c.key === cell)
   const hourMax = Math.max(1, ...hrs.by)
 
@@ -291,12 +293,12 @@ const Below = memo(function Below({ log, now }) {
 
       {/* on which days: one element a day, one tap handler for all of them */}
       {total > 0 && (
-        <Section title={`The last ${WEEKS} weeks`} aside={picks ? `${shortDay(picks.key)} · ${fmtDur(picks.seconds)}` : `${calOn} of ${calDays.length} days`}>
-          <div role="group" aria-label={`A square for each of the last ${calDays.length} days, brighter the more was listened to: ${calOn} with listening. Tap a day for its time.`}
+        <Section title={`The last ${WEEKS} weeks`} aside={picks ? `${shortDay(picks.key)} · ${fmtDur(picks.seconds)}` : `ring closed ${calOn} of ${calDays.length} days`}>
+          <div role="group" aria-label={`A square for each of the last ${calDays.length} days: full where the ring closed (${calOn} days), fainter the less was listened to. Tap a day for its time.`}
             onClick={e => { const k = e.target.dataset?.day; if (k) setCell(cell === k ? null : k) }}
             style={{ display: 'grid', gridTemplateColumns: `repeat(${WEEKS}, minmax(0, 1fr))`, gridTemplateRows: 'repeat(7, auto)', gridAutoFlow: 'column', gap: 4, cursor: 'pointer' }}>
             {flat.map(c => {
-              const level = c.seconds >= 60 ? 0.28 + 0.72 * Math.min(1, c.seconds / calMax) : 0
+              const level = c.seconds >= goalS ? 1 : c.seconds >= 60 ? 0.16 + 0.44 * (c.seconds / goalS) : 0 // closed: full; on the way: up to 60%
               return <div key={c.key} data-day={c.ahead ? undefined : c.key} style={{ aspectRatio: '1', borderRadius: 4, background: c.ahead ? 'transparent' : level ? `rgb(${LIME} / ${level.toFixed(2)})` : T.surfaceHi, outline: c.key === today || c.key === cell ? `1.5px solid ${c.key === cell ? T.text : T.borderHi}` : 'none', outlineOffset: 1 }} />
             })}
           </div>

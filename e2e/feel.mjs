@@ -97,7 +97,7 @@ async function measure(name, act) {
   rows.push({ name, first: Math.round(first), worst: Math.round(worst), late, frames: gaps.length, script: Math.round(script), took: Date.now() - started })
 }
 
-const card = t => page.locator('[role=button]').filter({ hasText: t }).first()
+const card = t => page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: t }).first()
 await measure('open a long book', () => card('The long river').click())
 await measure('sit still in the reader', () => sleep(50)) // nothing happening: script here is pure overhead
 await measure('open the reader menu', () => btn('Document menu').click())

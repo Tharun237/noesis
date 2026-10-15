@@ -65,7 +65,7 @@ const step = async (name, act, { shot } = {}) => {
   if (errs.length > before) flags.push(...errs.slice(before))
   console.log(`${String(n).padStart(2)} ${name.padEnd(36)} → ${state.view}${state.sheet ? '+' + state.sheet : ''} d${state.depth} dlg${state.dialogs} menu${state.menus}${flags.length ? '   !! ' + flags.join(' | ') : ''}`)
 }
-const card = t => page.locator('[role=button]').filter({ hasText: t }).first()
+const card = t => page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: t }).first()
 const btn = name => page.getByRole('button', { name, exact: true }).first()
 
 await step('open a document', () => card('Dad joke').click(), { shot: true })

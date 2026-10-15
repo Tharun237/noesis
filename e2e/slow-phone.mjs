@@ -65,7 +65,7 @@ await until(() => app('m.lib.library.get().loaded'), 20000, 'library')
 const cdp = await ctx.newCDPSession(page)
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU })
 
-await page.locator('[role=button]').filter({ hasText: TITLE }).first().click()
+await page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: TITLE }).first().click()
 await until(() => page.evaluate(() => history.state?.view === 'reader'), 15000, 'reader')
 await page.getByRole('button', { name: /^(Play|Resume)$/ }).first().click()
 const t0 = Date.now(), log = []

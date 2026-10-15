@@ -28,6 +28,9 @@ export const T = {
   // it could be adding colour"). The page, its type and its controls stay black, white and lime.
   //   mood: the feeling of the writing along a book's timeline: warm where it is brighter, blue where darker.
   mood: { bright: '#FFB23E', calm: '#F2F2F7', dark: '#6C7BFF' },
+  //   ring: the daily rings above the library (Heard.jsx Rings): today in lime, the week in rose; the third is
+  //   the book's own colour. Each ring one colour, told apart at a glance, as Apple's are.
+  ring: { today: '#AAFF00', week: '#FF4F8B' },
 
   font: "'DM Sans Variable', 'DM Sans', system-ui, -apple-system, sans-serif",
   // Labels, numbers and small print are set in the same face as everything else (figures line up: the page

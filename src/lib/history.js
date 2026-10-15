@@ -20,6 +20,10 @@ import { touch, deviceName } from './sync.js'
 import { aiText } from './ai.js'
 import { onShelf } from './shelf.js'
 import { dayKey, listenedBetween, mergeLogs, yearOf, yearsIn, newest, addHour, justStopped } from './heard.js'
+import { settings } from './settings.js'
+import { toast } from './nav.js'
+import { haptic, CHEER } from './haptics.js'
+import { streaks } from './listening.js'
 
 export const emptyLog = () => ({ titles: {}, finished: [], hours: {} })
 
@@ -48,6 +52,17 @@ export function markFinished(log, day, docId) {
 // How many different documents were finished on days that start with `prefix` ('2026-10' or '2026'). A book
 // finished twice in the period is one book, and a deleted document's finish still counts: the log keeps it.
 const finishedIn = (log, prefix) => new Set((log.finished || []).filter(f => f.day && f.day.startsWith(prefix)).map(f => f.id)).size
+
+// What finishing a book says (player.js finish): which one, and how many this year, counted from the record.
+const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth']
+const ordinal = n => ORDINAL[n - 1] || `${n}${[11, 12, 13].includes(n % 100) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`
+export function finishedWords(id) {
+  const log = historyStore.get().log
+  const n = finishedIn(log, String(new Date().getFullYear()))
+  const title = getDoc(id)?.title || log.titles?.[id] || 'the document'
+  return n ? `Finished ${title} · your ${ordinal(n)} this year` : `Finished ${title}`
+}
+export const cheer = () => settings.get().haptics && haptic(CHEER) // only for someone who chose to feel the app
 
 const dayTotal = (log, key) => {
   const m = log?.[key]
@@ -310,7 +325,15 @@ export function startHistory() {
     if (!loaded || !seconds) return
     const title = getDoc(id)?.title || own.titles?.[id] || historyStore.get().log.titles?.[id] || 'Untitled'
     const when = new Date(now)
+    const goal = (settings.get().listenGoal || 0) * 60
+    const before = dayTotal(historyStore.get().log, dayKey(when))
     record(log => addHour(addSeconds(log, dayKey(when), id, seconds, title), String(when.getFullYear()), when.getHours(), seconds))
+    // the listening here just closed today's ring: said once, the moment it happens (Apple Watch's "closed")
+    if (goal && before < goal && before + seconds >= goal) {
+      const run = streaks(historyStore.get().log, when, goal).current
+      toast(run > 1 ? `You closed your ring · ${run} days in a row` : 'You closed your ring')
+      cheer()
+    }
     // written down every 20 seconds while sound plays, and at once when it stops: closing the app straight
     // after a pause loses nothing (it lost up to 20 seconds)
     if (now - lastSave >= 20000 || !last.id) {

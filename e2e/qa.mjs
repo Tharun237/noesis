@@ -349,7 +349,7 @@ await step('add scanned PDF (Traction)', async () => {
 await step('pages view shows the original PDF', async () => {
   await page.evaluate(() => history.state.view !== 'library' && document.querySelector('button[aria-label="Back to library"]')?.click())
   await sleep(500)
-  await page.locator('[role=button]').filter({ hasText: 'Traction' }).first().click()
+  await page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: 'Traction' }).first().click()
   await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
   await click('tab', 'Pages')
   await until(() => page.evaluate(() => {
@@ -373,7 +373,7 @@ await step('the spoken sentence is marked on the PDF page, and a tap on a line s
   await maker.pdf({ path: pdfPath, format: 'A4', margin: { top: '60px', bottom: '60px', left: '50px', right: '50px' } })
   await maker.close()
   const d = await addViaSheet(async () => { await page.locator('input[type=file]').setInputFiles(pdfPath) })
-  await page.locator('[role=button]').filter({ hasText: 'Marked page test' }).first().click()
+  await page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: 'Marked page test' }).first().click()
   await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
   await click('tab', 'Pages')
   await until(() => page.evaluate(() => [...document.querySelectorAll('[data-testid="page-view"] canvas')].some(c => c.width > 100)), 30000, 'a drawn page')
@@ -447,7 +447,7 @@ const traction = () => app("m.lib.library.get().docs.find(d => d.title.startsWit
 const openDoc = async prefix => {
   await page.evaluate(() => history.state.view !== 'library' && document.querySelector('button[aria-label="Back to library"]')?.click())
   await sleep(500)
-  await page.locator('[role=button]').filter({ hasText: prefix }).first().click()
+  await page.locator('[role=button]:not([aria-label^="Your listening"])').filter({ hasText: prefix }).first().click()
   await until(() => page.evaluate(() => history.state?.view === 'reader'), 5000, 'reader')
 }
 

@@ -1,7 +1,7 @@
 // What the "Your listening" page says (listening.js): every number a sum or a count of the record.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { stretch, summary, streaks, calendar, hours, hourName } from './listening.js'
+import { stretch, summary, streaks, calendar, hours, hourName, ringOf, GOAL_USUAL_MIN } from './listening.js'
 import { dayKey } from './heard.js'
 
 const now = new Date(2026, 9, 13, 21, 30) // Tuesday 13 October 2026, in the evening
@@ -82,4 +82,15 @@ test('the hour of the day, every year together', () => {
   assert.equal(hourName(21), '9 pm')
   assert.equal(hourName(0), '12 am')
   assert.equal(hours({}).peak, null)
+})
+
+test('the ring: today against the goal, and the streak of days it closed', () => {
+  // today 1800 s (30 min), yesterday 900 s (15 min), the day before 30 s, then 2400 s three days ago
+  assert.deepEqual(ringOf(log, now, 20), { today: 1800, goal: 1200, share: 1, closed: true, left: 0 })
+  assert.deepEqual(ringOf(log, now, 60), { today: 1800, goal: 3600, share: 0.5, closed: false, left: 1800 })
+  assert.equal(ringOf({}, now, GOAL_USUAL_MIN).share, 0)
+  // closed on a day = listened at least the goal that day; today not closed yet does not break the run
+  assert.equal(streaks(log, now, 15 * 60).current, 2) // today and yesterday both reached 15 min
+  assert.equal(streaks(log, now, 20 * 60).current, 1) // yesterday's 15 min did not reach 20
+  assert.equal(streaks(log, now, 40 * 60).current, 0) // today (30 min) not closed yet, yesterday not either
 })
