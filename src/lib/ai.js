@@ -201,19 +201,18 @@ export async function aiText({ prompt, parts, system, json, schema, shape, signa
   // account took more than the 100 s the site's relay (Cloudflare) holds a silent line open: cut off (HTTP 524),
   // asked again, cut off again, while the screen blamed the quota (15 October 2026).
   const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: true, ...quick(p), messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
-  const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
-    .catch(e => { throw openaiFail(e, p) })
   let whole = ''
-  if (/event-stream/i.test(res.headers.get('content-type') || '')) {
-    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-    for (let buf = ''; ;) {
-      const { done, value } = await reader.read()
-      const r = parseSse(buf + (value || '') + (done ? '\n' : ''))
-      buf = r.rest
-      whole += r.texts.join('')
-      if (r.done || done) break
+  for (let again = 0; ; again++) {
+    const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
+      .catch(e => { throw openaiFail(e, p) })
+    if (!/event-stream/i.test(res.headers.get('content-type') || '')) { whole = (await res.json()).choices?.[0]?.message?.content || ''; break } // one piece anyway
+    whole = ''
+    try { await readStream(res, t => { whole += t }); break } catch (e) {
+      if (!e.stalled || signal?.aborted) throw e
+      if (again >= STALL_TRIES) throw new Error(`${p.name} stopped answering part way. Try again.`)
+      onRetry?.(null) // asked again from the start: nothing of a stalled answer is kept
     }
-  } else whole = (await res.json()).choices?.[0]?.message?.content || '' // a provider that answers in one piece anyway
+  }
   const text = stripThinking(whole)
   if (!text) throw new Error(`${p.name} returned no text`)
   return text
@@ -252,16 +251,30 @@ export async function aiStream({ system, messages, onText, signal, onRetry }) {
   const body = JSON.stringify({ model: p.model, temperature: 0.4, stream: true, ...quick(p), messages: [{ role: 'system', content: system }, ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))] })
   const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 3, onRetry })
     .catch(e => { throw openaiFail(e, p) })
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
-  let buf = ''
   const visible = thinkFilter() // a reasoning model streams <think>…</think> first: not for the listener
-  for (;;) {
-    const { done, value } = await reader.read()
-    const r = parseSse(buf + (value || '') + (done ? '\n' : ''))
+  // Part of the answer is already on screen: a stalled one is said, not asked again from the start.
+  await readStream(res, piece => { const t = visible(piece); if (t) onText(t) })
+    .catch(e => { throw e.stalled ? new Error(`${p.name} stopped answering part way. Ask again.`) : e })
+  const t = visible.flush()
+  if (t) onText(t)
+}
+
+// A streamed answer, piece by piece. No piece for STALL_MS and the answer has stalled: a stream that stops part
+// way would otherwise be waited on for ever (a briefing sat four minutes and more on one request, 15 October 2026:
+// streamed, nothing cuts a silent line any more). The pieces read so far have been handed on.
+const STALL_MS = 90_000
+const STALL_TRIES = 2 // a stalled answer is asked again this many times
+export async function readStream(res, onPiece, stallMs = STALL_MS) {
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  for (let buf = ''; ;) {
+    let timer
+    const next = await Promise.race([reader.read(), new Promise(r => { timer = setTimeout(() => r(null), stallMs) })])
+    clearTimeout(timer)
+    if (!next) { reader.cancel().catch(() => {}); throw Object.assign(new Error('stalled'), { stalled: true }) }
+    const r = parseSse(buf + (next.value || '') + (next.done ? '\n' : ''))
     buf = r.rest
-    for (const piece of r.texts) { const t = visible(piece); if (t) onText(t) }
-    if (r.done || done) { const t = visible.flush(); if (t) onText(t) }
-    if (r.done || done) break
+    for (const piece of r.texts) onPiece(piece)
+    if (r.done || next.done) return
   }
 }
 

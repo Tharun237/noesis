@@ -1,7 +1,7 @@
 // Pure parts of the AI provider door.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isGeminiKey, isNvidiaKey, parseSse, cleanBase, hostOf, stripThinking, thinkFilter, explainError, provider, hasAiKey, splitText, rankModels } from './ai.js'
+import { isGeminiKey, isNvidiaKey, parseSse, cleanBase, hostOf, stripThinking, thinkFilter, explainError, provider, hasAiKey, splitText, rankModels, readStream } from './ai.js'
 
 test('isGeminiKey keeps the old rule: trimmed key longer than 20 characters', () => {
   assert.equal(isGeminiKey('  ' + 'x'.repeat(21) + '  '), true)
@@ -91,4 +91,15 @@ test('a model is chosen from what the key answers: one to talk with, the best of
   for (const no of ['safety', 'parse', 'translate', 'diffusion', 'vision', 'laguna']) assert.ok(!ranked.some(id => id.includes(no)), no)
   assert.ok(ranked.includes('openai/gpt-oss-20b') && ranked.includes('stepfun-ai/step-5-preview'))
   assert.deepEqual(rankModels([]), [])
+})
+
+test('a streamed answer that goes silent part way is ended, not waited on for ever', async () => {
+  const sse = text => new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}` + String.fromCharCode(10, 10))
+  const stream = (chunks, close) => new Response(new ReadableStream({ start(c) { for (const x of chunks) c.enqueue(x); if (close) c.close() } }))
+  const got = []
+  await readStream(stream([sse('Hello'), sse(' world'), new TextEncoder().encode('data: [DONE]' + String.fromCharCode(10))], true), t => got.push(t), 200)
+  assert.equal(got.join(''), 'Hello world')
+  const part = []
+  await assert.rejects(readStream(stream([sse('Half an ans')], false), t => part.push(t), 50), e => e.stalled === true)
+  assert.equal(part.join(''), 'Half an ans') // what came before the silence was handed on
 })
