@@ -12,6 +12,8 @@
 //   DELETE /drive/v3/files/<id>
 //   POST   /upload/drive/v3/files?uploadType=multipart
 //   PATCH  /upload/drive/v3/files/<id>?uploadType=multipart
+//   POST   /upload/drive/v3/files?uploadType=resumable   → Location: the upload's own address
+//   PUT    <that address>  Content-Range: bytes a-b/n | bytes */n   → 308 + Range, or the file
 import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -57,8 +59,34 @@ function parts(bytes, type) {
   return { meta: JSON.parse(td.decode(bytes.subarray(metaFrom, b - 2))), body: bytes.slice(bodyFrom, end - 2) }
 }
 
+// Resumable uploads under way: the address itself is the permission (as on Drive), so its pieces carry no pass.
+const sessions = new Map() // upload id → { who, meta, total, bytes, got }
+function piece(request, sid, d) {
+  const up = sessions.get(sid)
+  if (!up) return refuse(404, 'notFound', 'Upload session not found')
+  const range = /^bytes (?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(request.headers.get('content-range') || '')
+  if (!range || +range[3] !== up.total) return refuse(400, 'badRequest', 'Bad Content-Range')
+  const status = () => new Response(null, { status: 308, headers: up.got ? { range: `bytes=0-${up.got - 1}` } : {} })
+  return (async () => {
+    if (range[1] != null) {
+      const body = new Uint8Array(await request.arrayBuffer())
+      if (+range[1] !== up.got || body.length !== +range[2] - +range[1] + 1) return status() // not where it left off: say where that is
+      up.bytes.set(body, up.got)
+      up.got += body.length
+    }
+    if (up.got < up.total) return status()
+    sessions.delete(sid)
+    const f = { id: crypto.randomUUID(), name: up.meta.name, appProperties: up.meta.appProperties || {}, bytes: up.bytes, seq: ++d.seq }
+    d.files.set(f.id, f)
+    keep()
+    return json(shown(f))
+  })()
+}
+
 export async function handleDevDrive(request, env) {
   if (env.DEV_LOGIN !== '1' || !isLocal(request.url)) return refuse(404, 'notFound', 'Not found')
+  const session = /\/api\/devdrive\/upload\/session\/([^/?]+)/.exec(new URL(request.url).pathname)?.[1]
+  if (session && request.method === 'PUT') return piece(request, session, drives.get(sessions.get(session)?.who) || { seq: 0, files: new Map() })
   const who = (request.headers.get('authorization') || '').replace(/^Bearer /, '')
   if (!who.startsWith('dev:')) return refuse(401, 'authError', 'Invalid Credentials')
   const d = drives.get(who) ?? drives.set(who, { seq: 0, files: new Map(), removed: [] }).get(who)
@@ -78,6 +106,13 @@ export async function handleDevDrive(request, env) {
     })
   }
   if (path === '/drive/v3/files') return json({ files: [...d.files.values()].map(shown) })
+  if (path === '/upload/drive/v3/files' && url.searchParams.get('uploadType') === 'resumable') {
+    const total = +request.headers.get('x-upload-content-length')
+    if (!(total > 0)) return refuse(400, 'badRequest', 'X-Upload-Content-Length is needed')
+    const sid = crypto.randomUUID()
+    sessions.set(sid, { who, meta: await request.json(), total, bytes: new Uint8Array(total), got: 0 })
+    return new Response(null, { status: 200, headers: { location: `${url.protocol}//${request.headers.get('host') || url.host}/api/devdrive/upload/session/${sid}` } })
+  }
   if (path.startsWith('/upload/drive/v3/files')) {
     const { meta, body } = parts(new Uint8Array(await request.arrayBuffer()), request.headers.get('content-type'))
     const f = id ? d.files.get(id) : { id: crypto.randomUUID(), name: meta.name }

@@ -11,7 +11,7 @@
 // before it. Not the whole library at once: a key's free quota, and a phone's memory, are spent where they are heard.
 // The page is drawn, and its text read, in a worker (figpage.worker.js): on the page's own thread a phone felt it.
 import { settings } from './settings.js'
-import { library, loadDoc, figuresArrived } from './library.js'
+import { library, loadDoc, figuresArrived, originals } from './library.js'
 import { player } from './player.js'
 import { aiText, canSee, chooseVisionModel, hasAiKey } from './ai.js'
 import { db } from './db.js'
@@ -149,6 +149,11 @@ export function startFigures() {
   player.sub(() => { const now = player.get().id; if (now !== id) { id = now; kickFigures() } })
   let was = ''
   settings.sub(() => { const s = settings.get(); const now = [s.describeFigures, s.aiProvider, s.nvidiaKey, s.nvidiaModel, s.nvidiaVision, s.customKey, s.customModel, s.customVision, s.skipVisuals].join('|'); if (now !== was) { was = now; refused = false; kickFigures() } })
+  originals.sub(() => { // a file fetched from the customer's Drive (Pages on a device it was not added on)
+    let more = false
+    for (const [id, st] of Object.entries(originals.get())) if (st?.done && noFile.delete(id)) more = true
+    if (more) kickFigures()
+  })
   let ready = 0
   library.sub(() => { const n = library.get().docs.filter(d => d.status === 'ready' || d.status === 'voicing').length; if (n !== ready) { ready = n; kickFigures() } })
 }

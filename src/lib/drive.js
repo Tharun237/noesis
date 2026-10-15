@@ -57,7 +57,7 @@ const unanswered = e => (e?.name === 'TimeoutError' || e?.name === 'AbortError' 
 
 async function call(path, init = {}, again = true) {
   const p = await getPass()
-  const res = await fetch(p.api + path, { ...init, signal: AbortSignal.timeout(init.body ? UPLOAD_MS : ANSWER_MS), headers: { ...init.headers, authorization: `Bearer ${p.value}` } }).catch(e => { throw unanswered(e) })
+  const res = await fetch(p.api + path, { ...init, signal: init.signal || AbortSignal.timeout(init.body ? UPLOAD_MS : ANSWER_MS), headers: { ...init.headers, authorization: `Bearer ${p.value}` } }).catch(e => { throw unanswered(e) })
   if (res.status === 401 && again) { forgetPass(); return call(path, init, false) } // the pass ran out early: one fresh one
   if (!res.ok) throw Object.assign(new Error(await why(res)), { status: res.status })
   return res
@@ -106,4 +106,73 @@ export async function write(name, at, body, id, quick = false) {
     method: id ? 'PATCH' : 'POST', headers: { 'content-type': `multipart/related; boundary=${boundary}` }, body: data, keepalive: quick,
   })
   return (await res.json()).id
+}
+
+// ── a document's own file (a PDF): too large for one request ─────────────────────────────────────────────
+// Drive's resumable upload, as Google's own browser sample does it (developers.google.com/workspace/drive/api/
+// guides/manage-uploads, and github.com/googledrive/cors-upload-sample, read 2026-10-15): the details first,
+// which answer with the upload's own address (Location); then the file in pieces of a multiple of 256 KB, each
+// answered 308 with how much has arrived (Range) until the last, answered with the file. The address is the
+// permission: the pieces carry no pass. It is good for a week, so an upload cut off (the app closed, the phone
+// asleep) carries on from where Drive says it got to: `kept` is { uri, size } from the last try, `keep` saves it.
+const PIECE = 16 * 256 * 1024 // 4 MB: on a slow line a lost piece is little to send again
+const nextByte = res => { const m = /bytes=0-(\d+)/.exec(res.headers.get('range') || ''); return m ? +m[1] + 1 : 0 }
+async function piece(uri, range, body) {
+  const res = await fetch(uri, { method: 'PUT', headers: { 'content-range': range, ...(body ? { 'content-type': body.type || 'application/octet-stream' } : {}) }, body, signal: AbortSignal.timeout(body ? UPLOAD_MS : ANSWER_MS) }).catch(e => { throw unanswered(e) })
+  if (res.ok) return { id: (await res.json()).id }
+  if (res.status === 308) return { from: nextByte(res) }
+  throw Object.assign(new Error(await why(res)), { status: res.status })
+}
+export async function upload(name, at, blob, kept, keep) {
+  let uri = kept?.size === blob.size ? kept.uri : null
+  let from = 0
+  if (uri) {
+    const got = await piece(uri, `bytes */${blob.size}`).catch(e => { if (e.status === 404 || e.status === 410) return null; throw e }) // a week old: start again
+    if (got?.id) return got.id
+    if (got) from = got.from
+    else uri = null
+  }
+  if (!uri) {
+    const res = await call(`/upload/drive/v3/files?${query({ uploadType: 'resumable', fields: 'id' })}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=UTF-8', 'x-upload-content-type': blob.type || 'application/octet-stream', 'x-upload-content-length': String(blob.size) },
+      body: JSON.stringify({ name, parents: [SPACE], appProperties: { at: String(at) } }),
+    })
+    uri = res.headers.get('location')
+    if (!uri) throw new Error('Google Drive did not start the upload. Noesis will try again.')
+    from = 0
+    await keep?.({ uri, size: blob.size })
+  }
+  for (;;) {
+    const end = Math.min(blob.size, from + PIECE)
+    const got = await piece(uri, `bytes ${from}-${end - 1}/${blob.size}`, blob.slice(from, end, blob.type))
+    if (got.id) return got.id
+    from = got.from // what Drive says it has, not what was sent
+  }
+}
+
+// A large file, read for as long as it keeps arriving: given up only when nothing has come for STALL_MS, so a
+// book on a slow line is not cut off at a fixed time, and one that has stopped does not wait for ever.
+// onBytes(got, of) as it comes; → a Blob.
+const STALL_MS = 30_000
+export async function readLarge(id, type, onBytes) {
+  const stop = new AbortController()
+  let timer = setTimeout(() => stop.abort(), STALL_MS)
+  try {
+    const res = await call(`/drive/v3/files/${id}?alt=media`, { signal: stop.signal })
+    const of = +res.headers.get('content-length') || 0
+    const reader = res.body.getReader()
+    const chunks = []
+    let got = 0
+    for (;;) {
+      const { done, value } = await reader.read().catch(e => { throw unanswered(e) })
+      if (done) break
+      clearTimeout(timer)
+      timer = setTimeout(() => stop.abort(), STALL_MS)
+      chunks.push(value)
+      got += value.length
+      onBytes?.(got, of)
+    }
+    return new Blob(chunks, { type })
+  } finally { clearTimeout(timer) }
 }

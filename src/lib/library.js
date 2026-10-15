@@ -21,7 +21,7 @@ import { carrier } from './carry.js'
 import { mergeMarks, sameMarks, carryMarks } from './marks.js'
 import { prefsSnapshot, applyPrefs, quietly, offerPrefs } from './prefs.js'
 import { muxOggOpus, unpackPackets, wav } from './audio-format.js'
-import { touch, touchAfter, configureSync, startSync, downloadContent, deviceName } from './sync.js'
+import { touch, touchAfter, configureSync, startSync, downloadContent, downloadOriginal, account, deviceName } from './sync.js'
 
 // Document lifecycle: queued → reading → narrating (AI only) → voicing → ready  (or error)
 // Two independent loops: PREP (parse + optional Gemini) and VOICE (on-device TTS, one sentence at a time),
@@ -470,7 +470,8 @@ async function prepare(id) {
   try {
     patch(id, { status: 'reading', stage: 'Reading the document', error: null, prep: 0 })
     let src = await db.getSource(id)
-    if (!src) throw new Error('The original file is on the device you added it from. Re-process it there.')
+    if (!src && d.kind === 'pdf' && await fetchOriginal(id)) src = await db.getSource(id) // from the customer's Drive
+    if (!src) throw new Error('The original file is not on this device, and not in your Google Drive yet. Open Noesis on the device you added it on, online.')
     // A translated version points at the original instead of copying its file.
     // It is made from the original's prepared text, not by reading the file again: no second pass of
     // page reading or AI narration, and block n here is block n there, which is how the place is carried.
@@ -893,7 +894,40 @@ export async function figuresArrived(id, keys) {
   if (remake.has(id)) kickVoice()
 }
 
+// A PDF's own file on this device. Sent to the customer's Drive by the device that has it (sync.js), fetched
+// from there by any other when its pages are wanted: every device shows a document's pages, not only the one
+// it was added on. originals: id → { got, of } while it comes, { error } when it cannot (yet), { done }.
+export const originals = createStore({})
+const gettingFile = new Map() // id → the fetch under way
+export function fetchOriginal(id) {
+  if (gettingFile.has(id)) return gettingFile.get(id)
+  const job = (async () => {
+    const d = getDoc(id)
+    if (!d || d.kind !== 'pdf' || d.from) return false // a translation points at its original's file
+    if ((await db.getSource(id))?.blob) return true
+    if (!account.get().user) { originals.set({ [id]: { error: 'away' } }); return false }
+    if (!navigator.onLine) { originals.set({ [id]: { error: 'offline' } }); return false }
+    originals.set({ [id]: { got: 0, of: 0 } })
+    try {
+      const blob = await downloadOriginal(id, 'application/pdf', (got, of) => originals.set({ [id]: { got, of } }))
+      if (!blob) { originals.set({ [id]: { error: 'notYet' } }); return false }
+      if (!getDoc(id)) return false // deleted while it came
+      await db.putSource(id, { kind: 'pdf', name: `${d.title || 'Document'}.pdf`, blob })
+      originals.set({ [id]: { done: true } })
+      return true
+    } catch (e) {
+      originals.set({ [id]: { error: navigator.onLine ? e.message || String(e) : 'offline' } })
+      return false
+    }
+  })().finally(() => gettingFile.delete(id))
+  gettingFile.set(id, job)
+  return job
+}
+
 const syncHooks = {
+  // the files to send, the book being listened to first
+  originals: async () => [...library.get().docs].filter(d => d.kind === 'pdf' && !d.from && !d.deleted).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).map(d => d.id),
+  original: async id => (await db.getSource(id))?.blob || null,
   allKeys: async () => ['cols', 'prefs', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id, ...(hasAny(d.id) ? ['figs:' + d.id] : [])]), ...(await heard?.keys() || [])],
   content: id => db.getDoc(id),
   snapshot(k) {

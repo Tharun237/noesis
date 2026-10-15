@@ -38,7 +38,9 @@ const apiInDev = {
     const { env } = await getPlatformProxy()
     const route = (path, handler) => server.middlewares.use(path, async (req, res) => {
       const chunks = []
-      for await (const c of req) chunks.push(c)
+      // A browser closed half-way through sending (a test closes the laptop mid-upload) ends the request: there
+      // is no one to answer. Uncaught, it stopped the whole dev server.
+      try { for await (const c of req) chunks.push(c) } catch { return }
       const body = chunks.length ? Buffer.concat(chunks) : undefined
       const r = await handler(new Request('http://localhost' + req.originalUrl, { method: req.method, headers: req.headers, body }), env)
       res.statusCode = r.status

@@ -5,7 +5,8 @@ import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet, tab as showTab } from '../lib/nav.js'
-import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation } from '../lib/library.js'
+import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation, fetchOriginal, originals } from '../lib/library.js'
+import { account, syncState } from '../lib/sync.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate, startNow } from '../lib/player.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
@@ -196,10 +197,21 @@ export function Reader({ wide }) {
     return () => { live = false }
   }, [id, d?.kind])
 
-  const pagesAvailable = d?.kind === 'pdf' && hasSource === true
-  const view = readerView === 'focus' ? 'focus' : pagesAvailable && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
+  // A PDF has pages on every device: where its file is not on this one yet, it comes from the customer's Drive
+  // (library.js fetchOriginal), quietly as the book is opened, so Pages is there when it is chosen.
+  const pdf = d?.kind === 'pdf' && !d.from
+  const pagesAvailable = pdf && hasSource === true // the side pane only shows a file that is here
+  const view = readerView === 'focus' ? 'focus' : pdf && !pdfFail && readerView === 'pages' ? 'pages' : 'text'
+  const synced = useStore(syncState, s => s.last > 0) // the folder has been looked at: it is known whether the file is there
+  const spare = typeof navigator !== 'undefined' && !!navigator.connection?.saveData // the customer asked to spare data: only when Pages is chosen
+  useEffect(() => {
+    if (!pdf || hasSource !== false || !synced || (spare && view !== 'pages')) return undefined
+    let live = true
+    fetchOriginal(id).then(ok => live && ok && setHasSource(true))
+    return () => { live = false }
+  }, [id, pdf, hasSource, synced, spare, view])
   // The Pages view is fetched while the customer reads, so choosing it never shows an empty frame first.
-  useEffect(() => { if (pagesAvailable) whenIdle(PageView.fetch) }, [pagesAvailable])
+  useEffect(() => { if (pdf) whenIdle(PageView.fetch) }, [pdf])
   useEffect(() => { whenIdle(() => { AskPanel.fetch(); Insights.fetch(); BlockTool.fetch(); CitationSheet.fetch() }) }, [])
   // "Both": the flowing text with the original page beside it. A wide screen only; elsewhere it is the text.
   // The original page beside the text is a pane the reader opens and closes (wide screens), like Contents on
@@ -370,9 +382,9 @@ export function Reader({ wide }) {
         </div>
         {d && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: SUBROW_H, padding: `0 ${wide ? 20 : 14}px 10px` }}>
-            <div style={{ width: pagesAvailable ? 240 : 164, flexShrink: 0 }}>
+            <div style={{ width: pdf ? 240 : 164, flexShrink: 0 }}>
               <Segmented size="sm" value={view}
-                options={[{ value: 'text', label: 'Text' }, ...(pagesAvailable ? [{ value: 'pages', label: 'Pages' }] : []), { value: 'focus', label: 'Focus' }]}
+                options={[{ value: 'text', label: 'Text' }, ...(pdf ? [{ value: 'pages', label: 'Pages' }] : []), { value: 'focus', label: 'Focus' }]}
                 onChange={v => { setPdfFail(false); userScroll.current = 0; settings.set({ readerView: v }) }} />
             </div>
             <div style={{ flex: 1, minWidth: 0, textAlign: 'right', fontFamily: T.mono, fontSize: 12, color: T.sub, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -448,11 +460,11 @@ export function Reader({ wide }) {
                 {numPages > 0 && doc && !linked && (
                   <div style={{ fontSize: 13, lineHeight: 1.5, color: T.sub, margin: '0 0 16px' }}>These pages are not linked to the voice, so they do not follow it. Add the file again to link them.</div>
                 )}
-                <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
+                {hasSource !== true ? <PagesComing id={id} checking={hasSource == null} onHere={() => setHasSource(true)} /> : <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
                   onPages={setNumPages} onVisible={setVisPage}
                   pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek} spoken={spoken}
                   onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }}
-                  onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />
+                  onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />}
               </Suspense>
             ) : view === 'focus' ? (
               doc && (
@@ -754,6 +766,43 @@ function Preparing({ d, doc, pos }) {
 
 // Word timing lives in src/lib/words.js so the lock screen can reuse it; the clock is useLitWord (litword.js).
 // `wipe` false (justified text, where the page may hyphenate any word): the word lights whole.
+// The pages of a PDF whose file is not on this device yet: coming from the customer's Drive, with how much has
+// come; or, when they cannot come now, why, and what will bring them. Never a Pages view that is just missing.
+const MB = n => `${(n / 1048576).toFixed(n < 10485760 ? 1 : 0)} MB`
+function PagesComing({ id, checking, onHere }) {
+  const st = useStore(originals, o => o[id]) || null
+  const signedIn = useStore(account, a => !!a.user)
+  useEffect(() => { // back online: it comes by itself
+    if (st?.error !== 'offline') return undefined
+    const on = () => fetchOriginal(id).then(ok => ok && onHere())
+    addEventListener('online', on)
+    return () => removeEventListener('online', on)
+  }, [id, st?.error, onHere])
+  if (checking || (!st && signedIn)) return pageGhost // looking on this device, or the folder is still being looked at
+  const coming = st && !st.error && !st.done
+  const words = coming ? 'Getting the pages from your Google Drive'
+    : st?.error === 'notYet' ? 'These pages are still on the device this was added on. They come here once Noesis has been open there, online.'
+    : st?.error === 'offline' ? 'These pages come from your Google Drive. They will come when you are online.'
+    : !signedIn || st?.error === 'away' ? 'These pages are on the device this was added on. Sign in there and here with the same account to have them on both.'
+    : `The pages could not be fetched from your Google Drive. ${st?.error || ''}`
+  const retry = st?.error && !['notYet', 'offline', 'away'].includes(st.error) && signedIn
+  return (
+    <div style={{ width: '100%', aspectRatio: `1 / ${PAGE_SHAPE}`, borderRadius: T.r.sm, background: T.surface, border: `1px solid ${T.border}`, display: 'grid', placeItems: 'center', padding: 24, boxSizing: 'border-box' }}>
+      <div data-fade="" style={{ width: 'min(100%, 320px)', display: 'grid', gap: 12, textAlign: 'center', justifyItems: 'center' }}>
+        {coming && <Spinner size={18} color={T.sub} />}
+        <div style={{ fontSize: 15, lineHeight: 1.5, color: coming ? T.text : T.sub }}><Swap>{words}</Swap></div>
+        {coming && st.of > 0 && (
+          <div style={{ width: '100%', display: 'grid', gap: 8 }}>
+            <Progress value={st.got / st.of} />
+            <div style={{ fontSize: 12, color: T.sub, fontVariantNumeric: 'tabular-nums' }}>{MB(st.got)} of {MB(st.of)}</div>
+          </div>
+        )}
+        {retry && <Button onClick={() => fetchOriginal(id).then(ok => ok && onHere())}>Try again</Button>}
+      </div>
+    </div>
+  )
+}
+
 function ActiveSentence({ i, text, dur, tail, words, plain, wipe, cut }) {
   const { ws, starts, lit, ms, shown: showWords } = useLitWord(text, dur, tail, words)
   const brk = cut ? starts.findIndex(s => s >= cut) : -1 // a figure's description starts on its own line, spoken or not

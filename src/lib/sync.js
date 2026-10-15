@@ -17,7 +17,7 @@
 // send what of ours is newer". If two devices write the same record in the same moment, whichever write
 // landed second is what the folder holds; the device whose copy is newer notices on its next round that the
 // folder is behind and sends its copy again. So they end on the newest, whatever the order.
-import { get, set } from 'idb-keyval'
+import { get, set, del } from 'idb-keyval'
 import { openStore, canStore } from './db.js'
 import { createStore } from './store.js'
 import * as drive from './drive.js'
@@ -41,8 +41,9 @@ const TAKE_AT_ONCE = 6
 const SAY_FROM = 8 // fewer records than this are taken without saying so: it is over before it could be read
 const FIRST = ['meta', 'cols', 'heard', 'marks', 'pos'] // a library is its documents; places and bookmarks follow
 const TEXT = 'doc:' // the prefix of a book-text part: fetched when a document is opened, never on a round
+const ORIGINAL = 'file:' // a document's own file (its PDF): fetched when its pages are wanted, never on a round
 
-let hooks = null // { snapshot(k), apply(k, value), content(id), allKeys() } — provided by library.js
+let hooks = null // { snapshot(k), apply(k, value), content(id), allKeys(), originals(), original(id) } — provided by library.js
 let uid = null
 let cursor = null // where "what changed in the folder since" starts from; null = this device has not listed it yet
 let clock = {} // k → newest timestamp this device has seen or written
@@ -142,7 +143,7 @@ async function pull() {
       if (!newer) continue
     }
     ids[k] = seen
-    if (k.startsWith(TEXT)) continue
+    if (k.startsWith(TEXT) || k.startsWith(ORIGINAL)) continue
     if (seen.at > (clock[k] || 0)) want.set(k, seen) // a record changed twice since the last look is read once
     else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
   }
@@ -215,7 +216,7 @@ async function push(quick) {
           }
           const body = JSON.stringify(v)
           ids[k] = { id: await put(k, at, body, quick && body.length < QUICK_MAX), at }
-          if (k.startsWith('meta:') && v.deleted) await dropText(k.slice(5)) // a deleted document leaves nothing behind in their Drive
+          if (k.startsWith('meta:') && v.deleted) { await dropText(k.slice(5)); await dropOriginal(k.slice(5)) } // a deleted document leaves nothing behind in their Drive
           if (k.startsWith('pos:')) lastPosPush = Date.now()
         }
       }
@@ -253,10 +254,64 @@ export async function flush() {
       flushing = null
       // Changes made while this round was in flight would otherwise wait for the next poll.
       if (uid && (urgent || Object.keys(dirty).some(k => !k.startsWith('pos:')))) schedule(urgent ? 50 : 1500)
+      if (uid && cursor && syncState.get().status === 'idle') void sendOriginals() // the folder has just been looked at: what it lacks is known
     }
   })()
   return flushing
 }
+
+// ── a document's own file ─────────────────────────────────────────────────────────────────────────────────
+// Every device shows a PDF's pages, not only the one it was added on (Tharun, 15 October 2026: the phone had
+// no Pages for books added on the laptop; "the customer should get the same experience across all devices").
+// The file goes to the customer's own Drive once, from a device that has it, in the background and in pieces
+// (drive.upload), carrying on where it stopped if the app was closed; another device fetches it when its pages
+// are wanted (downloadOriginal). It is never part of a round: a round stays a few small requests.
+// ponytail: one file at a time, in the order of the library; a file left behind by a document deleted while it
+// was being sent stays in the folder until that document's deletion is sent again (rare, and only their space).
+let sending = false
+async function sendOriginals() {
+  if (sending || !hooks?.originals || navigator.connection?.saveData) return // the customer asked their phone to spare data
+  sending = true
+  try {
+    for (const id of await hooks.originals()) {
+      const k = ORIGINAL + id
+      if (!uid || !cursor) return
+      if (ids[k]) continue
+      const blob = await hooks.original(id)
+      if (!blob?.size) continue
+      const at = drive.clockNow()
+      const fileId = await drive.upload(k, at, blob, await get('up:' + id, store), s => set('up:' + id, s, store))
+      if (!uid) return
+      ids[k] = { id: fileId, at }
+      await del('up:' + id, store)
+      await persist()
+    }
+  } catch (e) {
+    if (!e.signedOut) console.warn('Sync: a document’s own file could not be sent yet', e) // the next round tries again, from where it got to
+  } finally { sending = false }
+}
+
+async function dropOriginal(id) {
+  const k = ORIGINAL + id
+  await del('up:' + id, store)
+  if (!ids[k]) return
+  await drive.remove(ids[k].id).catch(() => {})
+  delete ids[k]
+  await persist()
+}
+
+// → a Blob of the document's own file, or null when it is not in the folder (yet). onBytes(got, of) as it comes.
+export async function downloadOriginal(id, type, onBytes) {
+  const k = ORIGINAL + id
+  if (!uid) return null
+  if (!ids[k]) await flush() // sent by another device since this one last looked
+  if (!ids[k]) return null
+  try { return await drive.readLarge(ids[k].id, type, onBytes) } catch (e) {
+    if (GONE.has(e.status)) { delete ids[k]; return null }
+    throw e
+  }
+}
+export const signedIn = () => !!uid
 
 // Book text: gzipped once, split into ≤1.5 MB parts, written before the meta record that points to it.
 const partName = (id, ver, n) => `${TEXT}${id}:${ver}:${n}`
