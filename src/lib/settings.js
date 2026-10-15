@@ -72,5 +72,15 @@ function load() {
 
 export const settings = createStore(load())
 settings.sub(() => localStorage.setItem(KEY, JSON.stringify(settings.get())))
+// Another window of Noesis on this device (the installed app beside a tab) changed a setting: this one takes it.
+// Each window used to keep what it had when it opened and write all of it back on its next change, so a key saved
+// in one window was undone by the other ("the key exists and is saved, the entire Noesis doesn't recognise it",
+// Tharun, 15 October 2026). The browser tells only the OTHER windows, so taking it here writes nothing back.
+if (typeof addEventListener === 'function') {
+  addEventListener('storage', e => {
+    if (e.key !== KEY || !e.newValue) return
+    try { settings.set({ ...DEFAULTS, ...JSON.parse(e.newValue) }) } catch { /* a half-written value: the next one comes */ }
+  })
+}
 
 export const hasKey = () => settings.get().geminiKey.trim().length > 20
