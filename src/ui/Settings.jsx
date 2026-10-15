@@ -9,7 +9,7 @@ import { useStore } from '../lib/store.js'
 import { ui, toast, goBack, openSheet, pushPanel, popPanel, showWelcome } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
 import { account } from '../lib/sync.js'
-import { hasAiKey, providerName } from '../lib/ai.js'
+import { hasAiKey, providerName, keyWithoutModel } from '../lib/ai.js'
 import { activeEngine } from '../lib/engine.js'
 import { AiCard } from './AiCard.jsx'
 import { deleteAllAudio } from '../lib/library.js'
@@ -37,7 +37,7 @@ const SECTIONS = [
   { id: 'voice', group: 1, icon: 'speaker', title: 'Voice', now: s => (activeEngine(s) === 'system' ? 'Built-in' : 'Natural') },
   { id: 'listening', group: 1, icon: 'play', title: 'Listening', now: s => `${s.speed}x · ${goalLabel(goalOf(s))} a day` },
   { id: 'sound', group: 1, icon: 'waves', title: 'Sounds and haptics', now: s => SOUND_NAMES[s.ambientMode || 'off'] },
-  { id: 'ai', group: 2, icon: 'sparkle', title: 'AI', now: s => (hasAiKey(s) ? providerName() : 'Not set up') },
+  { id: 'ai', group: 2, icon: 'sparkle', title: 'AI', now: s => (hasAiKey(s) ? providerName() : keyWithoutModel(s) ? 'Choose a model' : 'Not set up') },
   { id: 'storage', group: 3, icon: 'archive', title: 'Storage', now: () => null },
   { id: 'about', group: 3, icon: 'info', title: 'About', now: () => `v${__APP_VERSION__}` },
 ]

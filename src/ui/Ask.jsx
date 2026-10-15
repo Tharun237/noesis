@@ -4,7 +4,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { go } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { hasAiKey, providerName, contextChars } from '../lib/ai.js'
+import { hasAiKey, providerName, contextChars, keyWithoutModel, chooseModel } from '../lib/ai.js'
 import { db } from '../lib/db.js'
 import { player, pause, play } from '../lib/player.js'
 import { speak, stopSpeaking, voiceForText } from '../lib/aside.js'
@@ -27,7 +27,14 @@ export const QUICK = [
 
 export function AskPanel({ d, doc, onClose, auto, onSeek }) {
   useStore(settings)
-  const keyed = hasAiKey()
+  const keyed = useStore(settings, s => hasAiKey(s))
+  const keyOnly = useStore(settings, s => keyWithoutModel(s)) // a key saved, no model yet: one is chosen from what it answers
+  const [choosing, setChoosing] = useState(false)
+  useEffect(() => {
+    if (!keyOnly) return
+    setChoosing(true)
+    chooseModel().finally(() => setChoosing(false))
+  }, [keyOnly])
   const playId = useStore(player, s => s.id)
   const pi = useStore(player, s => s.i)
   const [msgs, setMsgs] = useState([])
@@ -124,9 +131,11 @@ export function AskPanel({ d, doc, onClose, auto, onSeek }) {
       {!keyed ? (
         <div style={{ padding: 22, display: 'grid', gap: 14 }}>
           <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.6 }}>
-            Ask questions, get explanations of what you just heard, and hear the answers read aloud. This uses your own free AI key, which stays on this device.
+            {keyOnly
+              ? choosing ? `Finding a model your ${providerName()} key can use…` : `Your ${providerName()} key is saved, but none of its models answered just now. Choose one in Settings.`
+              : 'Ask questions, get explanations of what you just heard, and hear the answers read aloud. This uses your own free AI key, which stays on this device.'}
           </div>
-          <Button kind="primary" icon="settings" onClick={() => go('settings')}>Add a free AI key</Button>
+          {!(keyOnly && choosing) && <Button kind="primary" icon="settings" onClick={() => go('settings')}>{keyOnly ? 'Choose a model' : 'Add a free AI key'}</Button>}
         </div>
       ) : (
         <>

@@ -3,7 +3,7 @@ import { db, persistStorage, canStore, storeNames } from './db.js'
 import { onShelf } from './shelf.js'
 import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
-import { hasAiKey, providerName, hostOf } from './ai.js'
+import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel } from './ai.js'
 import { synthesize, engine, loadEngine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
@@ -505,7 +505,8 @@ async function prepare(id) {
     patch(id, { scanned: !!parsed.scanned })
 
     if (d.mode !== 'full') {
-      if (!hasAiKey()) throw new Error('Summaries need a free AI key. Add one in Settings.')
+      if (!hasAiKey() && keyWithoutModel()) await chooseModel()
+      if (!hasAiKey()) throw new Error(keyWithoutModel() ? `Your ${providerName()} key is saved, but none of its models answered. Choose one in Settings.` : 'Summaries need a free AI key. Add one in Settings.')
       patch(id, { status: 'narrating', stage: d.mode === 'long' ? 'Writing a long summary' : 'Writing a short summary', prep: 0 })
       const { summarize } = await import('./gemini.js')
       const text = blocks.map(b => (b.k === 'h' ? `\n## ${b.text}\n` : b.text)).join('\n')
@@ -758,6 +759,7 @@ export async function boot() {
   kickVoice()
   // NVIDIA voices, if the customer saved a key: refresh the list at most once a day.
   void loadCloudVoices().catch(e => console.warn('NVIDIA voice list not loaded:', e?.message || e))
+  void chooseModel() // a key saved before a model was ever chosen for it (or on another device): mended here
   configureSync(syncHooks)
   offerPrefs()
   for (const d of metas) {

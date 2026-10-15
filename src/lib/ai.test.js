@@ -1,7 +1,7 @@
 // Pure parts of the AI provider door.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isGeminiKey, isNvidiaKey, parseSse, cleanBase, hostOf, stripThinking, thinkFilter, explainError, provider, hasAiKey, splitText } from './ai.js'
+import { isGeminiKey, isNvidiaKey, parseSse, cleanBase, hostOf, stripThinking, thinkFilter, explainError, provider, hasAiKey, splitText, rankModels } from './ai.js'
 
 test('isGeminiKey keeps the old rule: trimmed key longer than 20 characters', () => {
   assert.equal(isGeminiKey('  ' + 'x'.repeat(21) + '  '), true)
@@ -78,4 +78,17 @@ test('splitText: pieces within the limit, cut at paragraph ends, nothing lost', 
   assert.ok(cut.every(p => p.length <= 200) && cut.every(p => p.endsWith('.')))
   assert.equal(cut.join(' '), long)
   assert.deepEqual(splitText('short', 100), ['short'])
+})
+
+test('a model is chosen from what the key answers: one to talk with, the best of them first', () => {
+  // what a real free NVIDIA key answered on 15 October 2026 (13 of 81 listed), with seconds
+  const answered = { 'google/diffusiongemma-26b-a4b-it': 0.5, 'meta/llama-3.2-11b-vision-instruct': 0.4, 'meta/muse-glimmer-30b': 7.3,
+    'nvidia/llama-3.1-nemotron-safety-guard-8b-v3': 0.4, 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning': 1.2, 'nvidia/nemotron-3-super-120b-a12b': 0.9,
+    'nvidia/nemotron-3.5-content-safety': 1.8, 'nvidia/nemotron-3.5-lightning-30b-a3b': 1.9, 'nvidia/nemotron-parse-2.0': 0.4,
+    'nvidia/riva-translate-4b-instruct-v2': 0.9, 'openai/gpt-oss-20b': 0.7, 'poolside/laguna-xs-2.1': 4.4, 'stepfun-ai/step-5-preview': 0.9 }
+  const ranked = rankModels(Object.keys(answered), answered)
+  assert.equal(ranked[0], 'nvidia/nemotron-3-super-120b-a12b')
+  for (const no of ['safety', 'parse', 'translate', 'diffusion', 'vision', 'laguna']) assert.ok(!ranked.some(id => id.includes(no)), no)
+  assert.ok(ranked.includes('openai/gpt-oss-20b') && ranked.includes('stepfun-ai/step-5-preview'))
+  assert.deepEqual(rankModels([]), [])
 })

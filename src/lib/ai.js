@@ -124,7 +124,8 @@ export const providerName = () => provider().name
 // a question that overflows fails outright, so they get a window around the listener's place.
 export const contextChars = () => (provider().kind === 'gemini' ? 600_000 : 60_000)
 
-// Enough to make a request with the CHOSEN provider. No model is ever chosen for the customer.
+// Enough to make a request with the CHOSEN provider: a key, and (NVIDIA, other) a model, which chooseModel picks
+// from the ones the key answers when the customer has not.
 export function hasAiKey(s = settings.get()) {
   const p = provider(s)
   if (p.id === 'gemini') return isGeminiKey(p.key)
@@ -262,6 +263,43 @@ export async function testModel() {
   const t0 = performance.now()
   await aiText({ prompt: CHECK_QUESTION })
   return { seconds: (performance.now() - t0) / 1000 }
+}
+
+// A key is saved but no model is chosen: what every place says then, instead of "add a key".
+export function keyWithoutModel(s = settings.get()) {
+  const p = provider(s)
+  return p.kind === 'openai' && !p.model && (p.id === 'nvidia' ? isNvidiaKey(p.key) : !!p.base)
+}
+
+// Which model to use, from the ones the key answers. "No default is invented" (M9) stays true: nothing is chosen
+// by a name written here; a name only decides the order among models that really answered this key. Saved, the
+// key did nothing ("even though the key exists and is saved, the entire Noesis doesn't recognise it", Tharun,
+// 15 October 2026: 81 models listed, 12 answering, none chosen).
+// Not for talking with or writing: these answer, but as a guard, a reader of pages, a translator, a drawer.
+const NOT_FOR_TALK = /guard|safety|parse|translate|embed|rerank|reward|diffusion|vision|vlm|ocr|retriev|clip|code|coder|laguna|kosmos|deplot|paligemma|vila|neva/i
+// Of those that talk, the ones that reason and write best come first; ties and the rest go fastest first.
+const LIKED = [/nemotron-3-super/i, /gpt-oss-120b/i, /llama-3\.3-70b/i, /nemotron.*ultra/i, /deepseek/i, /qwen/i, /gpt-oss/i, /nemotron-3\.5/i, /nemotron/i, /step-/i, /kimi/i, /mistral/i, /llama/i]
+export function rankModels(ids, seconds = {}) {
+  const like = id => { const k = LIKED.findIndex(r => r.test(id)); return k < 0 ? LIKED.length : k }
+  return ids.filter(id => !NOT_FOR_TALK.test(id)).sort((a, b) => like(a) - like(b) || (seconds[a] ?? 99) - (seconds[b] ?? 99))
+}
+const PROBE = 6 // models asked, best first, when the key has not been checked: the first that answers is chosen
+let choosing = null
+export function chooseModel() {
+  choosing ||= (async () => {
+    const s = settings.get(), p = provider(s)
+    if (!keyWithoutModel(s)) return null
+    const checked = s.modelChecks?.[p.id] || []
+    const secs = Object.fromEntries(checked.map(c => [c.id, c.s]))
+    let pick = rankModels(checked.map(c => c.id), secs)[0] // a check already made: no request at all
+    if (!pick) {
+      const found = await checkModels(rankModels((await listAiModels()).map(m => m.id)).slice(0, PROBE))
+      pick = rankModels(found.map(f => f.id), Object.fromEntries(found.map(f => [f.id, f.s])))[0]
+    }
+    if (pick && keyWithoutModel()) settings.set({ [p.id === 'nvidia' ? 'nvidiaModel' : 'customModel']: pick })
+    return pick || null
+  })().catch(() => null).finally(() => { choosing = null })
+  return choosing
 }
 
 // Which of the listed models answer, and how fast. A provider's list is not a list of models that work

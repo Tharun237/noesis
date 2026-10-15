@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
-import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels } from '../lib/ai.js'
+import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels, chooseModel } from '../lib/ai.js'
 import { loadCloudVoices } from '../lib/cloudvoice.js'
 import { Button, IconButton, Segmented, Toggle, Field, inputStyle, Appear } from './kit.jsx'
 
@@ -68,6 +68,7 @@ export function AiCard({ Card }) {
     try {
       setModels(await listAiModels())
       setState('ok')
+      void chooseModel() // a key with no model: one it answers with is chosen (and can be changed below)
     } catch (e) {
       const offline = !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed/i.test(e.message || '')
       setModels(null)
@@ -100,7 +101,7 @@ export function AiCard({ Card }) {
     setScan({ checked: 0, total: models.length, working: 0 })
     const found = await checkModels(models.map(m => m.id), { onProgress: setScan, signal: stop.current.signal })
     // A check that was stopped has not seen every model: its result would read as "the rest do not answer".
-    if (!stop.current.signal.aborted) settings.set({ modelChecks: { ...settings.get().modelChecks, [id]: found } })
+    if (!stop.current.signal.aborted) { settings.set({ modelChecks: { ...settings.get().modelChecks, [id]: found } }); void chooseModel() }
     setScan(null)
   }
   const checked = new Map(checks.map(c => [c.id, c.s]))
