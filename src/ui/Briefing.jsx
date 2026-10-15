@@ -88,7 +88,7 @@ export function Briefing({ wide }) {
         <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Retrying in about {wait} s</Appear>
       )}
       {busy && wait == null && stage?.step === 'reading' && (
-        <Appear style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Reading {stage.n} of {stage.total}: {stage.title}{stage.parts > 1 ? ` · part ${stage.part} of ${stage.parts}` : ''}</span></Appear>
+        <Appear style={{ display: 'flex', minWidth: 0, alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Reading {stage.n} of {stage.total}: {stage.title}{stage.joining ? ' · bringing the notes together' : stage.parts > 1 ? ` · part ${stage.part} of ${stage.parts}` : ''}</span></Appear>
       )}
       {busy && wait == null && stage?.step === 'writing' && (
         <Appear style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: T.sub }}><Pulse /> Writing the briefing</Appear>

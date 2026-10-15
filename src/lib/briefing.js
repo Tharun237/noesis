@@ -80,6 +80,8 @@ export async function makeBriefing(ids, { onStage, signal } = {}) {
       notes = bits.join('\n\n')
       if (notes.length > perDocWords * 6) {
         signal?.throwIfAborted?.()
+        // its own words: this one request is long, and it showed as "part 8 of 8" for minutes (15 October 2026)
+        onStage?.({ step: 'reading', n: i + 1, total: ids.length, title, joining: true })
         notes = await aiText({ prompt: notesPrompt(title, notes, perDocWords), signal, onRetry: wait })
       }
     } else {
