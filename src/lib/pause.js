@@ -47,3 +47,22 @@ export function padTail(pcm, rate, targetMs) {
   out.set(pcm)
   return out
 }
+
+// Seconds of speech in pcm: from the first window that is not the voice's own quiet to the last (voiceplan.js
+// compares a sentence cut from a run with the same sentence spoken alone).
+export function speechSeconds(pcm, rate) {
+  if (!pcm?.length || !rate) return 0
+  const rms = rmsOf(pcm)
+  if (!(rms > 0)) return 0
+  const win = Math.max(1, Math.round(rate * WIN_S))
+  const limit = (rms * QUIET) ** 2
+  let start = 0
+  while (start < pcm.length) {
+    const b = Math.min(pcm.length, start + win)
+    let sum = 0
+    for (let i = start; i < b; i++) sum += pcm[i] * pcm[i]
+    if (sum / (b - start) > limit) break
+    start = b
+  }
+  return Math.max(0, pcm.length - start - trailingCount(pcm, rate, rms)) / rate
+}

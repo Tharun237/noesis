@@ -3,6 +3,7 @@
 // A cloud voice produces the same stored audio as a Piper voice; only where the samples come from differs.
 import { LANGS } from './lang.js'
 import { countUse } from './usage.js'
+import { gapOf, paced } from './voiceplan.js'
 import { settings } from './settings.js'
 import { isNvidiaKey, cleanBase, hostOf } from './ai.js'
 
@@ -275,7 +276,7 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
   if (!isNvidiaKey(key)) throw new Error('NVIDIA did not accept the key. Check it in Settings.')
   for (let attempt = 0; ; attempt++) {
     if (signal?.aborted) throw signal.reason || new Error('Aborted')
-    const gap = 1600 - (Date.now() - lastStart)
+    const gap = gapOf('nvidia') - (Date.now() - lastStart) // learnt from NVIDIA's own answers (voiceplan.js)
     if (gap > 0) await sleep(gap)
     lastStart = Date.now()
     const form = new FormData()
@@ -298,6 +299,7 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
     }
     if (res.ok) {
       onRetry?.(null)
+      paced('nvidia', 'ok')
       countUse('voice', 'made')
       return parseWav(await res.arrayBuffer())
     }
@@ -307,7 +309,9 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
       continue
     }
     if ((res.status === 429 || res.status >= 500) && attempt < 8) {
-      const ms = retryMs(attempt)
+      const told = (+res.headers.get('retry-after') || 0) * 1000 // the service's own word on how long, when it gives one
+      const ms = Math.max(retryMs(attempt), told)
+      if (res.status === 429) paced('nvidia', 'limited', told) // and asked less often from now on
       countUse('voice', res.status === 429 ? 'limited' : 'failed', { waited: res.status === 429 ? ms : 0 }) // how often NVIDIA asks for patience (usage.js)
       onRetry?.(Math.max(1, Math.round(ms / 1000)))
       await sleep(ms)

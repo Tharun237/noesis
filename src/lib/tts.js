@@ -79,11 +79,13 @@ export function loadEngine(voice = settings.get().voice) {
   return promise
 }
 
-// A run of sentences of one paragraph, given to an online voice as one (so it carries its feeling across each full
-// stop) and cut back into its sentences where it paused between them (split.js). → one record per sentence, or
-// null when the cuts could not be trusted: the caller then makes them one by one.
+// A run of sentences of one paragraph, given to the voice as one (so it carries its feeling across each full stop)
+// and cut back into its sentences where it paused between them (split.js). Any voice, online or on the device:
+// whether a voice's cuts can be trusted is learnt (voiceplan.js). → one record per sentence, or null when the cuts
+// could not be trusted: the caller then makes them one by one.
 export async function synthesizeRun(texts, voice, pauses, tone = settings.get().voiceTone || 'natural', opts = {}) {
   await loadEngine(voice)
+  if (!isCloudVoice(voice)) return (await call({ type: 'speakRun', texts, voice, pauses, tone })).recs
   const { pcm, rate } = await cloudSynthesize(texts.join(' '), voice, { signal: opts.signal, onRetry: opts.onRetry })
   const recs = (await call({ type: 'encodeRun', pcm, rate, lengths: texts.map(t => t.length), pauses, tone })).recs
   if (recs && voice.startsWith('nv:')) countUse('voice', 'said', { n: texts.length }) // sentences, beside the requests (usage.js)

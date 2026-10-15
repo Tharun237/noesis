@@ -6,6 +6,7 @@ import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee } from './ai.js'
 import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
 import { synthesize, synthesizeRun, engine, loadEngine } from './tts.js'
+import { runsFor, judge, learnRuns, runResult, runChars, ceilingOf, tooLong } from './voiceplan.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -380,16 +381,13 @@ async function nextVoiceJob() {
   return null
 }
 
-// A run of sentences given to an NVIDIA voice as one: up to this much of one paragraph. Spoken alone, each sentence
-// ended as if nothing came after it and the next began cold; given the paragraph, the voice carries its feeling
-// across the full stop ("B is far better than A", Tharun, 16 October 2026). Cut back into sentences by split.js.
-// Only NVIDIA's voices: they pause at every full stop, so the cuts are exact (checked by transcribing each piece).
-// The voices made on the device do not pause there inside a paragraph (Alba ran on into the next sentence and
-// paused at its comma), so their cuts could not be trusted: they are still made one sentence at a time.
+// A run of sentences given to a voice as one, from one paragraph: spoken alone, each sentence ended as if nothing
+// came after it and the next began cold; given the paragraph, the voice carries its feeling across the full stop
+// ("B is far better than A", Tharun, 16 October 2026). Cut back into sentences by split.js. Which voices may be cut,
+// how long a run is and how often a service is asked are learnt, not listed (voiceplan.js).
 // ponytail: a run's last sentence still meets the next run cold; runs overlapping by a sentence if that is heard.
-const RUN_CHARS = 350
-const RUN_MOST = 5
-const runsWhole = voice => typeof voice === 'string' && voice.startsWith('nv:')
+const RUN_SENTENCES = 8
+const serviceOf = voice => (!isCloudVoice(voice) ? 'device' : String(voice).startsWith('nv:') ? 'nvidia' : 'own')
 
 async function voiceOne(id, i, again = false) {
   if (library.get().voicingNow !== id) library.set({ voicingNow: id })
@@ -404,12 +402,16 @@ async function voiceOne(id, i, again = false) {
   const run = [i]
   const p = priority()
   const atPlace = p?.id === id && p.i === i
-  if (runsWhole(voice) && !again && !atPlace) {
+  const verdict = runsFor(voice) // true, false, or null: not tried yet (voiceplan.js)
+  const service = serviceOf(voice)
+  let chars = c.segs[i].t.length
+  if (verdict !== false && !again && !atPlace) {
+    // short while the listener is close behind (wanted soon), longer when the voice is well ahead
+    const most = runChars(p?.id === id ? madeAhead(d, c, p.i).ahead : Infinity, ceilingOf(service))
     const set = voicedSet(id)
-    let chars = c.segs[i].t.length
-    for (let j = i + 1; j < c.segs.length && run.length < RUN_MOST; j++) {
+    for (let j = i + 1; j < c.segs.length && run.length < RUN_SENTENCES; j++) {
       const sg = c.segs[j]
-      if (sg.b !== c.segs[i].b || sg.k === 'h' || set.has(j) || chars + sg.t.length > RUN_CHARS) break
+      if (sg.b !== c.segs[i].b || sg.k === 'h' || set.has(j) || chars + sg.t.length > most) break
       run.push(j)
       chars += sg.t.length
     }
@@ -429,6 +431,30 @@ async function voiceOne(id, i, again = false) {
     else patch(id, { stage: `NVIDIA's free quota is limiting requests. Retrying in about ${v} s.` })
   }
   const one = () => synthesize(c.segs[i].t, voice, pauseOf(i), tone, cloud ? { onRetry } : undefined).then(rec => [rec])
+  // The run given to the voice as one. A text the service refused as too long teaches its limit (undefined: not held
+  // against the voice); on the device, a run the engine could not make counts as one that could not be cut (null).
+  const together = () => synthesizeRun(run.map(j => c.segs[j].t), voice, run.map(pauseOf), tone, cloud ? { onRetry } : undefined).catch(e => {
+    if (e?.status === 400 || e?.status === 413) { tooLong(service, chars); return undefined }
+    if (!cloud) return null
+    throw e
+  })
+  const make = async () => {
+    if (run.length < 2) return one()
+    if (verdict === null) {
+      // This voice's first run: made both ways, each cut piece compared with its sentence spoken alone, the verdict
+      // kept. The sentences spoken alone are what is kept this time, so a voice that fails costs nothing heard.
+      const whole = await together()
+      const alone = []
+      for (const j of run) alone.push(await synthesize(c.segs[j].t, voice, pauseOf(j), tone, cloud ? { onRetry } : undefined))
+      if (whole !== undefined) learnRuns(voice, judge(alone.map(r => r.speech), whole?.map(r => r.speech)))
+      return alone
+    }
+    const whole = await together()
+    if (whole) { runResult(voice, true); return whole }
+    if (whole === null) runResult(voice, false) // cut could not be trusted this time
+    run.length = 1 // this sentence alone; the ones after it are made by the next turns
+    return one()
+  }
   try {
     if (cloud) {
       // A network or quota failure must never mark the sentence as failed: it is tried again in a moment.
@@ -436,8 +462,7 @@ async function voiceOne(id, i, again = false) {
       // steps aside (`later`), so the others in the line are made: it used to wait here, in the one line
       // there is, and a document in a voice made on the device waited behind it for as long as it did.
       try {
-        recs = run.length > 1 ? await synthesizeRun(run.map(j => c.segs[j].t), voice, run.map(pauseOf), tone, { onRetry }) : null
-        if (!recs) { run.length = 1; recs = await one() } // a run whose cuts could not be trusted: this sentence alone, the rest after it
+        recs = await make()
       } catch (e) {
         if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
         const status = e?.status
@@ -452,19 +477,20 @@ async function voiceOne(id, i, again = false) {
         return
       }
     } else {
-      recs = await one()
+      recs = await make()
     }
     const made = recs.reduce((a, r) => a + r.dur, 0)
     if (warm && made > 0.5) recordSpeed(voice, made / ((performance.now() - t0) / 1000))
   } catch (e) {
     if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
     console.warn('Sentence failed, skipping:', c.segs[i].t, e)
+    run.length = 1 // only this sentence is marked; the ones after it are tried by the next turns
     recs = [{ codec: 'none', dur: 0, tail: 0 }]
   }
   const now = getDoc(id)
   if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c || rewriting.has(id)) return // deleted / voice changed / re-processed meanwhile
   const set = voicedSet(id)
-  let chars = 0, secs = 0
+  let saidChars = 0, secs = 0
   for (let k = 0; k < run.length; k++) {
     const j = run[k], rec = recs[k]
     rec.v = tone === 'natural' ? voice : voice + '|' + tone
@@ -479,15 +505,15 @@ async function voiceOne(id, i, again = false) {
     set.add(j)
     c.durs[j] = rec.dur
     c.tails[j] = rec.tail || 0
-    chars += c.segs[j].t.length
+    saidChars += c.segs[j].t.length
     secs += rec.dur
   }
-  if (!chars) return
+  if (!saidChars) return
   saveDurs(id)
   const done = set.size
   patch(id, {
     done,
-    vChars: now.vChars + chars,
+    vChars: now.vChars + saidChars,
     vSec: now.vSec + secs,
     ...(done >= c.segs.length ? { status: 'ready', stage: 'Ready' } : {}),
   })

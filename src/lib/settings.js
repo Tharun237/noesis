@@ -35,6 +35,8 @@ export const DEFAULTS = {
   voiceEngine: 'natural', // natural (Piper, generated on the device) | system (built-in TTS) — see engine.js
   systemVoice: '', // voiceURI of the built-in voice ('' = device default)
   voiceSpeeds: {}, // voice → seconds of audio this device makes a second, as last measured (library.js voicePace)
+  voicePlans: {}, // voice → { runs, at, strikes }: whether its paragraphs can be cut back into sentences (voiceplan.js)
+  servicePlans: {}, // service → { gap, ceiling }: the pace and the longest text it takes, as learnt (voiceplan.js)
   translateCps: 0, // measured on this device: characters translated a second (0 = not measured yet); for estimates
   aiNarration: true, // use Gemini for PDFs when a key is set
   skipVisuals: false, // skip figure/table/math/code descriptions during playback

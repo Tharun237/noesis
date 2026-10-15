@@ -5,7 +5,7 @@ import { phonemize } from 'phonemizer'
 import { encode } from './encode.js'
 import { voiceUrl } from './voices.js'
 import { ipaChars } from './ipa.js'
-import { padTail, trailingSeconds } from './pause.js'
+import { padTail, trailingSeconds, speechSeconds } from './pause.js'
 import { sentenceCuts } from './split.js'
 import { applyTone } from './tone.js'
 
@@ -127,6 +127,11 @@ async function phonemeIds(text, cfg) {
 }
 
 async function speak({ text, voice: id, pause = 'sentence', tone = 'natural' }) {
+  const { pcm, rate } = await infer(text, id)
+  return finish(pcm, rate, pause, tone)
+}
+
+async function infer(text, id) {
   const { session, cfg } = await load(id)
   const ids = await phonemeIds(text, cfg)
   const inf = cfg.inference
@@ -136,9 +141,16 @@ async function speak({ text, voice: id, pause = 'sentence', tone = 'natural' }) 
     scales: new ort.Tensor('float32', Float32Array.from([inf.noise_scale, inf.length_scale, inf.noise_w]), [3]),
   }
   if (cfg.num_speakers > 1) feeds.sid = new ort.Tensor('int64', BigInt64Array.from([0n]), [1])
-  const pcm = (await session.run(feeds)).output.data
-  const rate = cfg.audio.sample_rate
-  return finish(pcm, rate, pause, tone)
+  return { pcm: (await session.run(feeds)).output.data, rate: cfg.audio.sample_rate }
+}
+
+// A run of sentences spoken as one and cut back into its sentences (split.js): one record each, or null.
+async function cutRun(pcm, rate, lengths, pauses, tone) {
+  const cuts = sentenceCuts(pcm, rate, lengths)
+  if (!cuts) return null
+  const recs = []
+  for (let k = 0; k < lengths.length; k++) recs.push(await finish(pcm.subarray(cuts[k], cuts[k + 1]), rate, pauses[k], tone))
+  return recs
 }
 
 // The tail every voice shares: natural pause → trailing silence → tone → encoding.
@@ -150,6 +162,7 @@ async function finish(pcm, rate, pause = 'sentence', tone = 'natural') {
   const rec = await encode(shaped, rate)
   rec.dur = shaped.length / rate
   rec.tail = tail
+  rec.speech = speechSeconds(pcm, rate) // how long it speaks, without its quiet (voiceplan.js)
   return rec
 }
 
@@ -163,11 +176,10 @@ self.onmessage = ({ data }) => {
         const transfer = [rec.data?.buffer, rec.bytes?.buffer].filter(Boolean)
         postMessage({ type: 'audio', id: data.id, rec }, transfer)
       }
-      else if (data.type === 'encodeRun') { // a run of sentences spoken as one, cut back into its sentences (split.js)
-        const cuts = sentenceCuts(data.pcm, data.rate, data.lengths)
-        const recs = []
-        if (cuts) for (let k = 0; k < data.lengths.length; k++) recs.push(await finish(data.pcm.subarray(cuts[k], cuts[k + 1]), data.rate, data.pauses[k], data.tone))
-        postMessage({ type: 'audio', id: data.id, recs: cuts ? recs : null }, recs.flatMap(rec => [rec.data?.buffer, rec.bytes?.buffer]).filter(Boolean))
+      else if (data.type === 'encodeRun' || data.type === 'speakRun') { // a run of sentences spoken as one, cut back into its sentences
+        const { pcm, rate } = data.type === 'speakRun' ? await infer(data.texts.join(' '), data.voice) : data
+        const recs = await cutRun(pcm, rate, data.texts ? data.texts.map(t => t.length) : data.lengths, data.pauses, data.tone)
+        postMessage({ type: 'audio', id: data.id, recs }, (recs || []).flatMap(rec => [rec.data?.buffer, rec.bytes?.buffer]).filter(Boolean))
       }
       else if (data.type === 'speak') {
         const rec = await speak(data)
