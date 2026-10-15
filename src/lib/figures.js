@@ -9,18 +9,18 @@
 // Old uploads and new ones alike: any PDF whose file is on this device.
 // Where the customer is comes first: the book in the player, from its place onwards, then the two listened to
 // before it. Not the whole library at once: a key's free quota, and a phone's memory, are spent where they are heard.
-// ponytail: pages are drawn on the page's own thread (as AI narration does), one figure at a time between requests
-// that take seconds; a worker with OffscreenCanvas if it is ever felt.
+// The page is drawn, and its text read, in a worker (figpage.worker.js): on the page's own thread a phone felt it.
 import { settings } from './settings.js'
 import { library, loadDoc, figuresArrived } from './library.js'
 import { player } from './player.js'
 import { aiText, canSee, chooseVisionModel, hasAiKey } from './ai.js'
 import { db } from './db.js'
-import { described, addFigures } from './figstore.js'
+import { described, addFigures, figureNews } from './figstore.js'
 import { touch } from './sync.js'
 
 const BOOKS = 3 // the one in the player and the two listened to before it
 const WIDTH = 1100 // the page as AI narration draws it
+const QUALITY = 0.72
 const MOST = 700 // characters: a description is a few sentences, not a lecture
 const START_AFTER_MS = 8000 // opening the app comes first
 const BREATH_MS = 250 // between two figures, at least
@@ -41,9 +41,11 @@ ${text}
 ` : ''}
 The page may hold other figures and text: describe ONLY the one with this caption, not the page. Describe it for someone LISTENING, who cannot see it, in 2 to 4 plain sentences: what it shows, and the one thing to take from it. Say only what the picture or the page's text shows; never add facts of your own. For a chart or graph, say what is plotted against what and how it changes. For a diagram, name the main parts and how they connect. Do not repeat the caption, do not begin with "This figure" or "The image", no lists, no markdown. If the page holds no such picture, answer only: none.`
 
+const TITLED = /,?\s*(?:en)?titled\s+["“][^"”]*["”],?/i
 const OPENER = /^(the|this) (image|picture|figure|diagram|table|chart|graph|page) (shows|presents|displays|depicts|illustrates|contains)\s+(?=(a|an|the|two|three|several)\s)/i // only where a noun phrase follows: "shows how" stays
 function clean(raw) {
   const t = String(raw || '').replace(/[*_#`>]+/g, '').replace(/\s+/g, ' ').trim().replace(/^["“]|["”]$/g, '')
+    .replace(TITLED, '') // the caption again, which the listener has just heard
   if (!t || /^none\.?$/i.test(t) || t.length < 30) return null
   // A small model opens with "The image shows…" whatever it is told: the listener knows it is a figure.
   const bare = t.replace(OPENER, '')
@@ -69,16 +71,24 @@ async function nextFigure() {
   return null
 }
 
-const open = new Map() // id → the open PDF, while its figures are described
-async function pdfOf(id) {
-  if (open.has(id)) return open.get(id)
-  const src = await db.getSource(id)
-  if (src?.kind !== 'pdf' || !src.blob) { noFile.add(id); return null }
-  const { openPdf } = await import('../ingest/pdf.js')
-  const pdf = await openPdf(new Uint8Array(await src.blob.arrayBuffer())) // the document itself, already waited for
-  for (const [k, other] of open) { if (k !== id) { other.destroy?.(); open.delete(k) } } // one book's file in memory at a time
-  open.set(id, pdf)
-  return pdf
+// The worker holds one book's file open while its figures are described, and is ended when there is nothing to do.
+let worker = null
+let asked = 0
+const waiting = new Map() // n → { ok, no }
+function endWorker(why) {
+  worker?.terminate()
+  worker = null
+  for (const [, w] of waiting) w.no(new Error(why))
+  waiting.clear()
+}
+function drawPage(id, blob, page) {
+  if (!worker) {
+    worker = new Worker(new URL('./figpage.worker.js', import.meta.url), { type: 'module' })
+    worker.onmessage = ({ data }) => { const w = waiting.get(data.n); waiting.delete(data.n); if (w) (data.error ? w.no(new Error(data.error)) : w.ok(data)) }
+    worker.onerror = e => { e.preventDefault(); endWorker(e.message || 'the page could not be drawn') } // never a wait for ever
+  }
+  const n = ++asked
+  return new Promise((ok, no) => { waiting.set(n, { ok, no }); worker.postMessage({ n, id, blob, page, width: WIDTH, quality: QUALITY }) })
 }
 
 async function describeOne({ d, c, bi }) {
@@ -87,22 +97,24 @@ async function describeOne({ d, c, bi }) {
   let words = null
   // Any failure counts against this figure, wherever it happens (opening the file, drawing the page, the request):
   // one that did not count was tried again at once, for ever, and the page froze (15 October 2026).
+  figureNews.set({ work: `${d.id}|${b.fk}` }) // its label says so while it is described (cleared by the loop)
   try {
-    const pdf = await pdfOf(d.id)
-    if (!pdf) throw new Error('its file could not be opened') // counted below, like any failure
-    const { renderPage, pageLayout } = await import('../ingest/pdf.js')
-    const image = await renderPage(pdf, b.p, WIDTH)
-    const text = (await pageLayout(pdf, b.p)).map(l => l.text).join('\n').slice(0, PAGE_TEXT)
-    words = clean(await aiText({ parts: [{ text: ask(d.title, b.s.join(' ').slice(0, 600), b.p, text) }, { image }] }))
+    const src = await db.getSource(d.id)
+    if (src?.kind !== 'pdf' || !src.blob) { noFile.add(d.id); throw new Error('its file is on another device') } // counted below
+    const { picture, text } = await drawPage(d.id, src.blob, b.p)
+    // read into text by the browser off this thread (FileReader): the 40 ms a copied string cost on arrival is gone
+    const image = await new Promise((ok, no) => { const f = new FileReader(); f.onload = () => ok(f.result); f.onerror = () => no(f.error); f.readAsDataURL(picture) })
+    words = clean(await aiText({ parts: [{ text: ask(d.title, b.s.join(' ').slice(0, 600), b.p, text.slice(0, PAGE_TEXT)) }, { image }] }))
   } catch (e) {
     console.warn('A figure could not be described:', e?.message || e)
     if ([400, 401, 403, 404].includes(e?.status)) refused = true // asking about the next figure would be refused too
   }
   if (!words) { failed.set(tag, (failed.get(tag) || 0) + 1); return }
   const fresh = await addFigures(d.id, { [b.fk]: words })
-  if (!fresh.length) return
-  touch('figs:' + d.id) // to the account's other devices: described once
-  await figuresArrived(d.id, fresh)
+  if (fresh.length) {
+    touch('figs:' + d.id) // to the account's other devices: described once
+    await figuresArrived(d.id, fresh)
+  }
 }
 
 let running = false
@@ -120,12 +132,11 @@ export function kickFigures() {
           if (!canSee(s)) await chooseVisionModel()
           if (canSee()) job = await nextFigure()
         }
-        if (job) await describeOne(job)
+        if (job) await describeOne(job).finally(() => figureNews.set({ work: '' })) // never left turning
       } catch (e) { console.error('Noesis figures:', e); if (job) failed.set(`${job.d.id}:${job.c.blocks[job.bi].fk}`, 9) }
       // the page's own turn between two figures: a step that needed no waiting would otherwise never let it draw
       if (job) { await new Promise(r => setTimeout(r, BREATH_MS)); continue }
-      for (const [, pdf] of open) pdf.destroy?.()
-      open.clear()
+      endWorker('nothing to describe') // its memory back while there is nothing to do
       await new Promise(r => { wake = r })
     }
   })()

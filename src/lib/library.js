@@ -4,7 +4,7 @@ import { onShelf } from './shelf.js'
 import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee } from './ai.js'
-import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures } from './figstore.js'
+import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
 import { synthesize, engine, loadEngine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
@@ -147,7 +147,9 @@ export function loadDoc(id) {
       const blocks = doc.blocks.map(b => {
         if (!isFigure(b)) return b
         const words = described(id, b)
-        return { ...b, fk: figKey(b), ...(words ? { ai: 1, s: [...b.s.slice(0, -1), `${b.s[b.s.length - 1]} ${words}`] } : {}) }
+        if (!words) return { ...b, fk: figKey(b) }
+        const { t, cut } = joinFigure(b.s[b.s.length - 1], words)
+        return { ...b, fk: figKey(b), ai: 1, cut, s: [...b.s.slice(0, -1), t] }
       })
       const segs = []
       const starts = []
@@ -314,7 +316,7 @@ export const kickVoice = makeLoop(async () => {
   if (library.get().noRoom) return false // no room to keep audio in: wait until something is removed
   const job = await nextVoiceJob()
   if (!job) { if (library.get().voicingNow) library.set({ voicingNow: null }); return false }
-  await voiceOne(job.id, job.i)
+  await voiceOne(job.id, job.i, job.again)
   return true
 })
 
@@ -337,7 +339,21 @@ const AGAIN_MS = 5000
 // article added beside an open book waited hours on a phone.
 const LEAD_S = 600
 
+// Sentences made before their figure was described, made again with its words. The audio already made (the
+// caption alone) is kept and played until the new one replaces it: nothing waits, and a finished book stays
+// Ready instead of saying "Making the audio" each time a figure is described.
+const remake = new Map() // id → Set of sentence indexes
+
 async function nextVoiceJob() {
+  for (const [id, set] of remake) { // one sentence each, a few a minute at most: before the rest
+    const d = getDoc(id)
+    if (!d || d.voice == null || !set.size || !(await loadDoc(id))) { remake.delete(id); continue }
+    if (rewriting.has(id) || later.get(id) > Date.now()) continue
+    const i = set.values().next().value
+    set.delete(i)
+    if (!set.size) remake.delete(id)
+    return { id, i, again: true }
+  }
   const p = priority()
   const pd = p && getDoc(p.id)
   const pc = pd?.status === 'voicing' ? await loadDoc(p.id) : null
@@ -364,7 +380,7 @@ async function nextVoiceJob() {
   return null
 }
 
-async function voiceOne(id, i) {
+async function voiceOne(id, i, again = false) {
   if (library.get().voicingNow !== id) library.set({ voicingNow: id })
   const d = getDoc(id)
   if (d.voice == null) return // no natural voice for this language: skip without an error, without spinning
@@ -406,6 +422,7 @@ async function voiceOne(id, i) {
         if (refusal) throw e
         if (!/limiting requests/i.test(msg)) patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
         later.set(id, Date.now() + AGAIN_MS)
+        if (again) { if (!remake.has(id)) remake.set(id, new Set()); remake.get(id).add(i) } // tried again with the others
         setTimeout(() => kickVoice(), AGAIN_MS + 100)
         return
       }
@@ -843,12 +860,19 @@ export const setHeardSync = h => { heard = h }
 
 // New descriptions of figures (described here, or arrived from another device): the opened copy takes them, and
 // the one sentence each joins is spoken again. Nothing else moves: no sentence is added, none is renumbered.
+// A figure's description joins its caption's last sentence (the sentences are what the audio, the place and the
+// bookmarks count). A caption without an ending gets one, so the voice pauses between the book's words and the
+// AI's; `cut` is where the AI's begin, for the reader to start them on their own line.
+export function joinFigure(was, words) {
+  const end = /[.!?:;]["”’)]?$/.test(was) ? '' : '.'
+  return { t: `${was}${end} ${words}`, cut: was.length + end.length + 1 }
+}
+
 export async function figuresArrived(id, keys) {
   const fresh = !cache.has(id) // opened now, it is merged already (loadDoc)
   const c = await loadDoc(id)
   if (!c) return
   const want = new Set(keys)
-  let redo = 0
   for (let bi = 0; bi < c.blocks.length; bi++) {
     const b = c.blocks[bi]
     if (!b.fk || !want.has(b.fk)) continue
@@ -856,23 +880,17 @@ export async function figuresArrived(id, keys) {
     if (!fresh) {
       const words = described(id, b)
       if (!words) continue
-      const last = `${b.s[b.s.length - 1]} ${words}`
-      c.blocks[bi] = { ...b, ai: 1, s: [...b.s.slice(0, -1), last] }
-      c.segs[i] = { ...c.segs[i], t: last }
+      const { t, cut } = joinFigure(b.s[b.s.length - 1], words)
+      c.blocks[bi] = { ...b, ai: 2, cut, s: [...b.s.slice(0, -1), t] } // ai 2: arrived while open, its words fade in
+      c.segs[i] = { ...c.segs[i], t }
     }
     if (voicedSet(id).has(i)) { // made before it was described: made again with the words
-      await db.delAudioAt(id, i)
-      voicedSet(id).delete(i)
-      c.durs[i] = 0
-      c.tails[i] = 0
-      redo++
+      if (!remake.has(id)) remake.set(id, new Set())
+      remake.get(id).add(i)
     }
   }
-  if (!redo) return
-  saveDurs(id)
-  const d = getDoc(id)
-  if (d) patch(id, { done: voicedSet(id).size, ...(d.status === 'ready' && d.voice != null ? { status: 'voicing', stage: 'Making the audio' } : {}) })
-  kickVoice()
+  figureNews.set(s => ({ seen: s.seen + 1 }))
+  if (remake.has(id)) kickVoice()
 }
 
 const syncHooks = {

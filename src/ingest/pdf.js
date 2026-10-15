@@ -15,10 +15,33 @@ export const openPdf = data => pdfjs.getDocument({
   standardFontDataUrl: CDN + 'standard_fonts/',
   wasmUrl: CDN + 'wasm/',
   iccUrl: CDN + 'iccs/',
-  // In a worker (reread.worker.js) text is read and nothing is drawn: no fonts, and pdf.js is told where its
-  // own files are fetched from instead of asking a page it does not have.
-  ...(typeof document === 'undefined' ? { disableFontFace: true, useSystemFonts: false, useWorkerFetch: true } : {}),
+  // In a worker there is no page: pdf.js is told where its own files are fetched from, draws letters as shapes
+  // (no fonts to install), and draws on canvases that exist away from the screen (figpage.worker.js).
+  ...(typeof document === 'undefined' ? { disableFontFace: true, useSystemFonts: false, useWorkerFetch: true, CanvasFactory: OffscreenFactory, FilterFactory: NoFilters } : {}),
 }).promise
+
+class OffscreenFactory {
+  create(width, height) {
+    const canvas = new OffscreenCanvas(width, height)
+    return { canvas, context: canvas.getContext('2d', { willReadFrequently: true }) }
+  }
+  reset(entry, width, height) { entry.canvas.width = width; entry.canvas.height = height }
+  destroy(entry) { entry.canvas.width = entry.canvas.height = 0; entry.canvas = entry.context = null }
+}
+// The colour filters pdf.js builds as SVG on a page (high contrast, transfer maps): none in a worker, as its own
+// base class does where there is no page. A figure for a model to see needs none of them.
+class NoFilters {
+  addFilter() { return 'none' }
+  addHCMFilter() { return 'none' }
+  addAlphaFilter() { return 'none' }
+  addLuminosityFilter() { return 'none' }
+  addKnockoutFilter() { return 'none' }
+  addHighlightHCMFilter() { return 'none' }
+  addSelectionHCMFilter() { return 'none' }
+  addSelectionFilter() { return 'none' }
+  createSelectionStyle() { return null }
+  destroy() {}
+}
 
 export async function renderPage(pdf, n, width, quality = 0.72) {
   const page = await pdf.getPage(n)
@@ -28,9 +51,12 @@ export async function renderPage(pdf, n, width, quality = 0.72) {
   canvas.width = Math.round(viewport.width)
   canvas.height = Math.round(viewport.height)
   await page.render({ canvas, viewport }).promise
-  const url = canvas.toDataURL('image/jpeg', quality)
   page.cleanup()
-  return url
+  // Encoded off the page's thread (toBlob), not by toDataURL, which held a phone's frame for the whole picture
+  // while the voice read and the reader scrolled (figures.js draws pages in the background).
+  const blob = await new Promise((ok, no) => canvas.toBlob(b => (b ? ok(b) : no(new Error('the page could not be drawn'))), 'image/jpeg', quality))
+  canvas.width = canvas.height = 0 // its memory back now, not when it is collected
+  return new Promise((ok, no) => { const f = new FileReader(); f.onload = () => ok(f.result); f.onerror = () => no(f.error); f.readAsDataURL(blob) })
 }
 
 // -- page-view exports (used by src/ui/PageView.jsx; ingest logic stays here) ----------------

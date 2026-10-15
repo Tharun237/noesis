@@ -28,7 +28,8 @@ import { numbersIn, columnsIn } from '../lib/sonify.js'
 import { findRef } from '../lib/citations.js'
 import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
-import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Swap, fmtDur, rowIn } from './kit.jsx'
+import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Spinner, Swap, fmtDur, rowIn } from './kit.jsx'
+import { figureNews } from '../lib/figstore.js'
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { DocInsight } from './Heard.jsx'
@@ -469,7 +470,7 @@ export function Reader({ wide }) {
                 {chunks.map((ch, ci) => {
                   const hasActive = active >= ch.s0 && active < ch.s1
                   const hasHit = hit >= ch.s0 && hit < ch.s1
-                  return <Chunk key={ci} ci={ci} ch={ch} doc={doc} typo={typo} skip={skip}
+                  return <Chunk key={ci} ci={ci} ch={ch} id={id} doc={doc} typo={typo} skip={skip}
                     mounted={near.has(ci) || hasActive || hasHit}
                     est={heights.current.get(ci) ?? estimateHeight(ch, typo, colRef.current?.clientWidth || (wide ? width : innerWidth - 40))}
                     active={hasActive ? active : -1} dur={hasActive ? doc.durs[active] : 0} tail={hasActive ? (doc.tails?.[active] || 0) : 0} hit={hasHit ? hit : -1}
@@ -609,8 +610,11 @@ function scrollToSentence(i, cut = false) {
   el.scrollIntoView({ block: 'center', behavior: far || cut ? 'auto' : scrollBehavior() })
 }
 
-const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight, watch }) {
+const Chunk = memo(function Chunk({ ci, ch, id, doc, typo, skip, mounted, est, active, dur, tail, hit, marks, onHeight, watch }) {
   const ref = useRef(null)
+  // A figure described while this part is on screen: drawn now (only the Block whose words changed redraws).
+  useStore(figureNews, n => n.seen)
+  const work = useStore(figureNews, n => (n.work.startsWith(id + '|') ? n.work.slice(id.length + 1) : ''))
   useEffect(() => watch(ref.current), [watch]) // watched from the moment it is on the page, whichever view put it there
   useLayoutEffect(() => { if (mounted && ref.current) onHeight(ci, ref.current.offsetHeight) })
   if (!mounted) return <div ref={ref} data-c={ci} style={{ height: est }} />
@@ -623,7 +627,7 @@ const Chunk = memo(function Chunk({ ci, ch, doc, typo, skip, mounted, est, activ
     let m = ''
     if (marked) for (let k = start; k < end; k++) if (marked.has(k)) m += k - start + ','
     out.push(<Block key={bi} bi={bi} b={b} start={start} active={active >= start && active < end ? active - start : -1} dur={dur} tail={tail}
-      hit={hit >= start && hit < end ? hit - start : -1} marks={m} dim={skip && VISUAL_KINDS.has(b.k)} typo={typo} />)
+      hit={hit >= start && hit < end ? hit - start : -1} marks={m} dim={skip && VISUAL_KINDS.has(b.k)} typo={typo} describing={!!work && b.fk === work} />)
   }
   return <div ref={ref} data-c={ci}>{out}</div>
 })
@@ -750,11 +754,12 @@ function Preparing({ d, doc, pos }) {
 
 // Word timing lives in src/lib/words.js so the lock screen can reuse it; the clock is useLitWord (litword.js).
 // `wipe` false (justified text, where the page may hyphenate any word): the word lights whole.
-function ActiveSentence({ i, text, dur, tail, words, plain, wipe }) {
-  const { ws, lit, ms, shown: showWords } = useLitWord(text, dur, tail, words)
+function ActiveSentence({ i, text, dur, tail, words, plain, wipe, cut }) {
+  const { ws, starts, lit, ms, shown: showWords } = useLitWord(text, dur, tail, words)
+  const brk = cut ? starts.findIndex(s => s >= cut) : -1 // a figure's description starts on its own line, spoken or not
   return (
     <span data-i={i} style={{ cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone', background: plain ? 'transparent' : T.accentSoft, color: T.text, boxShadow: plain ? 'none' : `0 0 0 2px ${T.accentSoft}` }}>
-      {showWords ? <Spoken ws={ws} lit={lit} ms={ms} ahead={T.body} wipe={wipe} /> : text}{' '}
+      {showWords ? <Spoken ws={ws} lit={lit} ms={ms} ahead={T.body} wipe={wipe} brk={brk} /> : cut ? <>{text.slice(0, cut).trimEnd()}<br />{text.slice(cut)}</> : text}{' '}
     </span>
   )
 }
@@ -806,7 +811,7 @@ function Glow({ boxes, at }) {
   )
 }
 
-const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks, dim, typo }) {
+const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks, dim, typo, describing }) {
   const host = useRef(null)
   const at = active >= 0 ? start + active : -1
   const boxes = useGlow(host, at)
@@ -816,14 +821,14 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
   const tool = useMemo(() => (VISUAL_KINDS.has(b.k) ? toolFor(b) : null), [b])
   const marked = marks ? new Set(marks.split(',').filter(Boolean).map(Number)) : null
   const sentences = b.s.map((t, k) => k === active
-    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} plain={!!boxes} wipe={!typo.justify} />
+    ? <ActiveSentence key={k} i={start + k} text={t} dur={dur} tail={tail} words={typo.words} plain={!!boxes} wipe={!typo.justify} cut={k === b.s.length - 1 ? b.cut : 0} />
     : (
       <span key={k} data-i={start + k}
         style={{
           cursor: 'pointer', borderRadius: 4, padding: '2px 1px', boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone',
           boxShadow: k === hit ? `0 0 0 2px ${T.accent}` : 'none',
           borderBottom: marked?.has(k) ? `2px solid ${T.accent}` : undefined,
-        }}>{t}{' '}</span>
+        }}>{k === b.s.length - 1 && b.cut ? <>{t.slice(0, b.cut).trimEnd()}<br />{b.ai === 2 ? <span data-fade="">{t.slice(b.cut)}</span> : t.slice(b.cut)}</> : t}{' '}</span>
     ))
   const box = { contentVisibility: 'auto', containIntrinsicSize: 'auto 120px' }
   if (b.k === 'h') return <h2 ref={host} style={{ ...box, ...LIT, fontSize: Math.round(typo.size * 1.2), lineHeight: 1.3, fontWeight: 700, letterSpacing: '-0.015em', color: T.text, margin: '44px 0 14px' }}>{sentences}{glow}</h2>
@@ -832,7 +837,7 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
       <motion.figure initial={false} animate={{ opacity: dim ? 0.4 : 1 }}
         style={{ ...box, margin: '22px 0', padding: '14px 16px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface }}>
         <div style={{ ...label, color: T.accent, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icon name={b.k === 'code' ? 'text' : b.k === 'math' ? 'sparkle' : 'grid'} size={13} />{VISUAL_LABEL[b.k]}{b.ai ? ' · described by AI' : ''}{dim ? ' · skipped' : ''}
+          <Icon name={b.k === 'code' ? 'text' : b.k === 'math' ? 'sparkle' : 'grid'} size={13} />{VISUAL_LABEL[b.k]}{(describing || b.ai) && <Swap>{describing ? '· describing' : '· described by AI'}</Swap>}{describing && <Spinner size={12} />}{dim ? ' · skipped' : ''}
           {tool && (
             <button type="button" data-tool={tool} data-b={bi}
               style={{ marginLeft: 'auto', height: 28, padding: '0 12px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 12, fontWeight: 600, letterSpacing: 0, textTransform: 'none', cursor: 'pointer' }}>

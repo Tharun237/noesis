@@ -17,8 +17,11 @@ const ONE_LINE = x => x.length < 25 && !/[-‐–—/\u00AD\u200B]/.test(x)
 // (measured). The word had nowhere to break anyway, so the page's lines stay exactly where they were.
 const HELD = { whiteSpace: 'nowrap' }
 
-export function Spoken({ ws, lit, ms, ahead, wipe = true }) {
-  return ws.map((x, k) => {
+// brk: the word that starts on a new line (a figure's description, after its caption), or -1.
+export function Spoken({ ws, lit, ms, ahead, wipe = true, brk = -1 }) {
+  return ws.map((x, k) => (k === brk ? [<br key="br" />, word(x, k)] : word(x, k)))
+
+  function word(x, k) {
     const gap = k < ws.length - 1 ? ' ' : ''
     const moves = wipe && ONE_LINE(x)
     if (k === lit) {
@@ -28,5 +31,5 @@ export function Spoken({ ws, lit, ms, ahead, wipe = true }) {
     }
     if (k === lit - 1 && moves) return <span key={k}><span style={HELD}><span key="said" aria-hidden="true" data-filled={x}><i data-w={x} /></span>{x}</span>{gap}</span>
     return <span key={k} style={{ color: k > lit ? ahead : undefined }}>{x}{gap}</span>
-  })
+  }
 }

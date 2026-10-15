@@ -6,6 +6,11 @@
 // (sync record 'figs:<id>'), so each figure is described once, on one device, with the customer's own key.
 import { openStore } from './db.js'
 import { get, set, getMany, del } from 'idb-keyval'
+import { createStore } from './store.js'
+
+// What the reader shows while it happens: the figure being described now (work: '<doc id>|<figure key>'), and a
+// count of descriptions that have arrived, so a page already open draws them without being opened again.
+export const figureNews = createStore({ work: '', seen: 0 })
 
 const content = openStore('noesis-content', 'content')
 const store = new Map() // id → { [figure key]: description }
