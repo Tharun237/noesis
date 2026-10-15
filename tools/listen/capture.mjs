@@ -81,10 +81,10 @@ export async function capture({ text, voice, url = APP_URL, onStatus = () => {} 
     // NOESIS_SETTINGS (JSON) adds settings for the run, e.g. a provider key for an online voice. Never put a key in this file.
     await page.evaluate(([v, extra]) => localStorage.setItem('noesis.settings.v1', JSON.stringify({ voice: v, voiceEngine: 'natural', ...extra })), [voice, JSON.parse(process.env.NOESIS_SETTINGS || '{}')])
     await page.reload()
-    const addButton = page.getByRole('button', { name: 'Add document' }).first()
+    const addButton = page.getByRole('button', { name: /^(Add document|Add a document|Add)$/ }).first() // the welcome page (a new profile) and the library name it differently
     await addButton.waitFor({ timeout: 60000 })
     await addButton.click()
-    await page.getByRole('tab', { name: 'Text', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Add document' }).getByRole('tab', { name: 'Text', exact: true }).click() // the welcome page has a Text tab of its own
     await page.getByPlaceholder(/Paste any text/).fill(text)
     await page.getByRole('button', { name: 'Add to library' }).click()
     await page.waitForFunction(() => history.state && history.state.view === 'reader', null, { timeout: 15000 })
