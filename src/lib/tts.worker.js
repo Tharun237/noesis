@@ -6,6 +6,7 @@ import { encode } from './encode.js'
 import { voiceUrl } from './voices.js'
 import { ipaChars } from './ipa.js'
 import { padTail, trailingSeconds } from './pause.js'
+import { sentenceCuts } from './split.js'
 import { applyTone } from './tone.js'
 
 const PAUSE_MS = { sentence: 260, paragraph: 480, heading: 650 }
@@ -161,6 +162,12 @@ self.onmessage = ({ data }) => {
         const rec = await finish(data.pcm, data.rate, data.pause, data.tone)
         const transfer = [rec.data?.buffer, rec.bytes?.buffer].filter(Boolean)
         postMessage({ type: 'audio', id: data.id, rec }, transfer)
+      }
+      else if (data.type === 'encodeRun') { // a run of sentences spoken as one, cut back into its sentences (split.js)
+        const cuts = sentenceCuts(data.pcm, data.rate, data.lengths)
+        const recs = []
+        if (cuts) for (let k = 0; k < data.lengths.length; k++) recs.push(await finish(data.pcm.subarray(cuts[k], cuts[k + 1]), data.rate, data.pauses[k], data.tone))
+        postMessage({ type: 'audio', id: data.id, recs: cuts ? recs : null }, recs.flatMap(rec => [rec.data?.buffer, rec.bytes?.buffer]).filter(Boolean))
       }
       else if (data.type === 'speak') {
         const rec = await speak(data)

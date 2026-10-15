@@ -5,7 +5,7 @@ import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee } from './ai.js'
 import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
-import { synthesize, engine, loadEngine } from './tts.js'
+import { synthesize, synthesizeRun, engine, loadEngine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -380,18 +380,41 @@ async function nextVoiceJob() {
   return null
 }
 
+// A run of sentences given to an NVIDIA voice as one: up to this much of one paragraph. Spoken alone, each sentence
+// ended as if nothing came after it and the next began cold; given the paragraph, the voice carries its feeling
+// across the full stop ("B is far better than A", Tharun, 16 October 2026). Cut back into sentences by split.js.
+// Only NVIDIA's voices: they pause at every full stop, so the cuts are exact (checked by transcribing each piece).
+// The voices made on the device do not pause there inside a paragraph (Alba ran on into the next sentence and
+// paused at its comma), so their cuts could not be trusted: they are still made one sentence at a time.
+// ponytail: a run's last sentence still meets the next run cold; runs overlapping by a sentence if that is heard.
+const RUN_CHARS = 350
+const RUN_MOST = 5
+const runsWhole = voice => typeof voice === 'string' && voice.startsWith('nv:')
+
 async function voiceOne(id, i, again = false) {
   if (library.get().voicingNow !== id) library.set({ voicingNow: id })
   const d = getDoc(id)
   if (d.voice == null) return // no natural voice for this language: skip without an error, without spinning
   const c = cache.get(id)
-  const seg = c.segs[i]
   const voice = isVoice(d.voice) ? d.voice : fromKokoro(d.voice) // a device not yet updated may sync a Kokoro voice
   const tone = settings.get().voiceTone || 'natural'
-  const b = seg.b
-  const lastInBlock = i === c.starts[b] + c.blocks[b].s.length - 1
-  const pauseKind = seg.k === 'h' ? 'heading' : lastInBlock ? 'paragraph' : 'sentence'
-  let rec
+  const pauseOf = j => { const sg = c.segs[j]; return sg.k === 'h' ? 'heading' : j === c.starts[sg.b] + c.blocks[sg.b].s.length - 1 ? 'paragraph' : 'sentence' }
+  // The sentences made together: this one and those after it in its paragraph not made yet. The sentence at the
+  // listener's place is made alone, so pressing Play starts as soon as it did.
+  const run = [i]
+  const p = priority()
+  const atPlace = p?.id === id && p.i === i
+  if (runsWhole(voice) && !again && !atPlace) {
+    const set = voicedSet(id)
+    let chars = c.segs[i].t.length
+    for (let j = i + 1; j < c.segs.length && run.length < RUN_MOST; j++) {
+      const sg = c.segs[j]
+      if (sg.b !== c.segs[i].b || sg.k === 'h' || set.has(j) || chars + sg.t.length > RUN_CHARS) break
+      run.push(j)
+      chars += sg.t.length
+    }
+  }
+  let recs
   const warm = engine.get().status === 'ready' && engine.get().voice === voice // the first call also downloads the voice
   const t0 = performance.now()
   const cloud = isCloudVoice(voice)
@@ -405,6 +428,7 @@ async function voiceOne(id, i, again = false) {
     else if (ownHost) patch(id, { stage: `${ownHost}'s quota is limiting requests. Retrying in about ${v} s.` })
     else patch(id, { stage: `NVIDIA's free quota is limiting requests. Retrying in about ${v} s.` })
   }
+  const one = () => synthesize(c.segs[i].t, voice, pauseOf(i), tone, cloud ? { onRetry } : undefined).then(rec => [rec])
   try {
     if (cloud) {
       // A network or quota failure must never mark the sentence as failed: it is tried again in a moment.
@@ -412,14 +436,15 @@ async function voiceOne(id, i, again = false) {
       // steps aside (`later`), so the others in the line are made: it used to wait here, in the one line
       // there is, and a document in a voice made on the device waited behind it for as long as it did.
       try {
-        rec = await synthesize(seg.t, voice, pauseKind, tone, { onRetry })
+        recs = run.length > 1 ? await synthesizeRun(run.map(j => c.segs[j].t), voice, run.map(pauseOf), tone, { onRetry }) : null
+        if (!recs) { run.length = 1; recs = await one() } // a run whose cuts could not be trusted: this sentence alone, the rest after it
       } catch (e) {
         if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
         const status = e?.status
         const msg = String(e?.message || '')
         const refusal = status === 401 || status === 403 || status === 404 || status === 400 ||
           /did not accept the key/i.test(msg)
-        if (refusal) throw e
+        if (refusal) { run.length = 1; throw e }
         if (!/limiting requests/i.test(msg)) patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
         later.set(id, Date.now() + AGAIN_MS)
         if (again) { if (!remake.has(id)) remake.set(id, new Set()); remake.get(id).add(i) } // tried again with the others
@@ -427,40 +452,48 @@ async function voiceOne(id, i, again = false) {
         return
       }
     } else {
-      rec = await synthesize(seg.t, voice, pauseKind, tone)
+      recs = await one()
     }
-    if (warm && rec.dur > 0.5) recordSpeed(voice, rec.dur / ((performance.now() - t0) / 1000))
+    const made = recs.reduce((a, r) => a + r.dur, 0)
+    if (warm && made > 0.5) recordSpeed(voice, made / ((performance.now() - t0) / 1000))
   } catch (e) {
     if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
-    console.warn('Sentence failed, skipping:', seg.t, e)
-    rec = { codec: 'none', dur: 0, tail: 0 }
+    console.warn('Sentence failed, skipping:', c.segs[i].t, e)
+    recs = [{ codec: 'none', dur: 0, tail: 0 }]
   }
   const now = getDoc(id)
   if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c || rewriting.has(id)) return // deleted / voice changed / re-processed meanwhile
-  rec.v = tone === 'natural' ? voice : voice + '|' + tone
-  // No room left on this device: the audio just made cannot be kept. That used to stop the line without a
-  // word, and start it again on every nudge to make the same sentence and fail the same way. Now it is
-  // said (Activity.jsx), and nothing more is made until something has been removed.
-  try { await db.putAudio(id, i, rec) } catch (e) {
-    console.warn('Audio could not be kept:', e)
-    library.set({ noRoom: true })
-    return
-  }
   const set = voicedSet(id)
-  set.add(i)
-  c.durs[i] = rec.dur
-  c.tails[i] = rec.tail || 0
+  let chars = 0, secs = 0
+  for (let k = 0; k < run.length; k++) {
+    const j = run[k], rec = recs[k]
+    rec.v = tone === 'natural' ? voice : voice + '|' + tone
+    // No room left on this device: the audio just made cannot be kept. That used to stop the line without a
+    // word, and start it again on every nudge to make the same sentence and fail the same way. Now it is
+    // said (Activity.jsx), and nothing more is made until something has been removed.
+    try { await db.putAudio(id, j, rec) } catch (e) {
+      console.warn('Audio could not be kept:', e)
+      library.set({ noRoom: true })
+      break
+    }
+    set.add(j)
+    c.durs[j] = rec.dur
+    c.tails[j] = rec.tail || 0
+    chars += c.segs[j].t.length
+    secs += rec.dur
+  }
+  if (!chars) return
   saveDurs(id)
   const done = set.size
   patch(id, {
     done,
-    vChars: now.vChars + seg.t.length,
-    vSec: now.vSec + rec.dur,
+    vChars: now.vChars + chars,
+    vSec: now.vSec + secs,
     ...(done >= c.segs.length ? { status: 'ready', stage: 'Ready' } : {}),
   })
   const voicedNow = getDoc(id)
   if (voicedNow && !voicedNow.spc && voicedNow.vChars > SPC_FROM) derive(id, { spc: Math.round((voicedNow.vSec / voicedNow.vChars) * 1e5) / 1e5 })
-  segListeners.forEach(f => f(id, i))
+  for (const j of run) if (set.has(j)) segListeners.forEach(f => f(id, j))
 }
 
 async function prepare(id) {

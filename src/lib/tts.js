@@ -2,6 +2,7 @@ import { createStore } from './store.js'
 import { settings } from './settings.js'
 import { muxOggOpus, unpackPackets } from './audio-format.js'
 import { isCloudVoice, cloudSynthesize } from './cloudvoice.js'
+import { countUse } from './usage.js'
 import { voiceName } from './voices.js'
 
 // The on-device voice engine (Piper, tts.worker.js). The worker starts on first use; each voice is one
@@ -78,10 +79,22 @@ export function loadEngine(voice = settings.get().voice) {
   return promise
 }
 
+// A run of sentences of one paragraph, given to an online voice as one (so it carries its feeling across each full
+// stop) and cut back into its sentences where it paused between them (split.js). → one record per sentence, or
+// null when the cuts could not be trusted: the caller then makes them one by one.
+export async function synthesizeRun(texts, voice, pauses, tone = settings.get().voiceTone || 'natural', opts = {}) {
+  await loadEngine(voice)
+  const { pcm, rate } = await cloudSynthesize(texts.join(' '), voice, { signal: opts.signal, onRetry: opts.onRetry })
+  const recs = (await call({ type: 'encodeRun', pcm, rate, lengths: texts.map(t => t.length), pauses, tone })).recs
+  if (recs && voice.startsWith('nv:')) countUse('voice', 'said', { n: texts.length }) // sentences, beside the requests (usage.js)
+  return recs
+}
+
 export async function synthesize(text, voice, pause = 'sentence', tone = settings.get().voiceTone || 'natural', opts = {}) {
   await loadEngine(voice)
   if (isCloudVoice(voice)) {
     const { pcm, rate } = await cloudSynthesize(text, voice, { signal: opts.signal, onRetry: opts.onRetry })
+    if (voice.startsWith('nv:')) countUse('voice', 'said')
     return (await call({ type: 'encode', pcm, rate, pause, tone })).rec
   }
   return (await call({ type: 'speak', text, voice, pause, tone })).rec

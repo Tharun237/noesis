@@ -308,7 +308,7 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
     }
     if ((res.status === 429 || res.status >= 500) && attempt < 8) {
       const ms = retryMs(attempt)
-      countUse('voice', res.status === 429 ? 'limited' : 'failed', res.status === 429 ? ms : 0) // how often NVIDIA asks for patience (usage.js)
+      countUse('voice', res.status === 429 ? 'limited' : 'failed', { waited: res.status === 429 ? ms : 0 }) // how often NVIDIA asks for patience (usage.js)
       onRetry?.(Math.max(1, Math.round(ms / 1000)))
       await sleep(ms)
       continue

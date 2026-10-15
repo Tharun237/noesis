@@ -144,7 +144,7 @@ async function withRetry(send, { tries, onRetry, delayOf, tally }) {
     const err = await res.json().catch(() => ({})) // an error body that is not JSON still has a status
     if ((res.status === 429 || res.status >= 500) && attempt < tries) {
       const ms = delayOf?.(err) ?? Math.min(60_000, 2000 * 2 ** attempt)
-      if (tally) countUse('text', res.status === 429 ? 'limited' : 'failed', res.status === 429 ? ms : 0)
+      if (tally) countUse('text', res.status === 429 ? 'limited' : 'failed', { waited: res.status === 429 ? ms : 0 })
       onRetry?.(Math.max(1, Math.round(ms / 1000)))
       await sleep(ms)
       // The wait is over and the question goes again: the countdown is no longer true. It stayed on screen ("retrying

@@ -208,7 +208,7 @@ function NvidiaUse() {
   const days = useStore(nvidiaUse, u => u.days)
   const u = useOver(days, 7)
   if (!u.voice.made && !u.text.made) return null
-  const asked = [u.voice.made && `${n(u.voice.made)} sentences spoken`, u.text.made && `${n(u.text.made)} AI requests`].filter(Boolean).join(' · ')
+  const asked = [u.voice.made && `${n(u.voice.said || u.voice.made)} sentences spoken in ${n(u.voice.made)} ${u.voice.made === 1 ? 'request' : 'requests'}`, u.text.made && `${n(u.text.made)} AI requests`].filter(Boolean).join(' · ')
   const limited = u.voice.limited + u.text.limited
   const waited = u.voice.waitedMs + u.text.waitedMs
   const busy = u.voice.failed + u.text.failed
@@ -216,7 +216,7 @@ function NvidiaUse() {
     <div style={small}>
       <div style={{ color: T.text, fontWeight: 600, marginBottom: 2 }}>Your NVIDIA key on this device, {u.days === 1 ? 'today' : `the last ${u.days} days`}</div>
       <div style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {asked}{u.voice.peak ? ` · at most ${n(u.voice.peak)} sentences in a minute` : ''}.{' '}
+        {asked}{u.voice.peak ? ` · at most ${n(u.voice.peak)} voice ${u.voice.peak === 1 ? 'request' : 'requests'} in a minute` : ''}.{' '}
         {limited ? `NVIDIA asked it to slow down ${n(limited)} ${limited === 1 ? 'time' : 'times'}, ${secs(waited)} of waiting in all.` : 'NVIDIA never asked it to slow down.'}
         {busy ? ` NVIDIA was busy ${n(busy)} ${busy === 1 ? 'time' : 'times'}; each was asked again.` : ''}
       </div>
