@@ -168,6 +168,13 @@ function openaiFail(e, p) {
 
 const openaiHeaders = p => ({ 'content-type': 'application/json', ...(p.key ? { authorization: `Bearer ${p.key}` } : {}) })
 
+// Models that think in private before answering, and can be told not to. Nemotron 3 Super thought for 12 s and
+// more before its first word of a two-line translation, minutes on a long one; told not to, it answered in 0.5 s
+// with the same Hindi (measured on NVIDIA, 15 October 2026). Only where it was measured to work: Step 5 told the
+// same rambled, Nemotron 3 Nano Omni gave no answer, gpt-oss ignores it.
+const NO_THINKING = /nemotron-3-super|nemotron-3\.5-lightning/i
+const quick = p => (p.id === 'nvidia' && NO_THINKING.test(p.model) ? { chat_template_kwargs: { enable_thinking: false } } : {})
+
 // One reply as a string.
 //   parts  — instead of `prompt`: [{ text } | { image: 'data:image/jpeg;base64,…' }] in order, for a model
 //            that reads page images.
@@ -193,7 +200,7 @@ export async function aiText({ prompt, parts, system, json, schema, shape, signa
   // Streamed, as Ask is: the answer starts flowing at once. Waited for whole, a long answer from a busy free
   // account took more than the 100 s the site's relay (Cloudflare) holds a silent line open: cut off (HTTP 524),
   // asked again, cut off again, while the screen blamed the quota (15 October 2026).
-  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: true, messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
+  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: true, ...quick(p), messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
   const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
     .catch(e => { throw openaiFail(e, p) })
   let whole = ''
@@ -242,7 +249,7 @@ export async function aiStream({ system, messages, onText, signal, onRetry }) {
     }
     return
   }
-  const body = JSON.stringify({ model: p.model, temperature: 0.4, stream: true, messages: [{ role: 'system', content: system }, ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))] })
+  const body = JSON.stringify({ model: p.model, temperature: 0.4, stream: true, ...quick(p), messages: [{ role: 'system', content: system }, ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))] })
   const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 3, onRetry })
     .catch(e => { throw openaiFail(e, p) })
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
