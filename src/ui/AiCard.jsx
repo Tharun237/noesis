@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
-import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels, chooseModel } from '../lib/ai.js'
+import { PROVIDERS, hasAiKey, isNvidiaKey, cleanBase, hostOf, listAiModels, testModel, checkModels, chooseModel, canSee, chooseVisionModel, provider } from '../lib/ai.js'
 import { loadCloudVoices } from '../lib/cloudvoice.js'
 import { Button, IconButton, Segmented, Toggle, Field, inputStyle, Appear } from './kit.jsx'
 
@@ -50,6 +50,11 @@ export function AiCard({ Card }) {
   const model = useStore(settings, s => s[MODEL[id]] || '')
   const checks = useStore(settings, s => s.modelChecks?.[id]) || []
   const ai = useStore(settings, s => s.aiNarration)
+  const figures = useStore(settings, s => s.describeFigures)
+  const sees = useStore(settings, s => (canSee(s) ? provider(s).vision : ''))
+  const triedSees = useStore(settings, s => !!s.visionTried?.[s.aiProvider])
+  const [looking, setLooking] = useState(false)
+  const lookAgain = async () => { setLooking(true); await chooseVisionModel({ again: true }); setLooking(false) }
   const connectedNow = useStore(settings, s => hasAiKey(s))
   const [draft, setDraft] = useState(savedKey)
   const [base, setBase] = useState(savedBase)
@@ -176,10 +181,19 @@ export function AiCard({ Card }) {
         </div>
       )}
 
+      {/* Figures: what is only in a picture, put into words by a model of this key that sees (figures.js) */}
+      <Toggle checked={figures} onChange={v => settings.set({ describeFigures: v })} disabled={!connectedNow} labelText="Describe figures, charts and diagrams"
+        hint={!connectedNow ? 'Needs your own AI key, set up above.'
+          : sees ? `In your PDFs, new ones and the ones already in your library, each figure is put into words by ${id === 'gemini' ? 'Gemini' : sees.split('/').pop()} and heard after its caption, starting where you are listening. One request per figure, with your key.`
+          : looking ? 'Looking for a model of your key that can see pictures…'
+          : triedSees ? 'None of the models your key can use can see pictures, so a figure is heard by its caption only.'
+          : 'Noesis looks for a model of your key that can see pictures, and uses it for figures.'} />
+      {connectedNow && !sees && triedSees && id !== 'gemini' && <div><Button onClick={lookAgain} disabled={looking}>{looking ? 'Looking…' : 'Look again'}</Button></div>}
+
       <Toggle checked={ai} onChange={v => settings.set({ aiNarration: v })} disabled={!connectedNow} labelText="AI narration for PDFs by default"
         hint={!connectedNow ? 'Needs your own AI key, set up above. It is then used for the PDFs you add, not the ones already in your library.' : id === 'gemini'
           ? 'Better for papers and textbooks. One request per 5 pages, in order: a 700-page book is 140 requests.'
-          : 'The model reads each page as an image, so it must be one that can see images; many cannot, and the app says so when one refuses. One request per 2 pages.'} />
+          : sees ? `Each page goes to ${sees.split('/').pop()}, which can see it. One request per 2 pages: a 700-page book is 350 requests.` : "Needs a model that can see pages, and none of your key's models can: PDFs are read without it."} />
     </Card>
   )
 }

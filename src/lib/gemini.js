@@ -82,7 +82,9 @@ Never add commentary, never summarise body text, never invent content.`
 // AI narration for PDFs: Gemini sees each page as an image (figures, tables, math) plus its text layer.
 // Pages go in small windows so any book length works and each response stays well under output limits.
 export async function narratePdf({ pdf, pageText, key, model, onProgress, signal, onRetry }) {
-  const WINDOW = provider().kind === 'gemini' ? 5 : 2 // other providers take smaller requests: fewer page images at a time
+  // Gemini takes several pages at once; other providers' models that see take one picture a request (NVIDIA's
+  // Llama 3.2 Vision refused two, and the book failed with it, 15 October 2026)
+  const WINDOW = provider().kind === 'gemini' ? 5 : 1
   const out = []
   const failed = []
   for (let start = 1; start <= pdf.numPages; start += WINDOW) {

@@ -115,9 +115,9 @@ export const PROVIDERS = [
 ]
 
 export function provider(s = settings.get()) {
-  if (s.aiProvider === 'nvidia') return { id: 'nvidia', kind: 'openai', name: 'NVIDIA', base: '/api/nvidia', key: String(s.nvidiaKey || '').trim(), model: s.nvidiaModel || '' }
-  if (s.aiProvider === 'custom') return { id: 'custom', kind: 'openai', name: hostOf(s.customBase) || 'your provider', base: cleanBase(s.customBase), key: String(s.customKey || '').trim(), model: String(s.customModel || '').trim() }
-  return { id: 'gemini', kind: 'gemini', name: 'Gemini', key: String(s.geminiKey || '').trim(), model: s.geminiModel }
+  if (s.aiProvider === 'nvidia') return { id: 'nvidia', kind: 'openai', name: 'NVIDIA', base: '/api/nvidia', key: String(s.nvidiaKey || '').trim(), model: s.nvidiaModel || '', vision: s.nvidiaVision || '' }
+  if (s.aiProvider === 'custom') return { id: 'custom', kind: 'openai', name: hostOf(s.customBase) || 'your provider', base: cleanBase(s.customBase), key: String(s.customKey || '').trim(), model: String(s.customModel || '').trim(), vision: String(s.customVision || '').trim() }
+  return { id: 'gemini', kind: 'gemini', name: 'Gemini', key: String(s.geminiKey || '').trim(), model: s.geminiModel, vision: s.geminiModel } // Gemini sees pages itself
 }
 export const providerName = () => provider().name
 // How much of a book fits in one question. Gemini reads a whole book; most other models hold far less, and
@@ -173,16 +173,24 @@ const openaiHeaders = p => ({ 'content-type': 'application/json', ...(p.key ? { 
 // with the same Hindi (measured on NVIDIA, 15 October 2026). Only where it was measured to work: Step 5 told the
 // same rambled, Nemotron 3 Nano Omni gave no answer, gpt-oss ignores it.
 const NO_THINKING = /nemotron-3-super|nemotron-3\.5-lightning/i
-const quick = p => (p.id === 'nvidia' && NO_THINKING.test(p.model) ? { chat_template_kwargs: { enable_thinking: false } } : {})
+const quick = (p, model = p.model) => (p.id === 'nvidia' && NO_THINKING.test(model) ? { chat_template_kwargs: { enable_thinking: false } } : {})
+
+// A model that can see pictures, for what is only in a picture: a figure, a chart, a scanned page. Most models
+// cannot: given a page, Nemotron 3 Super answered nothing and gpt-oss read the caption back (measured on a free
+// NVIDIA key, 15 October 2026). Pictures go to the model that sees (chooseVisionModel); words to the one chosen.
+export const canSee = (s = settings.get()) => hasAiKey(s) && !!provider(s).vision
+const SEES_STALL_MS = 180_000 // a model reading a page can be slow to its first word (Llama 3.2 Vision: 137 s whole)
 
 // One reply as a string.
 //   parts  — instead of `prompt`: [{ text } | { image: 'data:image/jpeg;base64,…' }] in order, for a model
 //            that reads page images.
 //   json   — the caller will parse JSON. Gemini is told by mime type (and `schema` when given); an OpenAI-style
 //            provider is told in words, with `shape` describing the JSON, since not every model has a JSON mode.
-export async function aiText({ prompt, parts, system, json, schema, shape, signal, onRetry }) {
+export async function aiText({ prompt, parts, system, json, schema, shape, signal, onRetry, model: asked }) {
   const p = provider()
   const pieces = parts || [{ text: prompt }]
+  const pictures = pieces.some(x => x.image)
+  const model = asked || (pictures && p.vision) || p.model // pictures to the model that sees
   if (p.kind === 'gemini') {
     const body = JSON.stringify({
       contents: [{ role: 'user', parts: pieces.map(x => (x.image ? { inline_data: { mime_type: x.image.slice(5, x.image.indexOf(';')), data: x.image.slice(x.image.indexOf(',') + 1) } } : { text: x.text })) }],
@@ -200,14 +208,14 @@ export async function aiText({ prompt, parts, system, json, schema, shape, signa
   // Streamed, as Ask is: the answer starts flowing at once. Waited for whole, a long answer from a busy free
   // account took more than the 100 s the site's relay (Cloudflare) holds a silent line open: cut off (HTTP 524),
   // asked again, cut off again, while the screen blamed the quota (15 October 2026).
-  const body = JSON.stringify({ model: p.model, temperature: 0.2, stream: true, ...quick(p), messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
+  const body = JSON.stringify({ model, temperature: 0.2, stream: true, ...quick(p, model), messages: [...(sys ? [{ role: 'system', content: sys }] : []), { role: 'user', content: parts ? pieces.map(x => (x.image ? { type: 'image_url', image_url: { url: x.image } } : { type: 'text', text: x.text })) : prompt }] })
   let whole = ''
   for (let again = 0; ; again++) {
     const res = await withRetry(() => fetch(`${p.base}/chat/completions`, { method: 'POST', headers: openaiHeaders(p), body, signal }), { tries: 8, onRetry })
       .catch(e => { throw openaiFail(e, p) })
     if (!/event-stream/i.test(res.headers.get('content-type') || '')) { whole = (await res.json()).choices?.[0]?.message?.content || ''; break } // one piece anyway
     whole = ''
-    try { await readStream(res, t => { whole += t }); break } catch (e) {
+    try { await readStream(res, t => { whole += t }, pictures ? SEES_STALL_MS : STALL_MS); break } catch (e) {
       if (!e.stalled || signal?.aborted) throw e
       if (again >= STALL_TRIES) throw new Error(`${p.name} stopped answering part way. Try again.`)
       onRetry?.(null) // asked again from the start: nothing of a stalled answer is kept
@@ -337,6 +345,48 @@ export function chooseModel() {
     return pick || null
   })().catch(() => null).finally(() => { choosing = null })
   return choosing
+}
+
+// Which model of this key can see. A model is shown a small picture of a shape in a colour, both picked at
+// random, and kept only if it names them: a model that cannot see can only guess, and two guesses right by chance
+// are 1 in 9. Asked of the likeliest names first (a name only orders the asking), at most PROBE_SEES of them;
+// found nothing, it is not asked again for a day. Gemini sees pages itself and is never asked.
+const SEES_NAMES = /vision|[-_]vl|-vl-|omni|multimodal|pixtral|llava|paligemma|gemma-3|phi-4-multimodal|maverick|scout/i
+const SHAPES = [['circle', /circle|round|disc|dot|ball/i], ['square', /square|box|rectangle/i], ['triangle', /triangle/i]]
+const COLOURS = [['red', '#e01818', /red|crimson|scarlet/i], ['blue', '#1840e0', /blue|navy/i], ['green', '#18a030', /green/i]]
+const PROBE_SEES = 4
+const TRY_AGAIN_MS = 24 * 3600 * 1000
+async function probePicture() {
+  const [shape, shapeRe] = SHAPES[Math.floor(Math.random() * SHAPES.length)]
+  const [, ink, colourRe] = COLOURS[Math.floor(Math.random() * COLOURS.length)]
+  const c = new OffscreenCanvas(256, 256), g = c.getContext('2d')
+  g.fillStyle = '#ffffff'; g.fillRect(0, 0, 256, 256); g.fillStyle = ink; g.beginPath()
+  if (shape === 'circle') g.arc(128, 128, 80, 0, Math.PI * 2)
+  else if (shape === 'square') g.rect(48, 48, 160, 160)
+  else { g.moveTo(128, 36); g.lineTo(224, 212); g.lineTo(32, 212); g.closePath() }
+  g.fill()
+  const blob = await c.convertToBlob({ type: 'image/jpeg', quality: 0.9 })
+  const url = await new Promise(done => { const r = new FileReader(); r.onload = () => done(r.result); r.readAsDataURL(blob) })
+  return { url, sees: answer => shapeRe.test(answer) && colourRe.test(answer) }
+}
+let looking = null
+export function chooseVisionModel({ again = false } = {}) {
+  looking ||= (async () => {
+    const s = settings.get(), p = provider(s)
+    if (p.kind !== 'openai' || !hasAiKey(s) || p.vision || typeof OffscreenCanvas === 'undefined') return p.vision || null
+    if (!again && Date.now() - (s.visionTried?.[p.id] || 0) < TRY_AGAIN_MS) return null
+    const checked = (s.modelChecks?.[p.id] || []).map(c => c.id)
+    const ids = (checked.length ? checked : (await listAiModels()).map(m => m.id)).filter(id => SEES_NAMES.test(id)).slice(0, PROBE_SEES)
+    for (const id of ids) {
+      const pic = await probePicture()
+      const answer = await aiText({ model: id, parts: [{ text: 'What shape is in this picture, and what colour is it? Answer in two words.' }, { image: pic.url }] }).catch(() => '')
+      if (pic.sees(answer) && provider().vision === '') { settings.set({ [p.id === 'nvidia' ? 'nvidiaVision' : 'customVision']: id }); return id }
+      await sleep(CHECK_GAP_MS)
+    }
+    settings.set({ visionTried: { ...settings.get().visionTried, [p.id]: Date.now() } })
+    return null
+  })().catch(() => null).finally(() => { looking = null })
+  return looking
 }
 
 // Which of the listed models answer, and how fast. A provider's list is not a list of models that work

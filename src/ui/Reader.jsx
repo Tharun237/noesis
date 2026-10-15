@@ -832,7 +832,7 @@ const Block = memo(function Block({ bi, b, start, active, dur, tail, hit, marks,
       <motion.figure initial={false} animate={{ opacity: dim ? 0.4 : 1 }}
         style={{ ...box, margin: '22px 0', padding: '14px 16px', borderRadius: T.r.md, border: `1px solid ${T.border}`, background: T.surface }}>
         <div style={{ ...label, color: T.accent, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Icon name={b.k === 'code' ? 'text' : b.k === 'math' ? 'sparkle' : 'grid'} size={13} />{VISUAL_LABEL[b.k]}{dim ? ' · skipped' : ''}
+          <Icon name={b.k === 'code' ? 'text' : b.k === 'math' ? 'sparkle' : 'grid'} size={13} />{VISUAL_LABEL[b.k]}{b.ai ? ' · described by AI' : ''}{dim ? ' · skipped' : ''}
           {tool && (
             <button type="button" data-tool={tool} data-b={bi}
               style={{ marginLeft: 'auto', height: 28, padding: '0 12px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, background: 'transparent', color: T.text, fontFamily: T.font, fontSize: 12, fontWeight: 600, letterSpacing: 0, textTransform: 'none', cursor: 'pointer' }}>

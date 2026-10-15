@@ -4,7 +4,7 @@ import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, closeSheet, go, toast } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
-import { hasAiKey } from '../lib/ai.js'
+import { hasAiKey, provider } from '../lib/ai.js'
 import { canTranslateHere } from '../lib/localtranslate.js'
 import { LANGS } from '../lib/lang.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn, loadDoc } from '../lib/library.js'
@@ -148,7 +148,10 @@ function AddForm({ wide }) {
   const voiceLang = target || 'en'
   const langVoices = voicesFor(voiceLang)
   const picked = langVoices.some(v => v.id === voice) ? voice : langVoices[0]?.id
-  const [ai, setAi] = useState(keyed && s.aiNarration)
+  // On by itself with Gemini only (5 pages a request, quickly). Other providers' models that see take a page a request:
+  // a 700-page book was hours of a free key and could not be heard until done. Figures are put into words apart
+  // (figures.js), so narration is for the customer to ask for, for a scanned or a muddled PDF.
+  const [ai, setAi] = useState(keyed && s.aiNarration && provider().kind === 'gemini')
   const [busy, setBusy] = usePreview()
   const [over, setOver] = useState(false)
   const inputRef = useRef(null)

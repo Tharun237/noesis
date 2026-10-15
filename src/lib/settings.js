@@ -17,6 +17,10 @@ export const DEFAULTS = {
   geminiModel: 'gemini-flash-latest',
   nvidiaKey: '',
   nvidiaModel: '', // no default invented: the customer picks one from the list their key returns
+  nvidiaVision: '', // the model of that key that sees pictures (ai.js chooseVisionModel): figures, page narration
+  customVision: '',
+  visionTried: {}, // provider → when a model that sees was last looked for and none found
+  describeFigures: true, // figures, charts, diagrams and tables put into words (figures.js), with the customer's own key
   nvidiaVoices: {}, // lang → [full NVIDIA voice names], from /api/nvidia-tts/list_voices
   nvidiaVoicesAt: 0, // when the voice list was last fetched (once a day at most)
   voiceBase: '', // the customer's own OpenAI-protocol voice service address, e.g. https://api.openai.com/v1

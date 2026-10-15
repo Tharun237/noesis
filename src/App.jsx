@@ -8,6 +8,7 @@ import { settings } from './lib/settings.js'
 import { reducedMotion, whenIdle } from './lib/motion.js'
 import { Route } from './lib/route.js'
 import { boot } from './lib/library.js'
+import { startFigures } from './lib/figures.js'
 import { startHistory } from './lib/history.js'
 import { startExtras } from './lib/extras.js'
 import { player, toggle, nextSentence, prevSentence } from './lib/player.js'
@@ -52,7 +53,7 @@ export default function App() {
   const activity = useActivity()
 
   useEffect(() => { boot() }, [])
-  useEffect(() => { startHistory(); startExtras() }, [])
+  useEffect(() => { startHistory(); startExtras(); startFigures() }, [])
   // Settings is fetched in a quiet moment after the app has started: the first tap on its tab then shows
   // Settings, not an empty screen while it loads (filmed by e2e/film.mjs: a third of a second of black).
   useEffect(() => { whenIdle(Settings.fetch) }, [])

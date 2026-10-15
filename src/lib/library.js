@@ -3,7 +3,8 @@ import { db, persistStorage, canStore, storeNames } from './db.js'
 import { onShelf } from './shelf.js'
 import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
-import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel } from './ai.js'
+import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee } from './ai.js'
+import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures } from './figstore.js'
 import { synthesize, engine, loadEngine } from './tts.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
@@ -141,9 +142,16 @@ export function loadDoc(id) {
     loading.set(id, (async () => {
       const [doc, stored] = await Promise.all([db.getDoc(id), db.getDurs(id)])
       if (!doc) return null
+      // A figure the customer's AI has put into words (figstore.js) is heard and shown with its caption: the words
+      // join the caption's last sentence, in this opened copy only. fk: the figure's key, from its own caption.
+      const blocks = doc.blocks.map(b => {
+        if (!isFigure(b)) return b
+        const words = described(id, b)
+        return { ...b, fk: figKey(b), ...(words ? { ai: 1, s: [...b.s.slice(0, -1), `${b.s[b.s.length - 1]} ${words}`] } : {}) }
+      })
       const segs = []
       const starts = []
-      doc.blocks.forEach((b, bi) => { starts.push(segs.length); for (const t of b.s) segs.push({ t, b: bi, k: b.k }) })
+      blocks.forEach((b, bi) => { starts.push(segs.length); for (const t of b.s) segs.push({ t, b: bi, k: b.k }) })
       let durs, tails
       if (stored && !Array.isArray(stored) && Array.isArray(stored.durs) && stored.durs.length === segs.length) {
         durs = stored.durs
@@ -162,7 +170,7 @@ export function loadDoc(id) {
         recs.forEach((r, k) => { if (r?.dur > 0) { durs[lost[k]] = r.dur; tails[lost[k]] = r.tail || 0; found++ } })
         if (found) db.putDurs(id, { durs, tails })
       }
-      const c = { blocks: doc.blocks, segs, starts, durs, tails, refs: doc.refs || [] }
+      const c = { blocks, segs, starts, durs, tails, refs: doc.refs || [] }
       cache.set(id, c)
       return c
     })().finally(() => loading.delete(id)))
@@ -482,16 +490,23 @@ async function prepare(id) {
     if (refs.length) blocks = withoutEmptyRefHeading(blocks)
     let note = null
 
-    if (d.ai && hasAiKey() && parsed.pdf) {
+    // AI narration shows each page to the model of the key that sees. A model that cannot see answered nothing for
+    // every page and the book came out as plain reading anyway, minutes later, with nothing said (15 October 2026).
+    if (d.ai && hasAiKey() && !canSee() && parsed.pdf) note = `AI narration needs a model that can see pages, and none of your ${providerName()} key's models can. This PDF is read without it.`
+    if (d.ai && canSee() && parsed.pdf) {
       patch(id, { status: 'narrating', stage: 'AI is reading the pages', prep: 0 })
       const { narratePdf } = await import('./gemini.js')
+      // A refusal (a model that will not take the pages, a key it does not accept) costs the narration, never the
+      // book: it is read as it would be without AI, and says why. It failed the whole book (15 October 2026).
       const r = await narratePdf({
         pdf: parsed.pdf, pageText: parsed.pageText, key: s.geminiKey, model: s.geminiModel,
         onProgress: stepped(id),
         onRetry: secs => patch(id, { stage: secs == null ? 'AI is reading the pages' : `${providerName()} is busy. Trying again in about ${secs} s.` }),
-      })
-      blocks = r.blocks.flatMap(b => (b.k === 'gap' ? parsed.blocks.filter(x => x.page >= b.from && x.page <= b.to) : [b]))
-      if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
+      }).catch(e => { if (e?.name === 'AbortError') throw e; note = `AI narration stopped (${String(e?.message || e).replace(/\.$/, '')}). This PDF is read without it.`; return null })
+      if (r) {
+        blocks = r.blocks.flatMap(b => (b.k === 'gap' ? parsed.blocks.filter(x => x.page >= b.from && x.page <= b.to) : [b]))
+        if (r.failed.length) note = `AI narration failed on pages ${r.failed.map(([a, b]) => (a === b ? a : `${a}–${b}`)).join(', ')}; those pages use standard cleanup.`
+      }
     }
 
     // Scanned book without AI narration: repair OCR errors on-device with a dictionary.
@@ -751,6 +766,7 @@ export async function boot() {
     const j = k.lastIndexOf(':')
     voicedSet(k.slice(0, j)).add(+k.slice(j + 1))
   }
+  await loadFigures(metas.map(m => m.id)) // before any document is opened: its figures' words are merged on opening
   library.set({ docs: metas.sort((a, b) => b.createdAt - a.createdAt), loaded: true })
   void repairMeta(metas)
   await retireKokoro(metas)
@@ -825,14 +841,49 @@ function takeMarks(id, v) {
 let heard = null
 export const setHeardSync = h => { heard = h }
 
+// New descriptions of figures (described here, or arrived from another device): the opened copy takes them, and
+// the one sentence each joins is spoken again. Nothing else moves: no sentence is added, none is renumbered.
+export async function figuresArrived(id, keys) {
+  const fresh = !cache.has(id) // opened now, it is merged already (loadDoc)
+  const c = await loadDoc(id)
+  if (!c) return
+  const want = new Set(keys)
+  let redo = 0
+  for (let bi = 0; bi < c.blocks.length; bi++) {
+    const b = c.blocks[bi]
+    if (!b.fk || !want.has(b.fk)) continue
+    const i = c.starts[bi] + b.s.length - 1
+    if (!fresh) {
+      const words = described(id, b)
+      if (!words) continue
+      const last = `${b.s[b.s.length - 1]} ${words}`
+      c.blocks[bi] = { ...b, ai: 1, s: [...b.s.slice(0, -1), last] }
+      c.segs[i] = { ...c.segs[i], t: last }
+    }
+    if (voicedSet(id).has(i)) { // made before it was described: made again with the words
+      await db.delAudioAt(id, i)
+      voicedSet(id).delete(i)
+      c.durs[i] = 0
+      c.tails[i] = 0
+      redo++
+    }
+  }
+  if (!redo) return
+  saveDurs(id)
+  const d = getDoc(id)
+  if (d) patch(id, { done: voicedSet(id).size, ...(d.status === 'ready' && d.voice != null ? { status: 'voicing', stage: 'Making the audio' } : {}) })
+  kickVoice()
+}
+
 const syncHooks = {
-  allKeys: async () => ['cols', 'prefs', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id]), ...(await heard?.keys() || [])],
+  allKeys: async () => ['cols', 'prefs', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id, ...(hasAny(d.id) ? ['figs:' + d.id] : [])]), ...(await heard?.keys() || [])],
   content: id => db.getDoc(id),
   snapshot(k) {
     if (k === 'cols') return { collections: library.get().collections }
     if (k === 'prefs') return prefsSnapshot()
     if (k.startsWith('heard:')) return heard?.snapshot(k)
     const [type, id] = k.split(':')
+    if (type === 'figs') return hasAny(id) ? { figs: allOf(id) } : undefined // described once, for every device
     const d = getDoc(id)
     // A document is told to the other devices once its text exists (contentVer): told earlier, it stood on
     // them as "waiting for your other device" for as long as this one took, and for ever if this one was
@@ -848,6 +899,7 @@ const syncHooks = {
     if (k === 'prefs') return applyPrefs(v)
     if (k.startsWith('heard:')) return heard?.apply(k, v)
     const [type, id] = k.split(':')
+    if (type === 'figs') { const fresh = await addFigures(id, v.figs); if (fresh.length && getDoc(id)) await figuresArrived(id, fresh); return }
     const d = getDoc(id)
     if (type === 'meta') {
       if (v.deleted) return d && deleteDoc(id, true)
@@ -1029,6 +1081,7 @@ export async function deleteDoc(id, remote = false) {
   if (library.get().noRoom) { library.set({ noRoom: false }); setTimeout(() => kickVoice(), 500) } // room has been made
   cache.delete(id)
   voiced.delete(id)
+  void dropFigures(id)
   library.set(s => ({ docs: s.docs.filter(d => d.id !== id) }))
   if (!remote) touch('meta:' + id) // snapshot of a missing doc = tombstone → deleted on every device
   await Promise.all([db.delMeta(id), db.delContent(id), db.delAudio(id)])

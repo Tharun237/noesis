@@ -51,6 +51,7 @@ export const db = {
   getAudios: (id, from, to) => getMany(Array.from({ length: to - from }, (_, k) => id + ':' + (from + k)), audio),
   putAudio: (id, i, rec) => set(id + ':' + i, rec, audio),
   audioKeys: () => keys(audio),
+  delAudioAt: (id, i) => del(id + ':' + i, audio), // one sentence's audio, to be made again (figures.js)
   async delAudio(id) {
     const ks = (await keys(audio)).filter(k => k.startsWith(id + ':'))
     await delMany(ks, audio)
