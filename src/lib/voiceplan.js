@@ -39,6 +39,36 @@ export function judge(alone, pieces) {
 }
 export const learnRuns = (voice, ok, now = Date.now()) => setPlan(voice, { runs: !!ok, at: now, strikes: 0 })
 
+// The same verdict WITHOUT making anything twice: each cut piece against the voice's own pace (seconds of speech a
+// character), learnt from the sentences it has already spoken alone. Making a paragraph both ways cost Gemini's
+// free key six of its ten requests a day before a paragraph was ever heard (16 October 2026). Measured on Mia's
+// clean cuts 0.92-1.11 of the pace; Alba's wrong cut 0.58. → true when every piece fits, null when no pace is known.
+export const PACE_FIT = [0.7, 1.4] // a little wider than piece-against-itself: a sentence's own pace varies
+export function fitsPace(pace, pieces) {
+  if (!(pace > 0) || !pieces?.length) return null
+  return pieces.every(p => p.chars > 0 && p.speech > 0 && p.speech / (p.chars * pace) >= PACE_FIT[0] && p.speech / (p.chars * pace) <= PACE_FIT[1])
+}
+// The voice's pace, from a sentence it spoke alone (seconds of speech, characters): a running mean, so one odd
+// sentence moves it a little. Kept per device with the voice's plan.
+const PACE_WEIGHT = 0.2
+export function learnPace(voice, speech, chars) {
+  if (!(speech > 0.3) || !(chars > 8)) return
+  const one = speech / chars
+  const was = settings.get().voicePlans?.[voice]?.pace
+  setPlan(voice, { pace: was > 0 ? was + (one - was) * PACE_WEIGHT : one })
+}
+export const paceOf = voice => settings.get().voicePlans?.[voice]?.pace || 0
+
+// Every run's check, whether the voice was judged before or not: a cut that fits confirms it; three in a row that do
+// not put it back to one sentence at a time (a first pace learnt from one sentence may be rough: one miss is not a
+// verdict).
+export function runVerdict(voice, ok) {
+  const p = settings.get().voicePlans?.[voice] || {}
+  if (ok) { if (!p.runs || p.strikes) setPlan(voice, { runs: true, at: p.runs ? p.at : Date.now(), strikes: 0 }); return }
+  const strikes = (p.strikes || 0) + 1
+  setPlan(voice, strikes >= STRIKES ? { runs: false, at: Date.now(), strikes: 0 } : { strikes })
+}
+
 // A run of a voice that had passed, whose cuts could not be trusted this time (null from split.js), or that was cut.
 export function runResult(voice, cut) {
   const p = settings.get().voicePlans?.[voice]

@@ -6,7 +6,7 @@ import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee, isNvidiaKey } from './ai.js'
 import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
 import { synthesize, synthesizeRun, engine, loadEngine } from './tts.js'
-import { runsFor, judge, learnRuns, runResult, runChars, ceilingOf, tooLong } from './voiceplan.js'
+import { runsFor, runVerdict, runChars, ceilingOf, tooLong, fitsPace, learnPace, paceOf } from './voiceplan.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -469,7 +469,8 @@ async function voiceOne(id, i, again = false) {
     else if (ownHost) patch(id, { stage: `${ownHost}'s quota is limiting requests. Retrying in about ${v} s.` })
     else patch(id, { stage: `${String(voice).startsWith('gm:') ? 'Gemini' : 'NVIDIA'}'s free quota is limiting requests. Retrying in about ${v} s.` })
   }
-  const one = () => synthesize(c.segs[i].t, voice, pauseOf(i), tone, cloud ? { onRetry } : undefined).then(rec => [rec])
+  // a sentence spoken alone also teaches the voice's pace (voiceplan.js learnPace), which every run is checked against
+  const one = () => synthesize(c.segs[i].t, voice, pauseOf(i), tone, cloud ? { onRetry } : undefined).then(rec => { learnPace(voice, rec.speech, c.segs[i].t.length); return [rec] })
   // The run given to the voice as one. A text the service refused as too long teaches its limit (undefined: not held
   // against the voice); on the device, a run the engine could not make counts as one that could not be cut (null).
   const together = () => synthesizeRun(run.map(j => c.segs[j].t), voice, run.map(pauseOf), tone, cloud ? { onRetry } : undefined).catch(e => {
@@ -479,18 +480,15 @@ async function voiceOne(id, i, again = false) {
   })
   const make = async () => {
     if (run.length < 2) return one()
-    if (verdict === null) {
-      // This voice's first run: made both ways, each cut piece compared with its sentence spoken alone, the verdict
-      // kept. The sentences spoken alone are what is kept this time, so a voice that fails costs nothing heard.
-      const whole = await together()
-      const alone = []
-      for (const j of run) alone.push(await synthesize(c.segs[j].t, voice, pauseOf(j), tone, cloud ? { onRetry } : undefined))
-      if (whole !== undefined) learnRuns(voice, judge(alone.map(r => r.speech), whole?.map(r => r.speech)))
-      return alone
-    }
+    // No pace known for this voice yet: this sentence alone first, which teaches it; runs after that.
+    if (!(paceOf(voice) > 0)) { run.length = 1; return one() }
+    // The run, made once, and each cut piece checked against the voice's own pace: nothing is made twice (making a
+    // paragraph both ways spent Gemini's free key before one was heard). Every run is checked, not only the first;
+    // a voice whose cuts keep failing goes back to one sentence at a time (runResult), and is tried again later.
     const whole = await together()
-    if (whole) { runResult(voice, true); return whole }
-    if (whole === null) runResult(voice, false) // cut could not be trusted this time
+    const fit = whole ? fitsPace(paceOf(voice), whole.map((r, k) => ({ speech: r.speech, chars: c.segs[run[k]].t.length }))) : false
+    if (whole && fit) { runVerdict(voice, true); return whole }
+    if (whole !== undefined) runVerdict(voice, false) // a cut that could not be trusted
     run.length = 1 // this sentence alone; the ones after it are made by the next turns
     return one()
   }

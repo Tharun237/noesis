@@ -15,6 +15,7 @@ import { kindOf, ACCEPT } from '../ingest/index.js'
 import { looksMarkdown } from '../ingest/text.js'
 import { voiceName, voicesFor, voiceKind } from '../lib/voices.js'
 import { isCloudVoice, cloudTruth } from '../lib/cloudvoice.js'
+import { db } from '../lib/db.js'
 import { activeEngine, pickSystemVoice, systemVoiceLabel } from '../lib/engine.js'
 import { SystemVoiceSelect } from './VoiceCard.jsx'
 import { Icon } from './icons.jsx'
@@ -85,7 +86,11 @@ async function preview(voice, setBusy) {
   previewAudio.pause()
   setBusy({ voice, phase: 'getting' })
   try {
-    const rec = await synthesize(`Hi, I'm ${voiceName(voice)}. I'll read your documents to you, clearly and calmly.`, voice)
+    // An online voice's sample is made once and kept on this device: a free key may allow only a few requests a day
+    // (Gemini: 10), and every press of Play here used one (16 October 2026).
+    const kept = isCloudVoice(voice) ? await db.getAudio('preview', voice).catch(() => null) : null
+    const rec = kept || await synthesize(`Hi, I'm ${voiceName(voice)}. I'll read your documents to you, clearly and calmly.`, voice)
+    if (!kept && isCloudVoice(voice)) db.putAudio('preview', voice, rec).catch(() => {})
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     previewUrl = URL.createObjectURL(recordToBlob(rec))
     previewAudio.src = previewUrl

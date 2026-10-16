@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 const kept = new Map()
 globalThis.localStorage = { getItem: k => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, String(v)), removeItem: k => kept.delete(k) }
 const { settings } = await import('./settings.js')
-const { judge, runsFor, learnRuns, runResult, runChars, gapOf, paced, tooLong, ceilingOf } = await import('./voiceplan.js')
+const { judge, runsFor, learnRuns, runResult, runChars, gapOf, paced, tooLong, ceilingOf, fitsPace, learnPace, paceOf, runVerdict } = await import('./voiceplan.js')
 
 test('a voice whose cuts match its sentences spoken alone passes; one that cut at a comma does not', () => {
   // measured on 16 October 2026: Mia cut cleanly, Alba cut in the middle of a sentence
@@ -46,4 +46,27 @@ test('the pace backs off when the service says too many, follows its Retry-After
   let g = gapOf('s2')
   for (let k = 0; k < 10; k++) g = paced('s2', 'ok')
   assert.ok(g < 20_000 && g > 400, `slowly back: ${g}`)
+})
+
+test("a cut is checked against the voice's own pace, with nothing made twice (16 October 2026)", () => {
+  // Mia's pace from her sentences alone (speech seconds, characters), and her four clean cut pieces
+  settings.set({ voicePlans: {} })
+  for (const [sec, ch] of [[2.54, 51], [3.67, 68], [2.61, 54], [2.92, 64]]) learnPace('mia', sec, ch)
+  const mia = [[2.38, 51], [3.70, 68], [2.97, 54], [2.91, 64]].map(([speech, chars]) => ({ speech, chars }))
+  assert.equal(fitsPace(paceOf('mia'), mia), true)
+  // Alba's cut in the middle of a sentence: one piece speaks for little more than half what its text needs
+  for (const [sec, ch] of [[2.79, 51], [4.04, 68], [3.00, 54], [3.04, 64]]) learnPace('alba', sec, ch)
+  const alba = [[3.13, 51], [4.35, 68], [1.69, 54], [3.14, 64]].map(([speech, chars]) => ({ speech, chars }))
+  assert.equal(fitsPace(paceOf('alba'), alba), false)
+  assert.equal(fitsPace(0, mia), null, 'no pace yet: not judged')
+})
+
+test('one miss is not a verdict; three in a row are; a fit confirms', () => {
+  settings.set({ voicePlans: {} })
+  runVerdict('v2', false); runVerdict('v2', false)
+  assert.equal(runsFor('v2'), null, 'two misses: still being tried')
+  runVerdict('v2', true)
+  assert.equal(runsFor('v2'), true, 'a fit: runs')
+  runVerdict('v2', false); runVerdict('v2', false); runVerdict('v2', false)
+  assert.equal(runsFor('v2'), false, 'three in a row: one sentence at a time')
 })
