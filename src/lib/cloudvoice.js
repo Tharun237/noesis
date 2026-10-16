@@ -372,7 +372,10 @@ export async function geminiSpeech(text, voice, { signal } = {}) {
   if (key.length < 20) throw Object.assign(new Error('Gemini did not accept the key. Check it in Settings → AI.'), { status: 401 })
   const listed = await geminiModels(key, signal)
   const learnt = gmPlan().model
-  const models = learnt && listed.includes(learnt) ? [learnt, ...listed.filter(m => m !== learnt)] : listed
+  const spent = gmPlan().spent || {} // model → when its daily allowance comes back
+  const fresh = listed.filter(m => !(spent[m] > Date.now()))
+  if (!fresh.length) throw dailySpent(Math.min(...listed.map(m => spent[m] || Infinity)))
+  const models = learnt && fresh.includes(learnt) ? [learnt, ...fresh.filter(m => m !== learnt)] : fresh
   let last = null
   for (const model of models) {
     const res = await fetch(GM_URL, {
@@ -385,6 +388,14 @@ export async function geminiSpeech(text, voice, { signal } = {}) {
       const got = await res.json().catch(() => ({}))
       const err = (Array.isArray(got) ? got[0] : got)?.error || {} // this endpoint answers with a list: [{ error }]
       const msg = String(err.message || '')
+      // Google says which limit and when it comes back: "limit: 10 requests per day on Free Tier. Please retry in
+      // 11h54m20s" (16 October 2026). A DAY's allowance used up is not a moment's wait: this model is set aside until
+      // then and the next of the key's models is asked at once (each has its own allowance).
+      if (res.status === 429 && /per day/i.test(msg)) {
+        setGmPlan({ spent: { ...(gmPlan().spent || {}), [model]: Date.now() + retryIn(msg, 3600_000) } })
+        last = res
+        continue
+      }
       // A voice name Google no longer knows: dropped from the list (the names come from its documentation; there is
       // no list to read), and said as a voice that is not available, so the book asks for another
       if (res.status === 400 && /voice/i.test(msg) && !/api key/i.test(msg)) {
@@ -404,7 +415,22 @@ export async function geminiSpeech(text, voice, { signal } = {}) {
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
     return parseWav(bytes.buffer)
   }
+  if (last?.status === 429) throw dailySpent(Math.min(...listed.map(m => gmPlan().spent?.[m] || Infinity)))
   throw Object.assign(new Error('This voice is not available now.'), { status: last?.status || 404 })
+}
+
+// "Please retry in 11h54m20s" → ms (fallback when it says nothing)
+export function retryIn(msg, fallback) {
+  const m = /retry in ((?:\d+h)?(?:\d+m)?(?:[\d.]+s)?)/i.exec(msg)
+  if (!m || !m[1]) return fallback
+  const n = u => +((new RegExp('([\\d.]+)' + u)).exec(m[1]) || [0, 0])[1]
+  return ((n('h') * 60 + n('m')) * 60 + n('s')) * 1000 || fallback
+}
+const clock = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+// Every speech model of this key has used up today's free allowance: nothing is asked until the first comes back.
+function dailySpent(until) {
+  const back = Number.isFinite(until) ? until : Date.now() + 3600_000
+  return Object.assign(new Error(`Gemini's free daily limit for its voices is used up until ${clock(back)}. Choose another voice to keep listening; this one goes on by itself after that.`), { status: 429, until: back })
 }
 
 // The same care as NVIDIA's: paced by what Google says (voiceplan.js), waiting out a "too many" or a busy moment,
@@ -428,6 +454,7 @@ async function geminiSynthesize(text, voice, { signal, onRetry } = {}) {
         await waitOnline(signal)
         continue
       }
+      if (e.until) { countUse('gemini', 'limited'); throw e } // the day's allowance: no point waiting here (voiceOne waits)
       if ((e.status === 429 || e.status >= 500) && attempt < 8) {
         const ms = Math.max(retryMs(attempt), e.retryAfter || 0)
         if (e.status === 429) paced('gemini', 'limited', e.retryAfter || 0)

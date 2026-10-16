@@ -506,6 +506,15 @@ async function voiceOne(id, i, again = false) {
         if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
         const status = e?.status
         const msg = String(e?.message || '')
+        // A day's free allowance used up (Gemini says until when): nothing is stored, the book says so and waits until
+        // then, and the others in the line go on.
+        if (e?.until) {
+          later.set(id, e.until)
+          needKey.set(id, msg)
+          patch(id, { stage: msg })
+          setTimeout(() => { needKey.delete(id); kickVoice() }, Math.max(1000, e.until - Date.now() + 1000))
+          return
+        }
         // The key, or the voice itself, refused: that is about this device, not about the sentence. Nothing is stored;
         // the book waits, and says why, until a key or a voice changes (it used to store every sentence as silent).
         if (status === 401 || status === 403 || status === 404 || /did not accept the key/i.test(msg)) {

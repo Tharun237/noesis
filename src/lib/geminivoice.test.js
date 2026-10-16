@@ -14,3 +14,12 @@ test('the newest first; the full model before its lighter one; a release before 
 test('a model Google adds later is found and goes first, with nothing written in the code', () => {
   assert.equal(rankSpeechModels(['gemini-3.8-flash-tts', 'gemini-4.0-flash-tts'])[0], 'gemini-4.0-flash-tts')
 })
+
+test('when Google says a day\'s allowance comes back, read from its own words', async () => {
+  const { retryIn } = await import('./cloudvoice.js')
+  // Google's answer on Tharun's key, 16 October 2026
+  const msg = 'Rate limit exceeded for model gemini-3.8-flash-tts (limit: 10 requests per day on Free Tier). Please retry in 11h54m20s or upgrade your tier at https://ai.dev/rate-limit.'
+  assert.equal(retryIn(msg, 1), ((11 * 60 + 54) * 60 + 20) * 1000)
+  assert.equal(retryIn('Please retry in 34.5s.', 1), 34500)
+  assert.equal(retryIn('no time given', 777), 777)
+})
