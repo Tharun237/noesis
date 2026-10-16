@@ -3,7 +3,8 @@
 //   system  — the device's built-in text to speech (instant, offline, no generation at all)
 // Older settings ('auto', 'piper', Kokoro-era values) all mean natural now.
 import { settings } from './settings.js'
-import { createStore } from './store.js'
+import { createStore, useStore } from './store.js'
+import { voiceName } from './voices.js'
 
 export const isMobile = () => navigator.userAgentData?.mobile ?? /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)
 export const hasSystemVoice = () => typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined'
@@ -42,3 +43,15 @@ export function pickSystemVoice(locale = 'en') {
 
 // "Microsoft David - English (United States)" → "David"; "Google UK English Female" → "UK English Female".
 export const systemVoiceLabel = v => (v ? `${v.name.replace(/^(Google|Microsoft|Samsung|Apple)\s+/i, '').replace(/\s+[-–]\s+.*$/, '').replace(/\s*\((Natural|Enhanced|Premium)\)/i, '') || v.name}${v.localService ? '' : ' · online'}` : 'Default voice')
+
+// The name of the voice a document is HEARD in on this device: the built-in voice when it speaks (chosen in
+// Settings, or the document's language has no natural voice), else the voice its audio is made in. Every place
+// that names a document's voice says this one: the menu said "Zephyr" while Edge's Ava was speaking (Tharun,
+// 16 October 2026). Same choice as player.js `system()`.
+export const heardVoice = d => (activeEngine() === 'system' || builtInOnly(d) ? systemVoiceLabel(pickSystemVoice(d.lang || 'en')) : voiceName(d.voice))
+// The same in a component, kept up to date: follows the engine, the chosen built-in voice and the browser's list.
+export function useHeardVoice(d) {
+  useStore(settings, s => `${activeEngine(s)}|${s.systemVoice}`)
+  useStore(systemVoices, s => s.list)
+  return heardVoice(d)
+}

@@ -15,8 +15,7 @@ import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, e
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
 import { historyStore, hasEntries } from '../lib/history.js'
 import { engine } from '../lib/tts.js'
-import { voiceName } from '../lib/voices.js'
-import { activeEngine } from '../lib/engine.js'
+import { activeEngine, heardVoice, useHeardVoice } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
 import { Button, IconButton, Menu, Pulse, Spinner, inputStyle, fmtDur, Swap } from './kit.jsx'
 import { AccountChip } from './SyncStatus.jsx'
@@ -409,7 +408,8 @@ function queuedText(id, qkey) {
 // listener's own time.
 const DocCard = memo(function DocCard({ d, i, order, glide, playing, pace, ref }) {
   const dur = d.chars ? fmtDur(atPace(docDuration(d), pace)) : null
-  const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voiceName(d.voice), MODE[d.mode]].filter(Boolean).join(' · ')
+  const voice = useHeardVoice(d)
+  const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voice, MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
   // The cover is one object: it leaves with the tap and flies home when the reader is left (coverflight.js).
   const cover = useRef(null)
@@ -459,7 +459,7 @@ const DocCard = memo(function DocCard({ d, i, order, glide, playing, pace, ref }
 // out (`keeping: false`): twelve rows had become a list to read rather than a menu to use.
 export function docMenu(d, { keeping = true } = {}) {
   return [
-    { label: 'Change voice', icon: 'voice', right: voiceName(d.voice), onClick: () => openSheet('voice', { docId: d.id }) },
+    { label: 'Change voice', icon: 'voice', right: heardVoice(d), onClick: () => openSheet('voice', { docId: d.id }) },
     { label: 'Listen in another language', icon: 'globe', onClick: () => openSheet('language', { docId: d.id }) },
     '-',
     ...(keeping ? [

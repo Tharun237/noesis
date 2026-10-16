@@ -33,6 +33,10 @@ export function cloudVoiceInfo(id = '') {
   return { name, nv, lang }
 }
 
+// A voice with no language of its own speaks whatever the document is in (Gemini's, and the customer's own service's):
+// a document in one keeps it whatever language it turns out to be in.
+export const speaksAnyLanguage = id => isCloudVoice(id) && cloudVoiceInfo(id).lang == null
+
 // WAV → { pcm: Float32Array, rate }. Finds the `data` chunk; does not assume byte 44.
 // Accepts mono and stereo (channels are averaged), 8/16/24/32-bit PCM and 32-bit float
 // (format tags 1 and 3). Anything else throws with 'This audio format is not supported: …'.

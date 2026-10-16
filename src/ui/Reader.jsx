@@ -18,7 +18,7 @@ import { hasAiKey } from '../lib/ai.js'
 import { useRoute } from '../lib/route.js'
 import { pushPanel, popPanel } from '../lib/nav.js'
 import { scrollBehavior, whenIdle } from '../lib/motion.js'
-import { activeEngine, hasSystemVoice } from '../lib/engine.js'
+import { activeEngine, hasSystemVoice, useHeardVoice } from '../lib/engine.js'
 import { engine, loadEngine, voiceWait } from '../lib/tts.js'
 import { waitWords, LONG_WAIT_S } from '../lib/readiness-math.js'
 import { askNotify, notifyAsked } from '../lib/ready.js'
@@ -75,6 +75,7 @@ export function Reader({ wide }) {
   useEffect(() => { if (libraryLoaded && !d) showTab('library') }, [libraryLoaded, d])
   const status = d?.status
   const total = d?.total
+  const voiceHeard = useHeardVoice(d || {}) // also names the voice in the document's menu, beside it
   const [doc, setDoc] = useState(null)
   const [panel, setPanelState] = useState(null) // toc | type | marks | ask
   // A panel shown as a sheet over the page is a history entry, on any screen: Back closes it instead of
@@ -439,7 +440,7 @@ export function Reader({ wide }) {
               <div style={{ minWidth: 0, display: 'grid', gap: 8 }}>
                 <h1 {...rowIn(0)} style={{ margin: 0, fontSize: wide ? 34 : 26, lineHeight: 1.12, letterSpacing: '-0.025em', fontWeight: 700, color: T.text, wordBreak: 'break-word' }}>{d.title}</h1>
                 <div {...rowIn(1)} style={{ fontFamily: T.mono, fontSize: 12, color: T.faint }}>
-                  {[d.author, d.chars ? fmtDur(atPace(docDuration(d), rate)) : null, voiceName(d.voice), d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
+                  {[d.author, d.chars ? fmtDur(atPace(docDuration(d), rate)) : null, voiceHeard, d.mode !== 'full' ? (d.mode === 'long' ? 'Long summary' : 'Short summary') : d.ai && d.kind === 'pdf' ? 'AI narration' : null].filter(Boolean).join(' · ')}
                 </div>
                 {playId !== id && (d.status === 'voicing' || d.status === 'ready') && (
                   <div {...rowIn(2)}><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></div>

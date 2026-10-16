@@ -10,7 +10,7 @@ import { runsFor, runVerdict, runChars, ceilingOf, tooLong, fitsPace, learnPace,
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
-import { isCloudVoice, cloudVoiceInfo, loadCloudVoices } from './cloudvoice.js'
+import { isCloudVoice, cloudVoiceInfo, loadCloudVoices, speaksAnyLanguage } from './cloudvoice.js'
 import { LANGS, detectLang, isEnglish } from './lang.js'
 import { activeEngine, hasSystemVoice } from './engine.js'
 import { waitSeconds } from './readiness-math.js'
@@ -353,15 +353,21 @@ async function resetAudio(id) {
   voicedSet(id).clear()
   const c = cache.get(id)
   if (c) { c.durs.fill(0); c.tails.fill(0); db.putDurs(id, { durs: c.durs, tails: c.tails }) }
-  patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Making the audio' } : {}) })
+  patch(id, { done: 0, vChars: 0, vSec: 0, ...(d.status === 'ready' || d.status === 'voicing' ? { status: 'voicing', stage: 'Making the audio' } : {}) })
 }
 
+// A hold is about the VOICE that could not be asked, never about the document: once the document is in another voice
+// (chosen in its menu, a language change, another device's choice arriving, a retired voice mended) the hold is
+// simply not its own any more. Tharun's book was held by Gemini's spent day while he chose a voice made on the device,
+// and stayed silent: the hold had been kept by document (16 October 2026).
+const holdOf = (map, id) => { const h = map.get(id); return h && h.voice === getDoc(id)?.voice ? h : null }
 // Documents whose online voice could not be reached, and when each is tried again.
-const later = new Map()
+const later = new Map() // id → { voice, until }
+const laterOf = id => holdOf(later, id)?.until || 0
 // Books whose voice cannot be asked on this device (its key is missing here, or was refused, or the voice is gone):
-// nothing is made for them, and nothing is stored as silent, until a key or a voice changes in Settings.
-const needKey = new Map() // id → the words the book shows
-export const keyWaitOf = id => needKey.get(id) || null // what the reader says instead of "Making the audio"
+// nothing is made for them, and nothing is stored as silent, until a key or a voice changes.
+const needKey = new Map() // id → { voice, words }: the words the book shows
+export const keyWaitOf = id => holdOf(needKey, id)?.words || null // what the reader says instead of "Making the audio"
 let keyWas = ''
 settings.sub(() => {
   const s = settings.get()
@@ -387,7 +393,7 @@ async function nextVoiceJob() {
   for (const [id, set] of remake) { // one sentence each, a few a minute at most: before the rest
     const d = getDoc(id)
     if (!d || d.voice == null || !set.size || !(await loadDoc(id))) { remake.delete(id); continue }
-    if (rewriting.has(id) || later.get(id) > Date.now()) continue
+    if (rewriting.has(id) || laterOf(id) > Date.now()) continue
     const i = set.values().next().value
     set.delete(i)
     if (!set.size) remake.delete(id)
@@ -404,8 +410,8 @@ async function nextVoiceJob() {
     .sort((a, b) => rank(a) - rank(b) || left(a) - left(b) || a.createdAt - b.createdAt)
   for (const d of docs) {
     if (d.voice == null) continue // no natural voice for this language: the built-in voice speaks it, no generation
-    if (later.get(d.id) > Date.now()) continue // its online voice could not be reached a moment ago: the others go first
-    if (needKey.has(d.id)) continue // its voice cannot be asked here until a key or a voice changes
+    if (laterOf(d.id) > Date.now()) continue // its online voice could not be reached a moment ago: the others go first
+    if (keyWaitOf(d.id)) continue // its voice cannot be asked here until a key or its voice changes
     const c = await loadDoc(d.id)
     if (!c) continue
     const set = voicedSet(d.id)
@@ -507,10 +513,11 @@ async function voiceOne(id, i, again = false) {
         // A day's free allowance used up (Gemini says until when): nothing is stored, the book says so and waits until
         // then, and the others in the line go on.
         if (e?.until) {
-          later.set(id, e.until)
-          needKey.set(id, msg)
+          later.set(id, { voice: d.voice, until: e.until })
+          const hold = { voice: d.voice, words: msg }
+          needKey.set(id, hold)
           patch(id, { stage: msg })
-          setTimeout(() => { needKey.delete(id); kickVoice() }, Math.max(1000, e.until - Date.now() + 1000))
+          setTimeout(() => { if (needKey.get(id) === hold) needKey.delete(id); kickVoice() }, Math.max(1000, e.until - Date.now() + 1000)) // only this hold: a later one keeps its own
           return
         }
         // The key, or the voice itself, refused: that is about this device, not about the sentence. Nothing is stored;
@@ -523,13 +530,13 @@ async function voiceOne(id, i, again = false) {
             : own ? `${ownHost} did not accept the key. Check it in Settings → Voice.`
             : here ? `${who} did not accept your key. Check it in Settings → AI.`
             : `Your ${who} key is not on this device. Add it in Settings → AI, or sign in to bring it from your account.`
-          needKey.set(id, words)
+          needKey.set(id, { voice: d.voice, words })
           patch(id, { stage: words })
           return
         }
         if (status === 400) { run.length = 1; throw e } // this text was refused: this sentence alone is marked
         if (!/limiting requests/i.test(msg)) patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
-        later.set(id, Date.now() + AGAIN_MS)
+        later.set(id, { voice: d.voice, until: Date.now() + AGAIN_MS })
         if (again) { if (!remake.has(id)) remake.set(id, new Set()); remake.get(id).add(i) } // tried again with the others
         setTimeout(() => kickVoice(), AGAIN_MS + 100)
         return
@@ -721,9 +728,9 @@ async function prepare(id) {
     const lang = (d.target && LANGS[d.target]) ? d.target : detectLang(finalText)
     const foreign = lang === 'en' && !isEnglish(finalText) // Latin letters, but not English: no voice of its own yet
     const curLang = d.voice == null ? null : (VOICES.find(v => v.id === d.voice)?.lang ?? (isCloudVoice(d.voice) ? cloudVoiceInfo(d.voice).lang : 'en'))
-    // A custom (`oa:`) voice has no language of its own: the document keeps it whatever its language.
-    const keepOwn = typeof d.voice === 'string' && d.voice.startsWith('oa:')
-    const voice = keepOwn || lang === curLang ? d.voice : defaultVoiceFor(lang)
+    // A voice with no language of its own (Gemini's, the customer's own service's) is kept whatever the language. Only
+    // `oa:` was, and every book added in a Gemini voice was quietly put into Alba as it was read (16 October 2026).
+    const voice = speaksAnyLanguage(d.voice) || lang === curLang ? d.voice : defaultVoiceFor(lang)
     const langNote = voice == null ? `No natural voice for ${LANGS[lang].name} yet. ${hasSystemVoice() ? "Your device's built-in voice reads this document." : 'This browser has no built-in voice to read it either.'}` : null
     const listening = await toListeningAsync(blocks, lang)
     if (!listening.length) {

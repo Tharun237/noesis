@@ -9,18 +9,10 @@ import { player, toggle, nextSentence, prevSentence, setRate, hearRate, setSleep
 import { speedLabel } from '../lib/speed.js'
 import { waitWords } from '../lib/readiness-math.js'
 import { SpeedSlider } from './SpeedSlider.jsx'
-import { voiceName } from '../lib/voices.js'
-import { activeEngine, pickSystemVoice, systemVoiceLabel, systemVoices } from '../lib/engine.js'
+import { useHeardVoice } from '../lib/engine.js'
 
 const fmtWait = w => (w < 90 ? '< 2 min' : w < 3600 ? `${Math.round(w / 60)} min` : `${(w / 3600).toFixed(1)} h`)
 
-// Which voice is actually speaking on this device right now.
-function useVoiceLabel(d) {
-  const sys = useStore(settings, s => activeEngine(s) === 'system')
-  useStore(settings, s => s.systemVoice)
-  useStore(systemVoices, s => s.list)
-  return sys ? systemVoiceLabel(pickSystemVoice()) : voiceName(d.voice)
-}
 import { Icon } from './icons.jsx'
 import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap, useBusy, Spinner } from './kit.jsx'
 import { Cover } from './Library.jsx'
@@ -49,7 +41,7 @@ export function PlayerBar({ wide, full }) {
   const goOn = useStore(player, s => s.goOn) // caught up with the voice: when it goes on
   const waiting = useStore(player, s => s.waiting)
   const sleep = useStore(player, s => s.sleep)
-  const voiceLabel = useVoiceLabel(d || {})
+  const voiceLabel = useHeardVoice(d || {})
   const rate = usePace(id)
   if (!id || !d) return null
   const total = offs ? offs[offs.length - 1] : 0
