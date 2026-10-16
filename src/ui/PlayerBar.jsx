@@ -14,7 +14,7 @@ import { useHeardVoice } from '../lib/engine.js'
 const fmtWait = w => (w < 90 ? '< 2 min' : w < 3600 ? `${Math.round(w / 60)} min` : `${(w / 3600).toFixed(1)} h`)
 
 import { Icon } from './icons.jsx'
-import { IconButton, Menu, Progress, fmtTime, fmtDur, Swap, useBusy, Spinner } from './kit.jsx'
+import { IconButton, Menu, Progress, fmtTime, fmtLeft, Swap, useBusy, Spinner } from './kit.jsx'
 import { Cover } from './Library.jsx'
 import { usePace } from './usePace.js'
 import { atPace } from '../lib/pace.js'
@@ -52,7 +52,7 @@ export function PlayerBar({ wide, full }) {
   const elapsed = atPace(shown, rate)
   const remaining = atPace(Math.max(0, total - shown), rate)
   const est = d.vChars <= 400
-  const left = total ? `${est ? '~' : ''}${fmtDur(remaining)} left` : ''
+  const left = total ? fmtLeft(remaining, est) : ''
   const sleepLine = sleepText(sleep)
 
   const scrubber = (

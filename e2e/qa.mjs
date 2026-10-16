@@ -393,6 +393,11 @@ await step('the spoken sentence is marked on the PDF page, and a tap on a line s
   const now = await page.locator('[data-page="1"]').boundingBox() // the view follows the sentence, so the page may have moved since the tap
   expect(m.some(r => Math.abs(r[1] - (now.y + now.height * 0.22)) < now.height * 0.06), `mark is not near the tapped line: ${JSON.stringify(m)} on page at y ${Math.round(now.y)}`)
   await app('m.pl.pause()')
+  // Find in Pages: the match is ringed on its page and in view (it counted matches and showed nothing, 16 October 2026)
+  await page.getByRole('button', { name: 'Find in document' }).first().click()
+  await page.keyboard.type('Paragraph 7 begins')
+  await until(() => page.evaluate(() => { const r = document.querySelector('[data-testid="found-mark"] > div')?.getBoundingClientRect(); return !!r && r.top > 0 && r.bottom < innerHeight }), 15000, 'the match ringed on its page, in view')
+  await page.keyboard.press('Escape')
   await click('tab', 'Text')
   await click('button', 'Back to library')
   await app(`m.lib.deleteDoc(${JSON.stringify(d.id)})`)

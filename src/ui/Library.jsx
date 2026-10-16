@@ -17,7 +17,7 @@ import { historyStore, hasEntries } from '../lib/history.js'
 import { engine } from '../lib/tts.js'
 import { activeEngine, heardVoice, useHeardVoice } from '../lib/engine.js'
 import { Icon, LogoWordmark } from './icons.jsx'
-import { Button, IconButton, Menu, Pulse, Spinner, inputStyle, fmtDur, Swap } from './kit.jsx'
+import { Button, IconButton, Menu, Pulse, Spinner, inputStyle, fmtDur, fmtAbout, Swap } from './kit.jsx'
 import { AccountChip } from './SyncStatus.jsx'
 import { syncState } from '../lib/sync.js'
 import { waitSeconds, waitWords } from '../lib/readiness-math.js'
@@ -227,16 +227,20 @@ function DesktopHeader({ summary }) {
   const hasHistory = useStore(historyStore, s => hasEntries(s.log))
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
-    <header style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
-      <div style={{ flex: 1, minWidth: 0, visibility: summary ? 'visible' : 'hidden' }}>
+    // The title keeps the width of its own words; when the tools do not fit beside it they go under it, together.
+    // It used to give way to them, and at 900 px "1 document · <1m" stood one word to a line (random customer).
+    <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 12, marginBottom: 26 }}>
+      <div style={{ flex: '1 0 auto', maxWidth: '100%', visibility: summary ? 'visible' : 'hidden' }}>
         <h1 style={{ margin: 0, fontSize: 44, fontWeight: 800, letterSpacing: '-0.045em', lineHeight: 1, color: T.text }}><Swap>{name}</Swap></h1>
         <div style={{ ...eyebrow, marginTop: 10 }}>{summary}</div>
       </div>
-      <SearchBox value={query} width={220} />
-      <SortMenu />
-      <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
-      {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
-      <Button kind="primary" icon="plus" onClick={() => openSheet('add')}>Add document</Button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <SearchBox value={query} width={220} />
+        <SortMenu />
+        <IconButton icon={view === 'grid' ? 'list' : 'grid'} label={view === 'grid' ? 'List view' : 'Grid view'} onClick={() => settings.set({ view: view === 'grid' ? 'list' : 'grid' })} />
+        {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
+        <Button kind="primary" icon="plus" onClick={() => openSheet('add')}>Add document</Button>
+      </div>
     </header>
   )
 }
@@ -407,9 +411,9 @@ function queuedText(id, qkey) {
 // `pace`: the speed this document is heard at (pace.js): its length, and what is done and left, are in the
 // listener's own time.
 const DocCard = memo(function DocCard({ d, i, order, glide, playing, pace, ref }) {
-  const dur = d.chars ? fmtDur(atPace(docDuration(d), pace)) : null
+  const dur = d.chars ? fmtAbout(atPace(docDuration(d), pace), d.vChars <= 400) : null
   const voice = useHeardVoice(d)
-  const meta = [KIND[d.kind], dur ? (d.vChars > 400 ? dur : `~${dur}`) : null, voice, MODE[d.mode]].filter(Boolean).join(' · ')
+  const meta = [KIND[d.kind], dur, voice, MODE[d.mode]].filter(Boolean).join(' · ')
   const working = d.status !== 'ready' && d.status !== 'error'
   // The cover is one object: it leaves with the tap and flies home when the reader is left (coverflight.js).
   const cover = useRef(null)

@@ -20,7 +20,7 @@ import { library, docDuration } from '../lib/library.js'
 import { historyStore } from '../lib/history.js'
 import { dayKey, weekOf, docListening, docBar, shelfOf, shareOf } from '../lib/heard.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
-import { fmtDur } from './kit.jsx'
+import { fmtDur, fmtLeft } from './kit.jsx'
 import { usePace, useLength } from './usePace.js'
 import { openSheet } from '../lib/nav.js'
 import { player } from '../lib/player.js'
@@ -58,7 +58,7 @@ const DAY_MIN_SHARE = 0.025 // days thinner than this (of what is left) would be
 function Bar({ bar, colour, h }) {
   const perDay = bar.left > 0 ? bar.dayShare / bar.left : 0 // one day's listening, as a share of what is left
   const cut = perDay >= DAY_MIN_SHARE && perDay < 1
-  const said = `${Math.round(bar.heard * 100)}% done, ${fmtDur(bar.leftSeconds)} left${bar.days != null ? `, about ${bar.days} more day${bar.days === 1 ? '' : 's'} at your pace` : ''}`
+  const said = `${Math.round(bar.heard * 100)}% done, ${fmtLeft(bar.leftSeconds)}${bar.days != null ? `, about ${bar.days} more day${bar.days === 1 ? '' : 's'} at your pace` : ''}`
   return (
     <div role="img" aria-label={said} style={{ display: 'flex', height: h, gap: bar.heard > 0 && bar.left > 0 ? Math.max(2, h / 3) : 0 }}>
       <div style={{ position: 'relative', flex: `${bar.heard} 1 0`, minWidth: bar.heard > 0 ? h * 1.5 : 0, borderRadius: h / 2, overflow: 'hidden', background: T.surfaceTop }}>
@@ -86,7 +86,7 @@ export function DocBar({ d, pace }) {
       {/* wraps on a narrow phone: the two halves are one line when they fit and two when they do not */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 10px', minWidth: 0, ...mono, fontSize: 11 }}>
         <span>{today}</span>
-        {drawn && <span>{fmtDur(bar.leftSeconds)} left</span>}
+        {drawn && <span>{fmtLeft(bar.leftSeconds)}</span>}
       </div>
     </div>
   )
@@ -106,7 +106,7 @@ export function DocInsight({ d }) {
           {heardToday > 0 && <span style={{ color: colour }}> · {fmtDur(heardToday)} listened today</span>}
         </span>
         <span>
-          <span style={{ color: T.sub }}>{fmtDur(bar.leftSeconds)} left</span>
+          <span style={{ color: T.sub }}>{fmtLeft(bar.leftSeconds)}</span>
           {bar.days != null && <span> · {bar.days === 1 ? 'one more day' : `${bar.days} days`} at your pace</span>}
         </span>
       </div>
@@ -177,6 +177,7 @@ function nudgeOf(ring, near, run) {
 const COL_H = 46 // the tallest a day's column stands
 const QUIET_DAY_S = 20 * 60 // a week of short listens is drawn against this, not blown up to full height
 const OTHER_DAY = 0.5 // days before today stand back
+const SHELF_MIN = 240 // px: the shelf line's "3h 48m done" and "39m left" and its sentence, side by side
 
 // Reads the whole library, not the list it sits above: its done and left are the listening page's (shelfOf),
 // which a filter, a search or the Archived shelf must not change.
@@ -207,14 +208,14 @@ export function LibraryGlance({ wide }) {
   const rings = [
     { share: ring.share, colour: T.ring.today, name: 'Today', value: `${fmtDur(today)} of ${goalLabel(goalMin)}` },
     { share: Math.min(1, weekSeconds / weekGoal), colour: T.ring.week, name: '7 days', value: `${fmtDur(weekSeconds)} of ${goalLabel(weekGoal / 60)}` },
-    ...(book ? [{ share: book.share, colour: bookColour, name: book.d.title, value: `${Math.floor(book.share * 100)}% · ${fmtDur(book.seconds * (1 - book.share))} left` }] : []),
+    ...(book ? [{ share: book.share, colour: bookColour, name: book.d.title, value: `${Math.floor(book.share * 100)}% · ${fmtLeft(book.seconds * (1 - book.share))}` }] : []),
   ]
   const nudge = nudgeOf(ring, near, run)
   const tallest = Math.max(QUIET_DAY_S, ring.goal * 1.2, ...week.map(d => d.seconds))
   return (
-    <section data-rise="0" role="button" tabIndex={0} data-press="" aria-label="Your listening: open all of it" onClick={() => openSheet('listening')} onKeyDown={e => { if (e.key === 'Enter') openSheet('listening') }} style={{ '--press': T.tap.card, cursor: 'pointer', margin: wide ? '0 0 26px' : '2px 16px 14px', padding: wide ? '18px 22px' : 16, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, display: 'grid', gridTemplateColumns: wide ? 'auto auto minmax(0, 1fr)' : 'minmax(0, 1fr)', columnGap: 36, rowGap: 14, alignItems: 'center' }}>
+    <section data-rise="0" role="button" tabIndex={0} data-press="" aria-label="Your listening: open all of it" onClick={() => openSheet('listening')} onKeyDown={e => { if (e.key === 'Enter') openSheet('listening') }} style={{ '--press': T.tap.card, cursor: 'pointer', margin: wide ? '0 0 26px' : '2px 16px 14px', padding: wide ? '18px 22px' : 16, borderRadius: T.r.lg, border: `1px solid ${T.border}`, background: T.surface, ...(wide ? { display: 'flex', flexWrap: 'wrap', gap: '14px 36px' } : { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', rowGap: 14 }), alignItems: 'center' }}>
       {/* the rings, and a line for each in its colour: what it is, and how far */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, flex: wide ? '0 1 auto' : undefined }}>
         <Rings rings={rings} size={wide ? 92 : 88} name={rings.map(r => `${r.name}: ${r.value}`).join('. ')} />
         <div style={{ display: 'grid', gap: 5, minWidth: 0, maxWidth: wide ? 190 : undefined, flex: 1 }}>
           {rings.map(r => (
@@ -226,7 +227,7 @@ export function LibraryGlance({ wide }) {
         </div>
       </div>
       {/* the week: a column a day, split by what was listened to; a day over the line closed its ring */}
-      <div role="img" aria-label={`The last seven days: ${week.map(d => `${d.letter} ${Math.round(d.seconds / 60)} minutes`).join(', ')}. The line is your daily goal.`} style={{ position: 'relative', width: wide ? 210 : '100%', display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 7, alignSelf: 'end' }}>
+      <div role="img" aria-label={`The last seven days: ${week.map(d => `${d.letter} ${Math.round(d.seconds / 60)} minutes`).join(', ')}. The line is your daily goal.`} style={{ position: 'relative', width: wide ? 210 : '100%', flex: wide ? '0 0 auto' : undefined, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 7, alignSelf: 'end' }}>
         <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: COL_H * (1 - ring.goal / tallest), borderTop: `1px dashed ${T.borderHi}`, pointerEvents: 'none' }} />
         {week.map((day, i) => (
           <div key={day.key} style={{ display: 'grid', gap: 6, justifyItems: 'stretch' }}>
@@ -244,7 +245,9 @@ export function LibraryGlance({ wide }) {
         ))}
       </div>
       {/* the library, and under it the one sentence that says why to listen a little more today */}
-      <div style={{ display: 'grid', gap: 8, minWidth: 0, alignSelf: wide ? 'end' : undefined }}>
+      {/* beside the week when there is room for its words, under the rings and the week when there is not: in a grid
+          it was given what was left, nothing at 900 px, and its words spilled out of the card (random customer) */}
+      <div style={{ display: 'grid', gap: 8, minWidth: 0, alignSelf: wide ? 'end' : undefined, flex: wide ? `1 1 ${SHELF_MIN}px` : undefined }}>
         {all > 0 && (
           <>
             <div role="img" aria-label={`${fmtDur(heard)} done of ${fmtDur(all)} in these documents`} style={{ display: 'flex', gap: 2, height: 10 }}>
@@ -258,7 +261,7 @@ export function LibraryGlance({ wide }) {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, ...mono }}>
               <span style={{ color: T.sub }}>{fmtDur(heard)} done</span>
-              <span>{fmtDur(all - heard)} left</span>
+              <span>{fmtLeft(all - heard)}</span>
             </div>
           </>
         )}

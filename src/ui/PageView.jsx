@@ -38,6 +38,16 @@ export function SentenceOnPage({ i, rects, invert }) {
   )
 }
 
+// The sentence Find is on, ringed as the Text view rings it (Reader.jsx Block): the page turned to the match and
+// showed nothing, so Find in Pages looked broken (random customer, 16 October 2026). Still: it is placed, not moved.
+export function FoundOnPage({ rects }) {
+  return (
+    <div data-testid="found-mark" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      {rects.map((rc, k) => <div key={k} style={{ position: 'absolute', borderRadius: 3, outline: `2px solid ${T.accent}`, outlineOffset: 1, left: `${rc.x * 100}%`, top: `${rc.y * 100}%`, width: `${rc.w * 100}%`, height: `${rc.h * 100}%` }} />)}
+    </div>
+  )
+}
+
 // The word being said, on the page: it fills with lime from its first letter to its last in the time the voice
 // takes to say it, as in Text and Focus (Spoken.jsx): one language for the voice in every view. It was a box that
 // appeared at each word and vanished at the next, three times a second. Now ONE pen stays on the page: at each word
@@ -84,7 +94,7 @@ export function WordOnPage({ rects, spoken, invert }) {
   )
 }
 
-export function PageView({ id, activePage, invert, userScroll, onPages, onVisible, onTapPage, onFail, pageSentences, activeSentence, onTapSentence, spoken }) {
+export function PageView({ id, activePage, invert, userScroll, onPages, onVisible, onTapPage, onFail, pageSentences, activeSentence, onTapSentence, spoken, found = -1, foundPage = null }) {
   const [numPages, setNumPages] = useState(0)
   const [near, setNear] = useState(() => new Set([1]))
   const [visible, setVisible] = useState(1)
@@ -98,6 +108,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
   const tasks = useRef(new Map())
   const located = useRef(new Map()) // page -> [{ i, rects }] for the sentences on that page
   const followed = useRef(-1) // the sentence the view last decided about: one decision per sentence
+  const placedFound = useRef({ i: -1, exact: false }) // the match Find last turned to, and whether to its line yet
   const psRef = useRef(pageSentences)
   psRef.current = pageSentences
   const bad = useRef(new Set()) // pages that failed to paint: skip, don't stall the queue
@@ -337,6 +348,26 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSentence, tick, userScroll])
 
+  // Find: its page is turned to at once, then, when the page has been painted and its sentences found on it, the
+  // match is brought to where the eye is (FOLLOW_AT), once.
+  const foundRects = typeof foundPage === 'number' && found >= 0 ? located.current.get(foundPage)?.find(e => e.i === found)?.rects || null : null
+  useEffect(() => {
+    if (!(found >= 0) || typeof foundPage !== 'number') { placedFound.current = { i: -1, exact: false }; return }
+    const el = boxRef.current?.querySelector(`[data-page="${foundPage}"]`)
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    if (placedFound.current.i !== found) {
+      placedFound.current = { i: found, exact: false }
+      const far = r.top < -window.innerHeight * 2 || r.top > window.innerHeight * 3
+      if (!foundRects) { el.scrollIntoView({ block: 'start', behavior: far ? 'auto' : scrollBehavior() }); return }
+    }
+    if (placedFound.current.exact || !foundRects?.length || !r.height) return
+    placedFound.current.exact = true
+    const dy = r.top + foundRects[0].y * r.height - window.innerHeight * FOLLOW_AT
+    window.scrollTo({ top: window.scrollY + dy, behavior: Math.abs(dy) < window.innerHeight * 1.5 ? scrollBehavior() : 'auto' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found, foundPage, tick, numPages])
+
   // A tap on a page with located sentences starts at the tapped sentence (point
   // as fractions of the wrapper's box); otherwise the page-level tap stays.
   const onTap = (e, p) => {
@@ -369,6 +400,7 @@ export function PageView({ id, activePage, invert, userScroll, onPages, onVisibl
               }} />
             {p === activeLocPage && activeRects && <SentenceOnPage i={activeSentence} rects={activeRects} invert={invert} />}
             {p === activeLocPage && activeRects && <WordOnPage rects={activeRects} spoken={spoken} invert={invert} />}
+            {p === foundPage && foundRects && <FoundOnPage rects={foundRects} />}
           </div>
         )
       })}

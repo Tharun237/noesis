@@ -30,7 +30,7 @@ import { dayKey, shelfOf } from '../lib/heard.js'
 import { KINDS, stretch, summary, streaks, calendar, hours, hourName, goalOf, goalLabel } from '../lib/listening.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { colours, colourOf, hueOf } from './bookcolour.js'
-import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur } from './kit.jsx'
+import { Button, IconButton, Pulse, Appear, Segmented, SheetLanded, fmtDur, fmtLeft } from './kit.jsx'
 import { useLength } from './usePace.js'
 
 const CHART_H = 132 // px: the tallest a bar stands
@@ -319,7 +319,7 @@ const Below = memo(function Below({ log, now }) {
             ))}
           </div>
           <div style={sub}>
-            <span style={{ color: T.text }}>{fmtDur(inAll)}</span> to listen to, <span style={{ color: T.text }}>{fmtDur(done)}</span> done, <span style={{ color: T.text }}>{fmtDur(left)}</span> left.
+            <span style={{ color: T.text }}>{fmtDur(inAll)}</span> to listen to, <span style={{ color: T.text }}>{fmtDur(done)}</span> done, <span style={{ color: T.text }}>{fmtLeft(left)}</span>.
             {daysLeft != null && daysLeft <= FAR_DAYS && ` At your last two weeks' pace (${fmtDur(pace)} a day${rate !== 1 ? ` at ${rate}x` : ''}) that is ${days(daysLeft)}.`}
           </div>
         </Section>

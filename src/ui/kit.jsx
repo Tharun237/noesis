@@ -281,7 +281,7 @@ export function Sheet({ open, onClose, children, wide, width = 560, title }) {
 // Popover menu anchored to its trigger.
 const MENU_W = 260
 const EDGE = 8
-const MENU_Z = 55 // over a sheet (50), whose buttons can open one; under the toast (60)
+const MENU_Z = 70 // over a sheet (50) and over the toast (60): a menu is what the customer is using right now, and a toast covered its last rows (random customer, seed 82259, 16 October 2026)
 
 // Popover menu anchored to its trigger. On open it measures the room around the trigger and
 // opens toward whichever side fits, so it never spills off-screen (e.g. the speed menu at the right edge).
@@ -370,3 +370,8 @@ export const fmtDur = s => {
   if (mins < 1) return s >= 1 ? '<1m' : '0m'
   return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`
 }
+// What is left of something, in the listener's words: "12m left", "<1m left", and never "0m left" when nothing is
+// (the random customer found the player saying "~0m left" at the end of a book, 16 October 2026).
+export const fmtLeft = (s, about = false) => (s < 1 ? 'nothing left' : `${fmtAbout(s, about)} left`)
+// An estimated length: "~12m", but "<1m" as it is ("~<1m" said "about under a minute").
+export const fmtAbout = (s, about = true) => (about && !fmtDur(s).startsWith('<') ? '~' : '') + fmtDur(s)

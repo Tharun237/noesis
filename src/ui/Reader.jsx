@@ -222,6 +222,7 @@ export function Reader({ wide }) {
   // Sentence i belongs to block segs[i].b, so its page is blocks[segs[i].b].p (1-based; older
   // documents prepared before pages were linked have no p).
   const activePage = view === 'pages' && doc && active >= 0 ? (doc.blocks[doc.segs[active]?.b]?.p ?? null) : null
+  const foundPage = view === 'pages' && doc && hit >= 0 ? (doc.blocks[doc.segs[hit]?.b]?.p ?? null) : null // Find's match, in Pages
   const firstOfPage = useMemo(() => {
     const m = new Map()
     if (doc) doc.segs.forEach((s, i) => { const p = doc.blocks[s.b]?.p; if (typeof p === 'number' && !m.has(p)) m.set(p, i) })
@@ -260,7 +261,11 @@ export function Reader({ wide }) {
     if (doc) placed.current = true
   }, [active, doc, view])
 
-  useEffect(() => { if (hit >= 0) scrollToSentence(hit) }, [hit])
+  // A match Find moved to is the reader looking somewhere: the voice does not pull the page back to itself for as
+  // long as it would after a scroll by hand.
+  useEffect(() => { if (hit >= 0) { userScroll.current = Date.now(); scrollToSentence(hit) } }, [hit])
+  // Focus shows one word: there is no page to show a match on. Finding takes the reader to the text.
+  useEffect(() => { if (searching && view === 'focus') settings.set({ readerView: 'text' }) }, [searching, view])
 
   const typo = useMemo(() => ({ font: font === 'serif' ? T.serif : T.font, size, leading, justify, words }), [font, size, leading, justify, words])
   const offs = useMemo(() => (doc && d ? timeline(d, doc) : null), [doc, d?.done, d?.vSec]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -465,7 +470,7 @@ export function Reader({ wide }) {
                 )}
                 {hasSource !== true ? <PagesComing id={id} checking={hasSource == null} onHere={() => setHasSource(true)} /> : <PageView key={id} id={id} activePage={activePage} invert={invertPages} userScroll={userScroll}
                   onPages={setNumPages} onVisible={setVisPage}
-                  pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek} spoken={spoken}
+                  pageSentences={pageSentences} activeSentence={active} onTapSentence={onSeek} spoken={spoken} found={hit} foundPage={foundPage}
                   onTapPage={pg => { const i = firstOfPage.get(pg); if (i != null) onSeek(i) }}
                   onFail={() => { setPdfFail(true); settings.set({ readerView: 'text' }) }} />}
               </Suspense>
