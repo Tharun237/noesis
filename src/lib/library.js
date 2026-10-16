@@ -3,7 +3,7 @@ import { db, persistStorage, canStore, storeNames } from './db.js'
 import { onShelf } from './shelf.js'
 import { samePart, progressOf } from './parts.js'
 import { settings, hasKey } from './settings.js'
-import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee } from './ai.js'
+import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee, isNvidiaKey } from './ai.js'
 import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
 import { synthesize, synthesizeRun, engine, loadEngine } from './tts.js'
 import { runsFor, judge, learnRuns, runResult, runChars, ceilingOf, tooLong } from './voiceplan.js'
@@ -115,7 +115,12 @@ const stepped = id => { let last = -1; return p => { if (p >= 1 || p - last >= 0
 // each. The first device to have voiced a good part of it says what it measured (spc, kept in step with the
 // document), and every device uses that.
 const SPC_FROM = 20000 // letters voiced before the measure is told to the others: about twenty minutes of audio
-export const secPerChar = d => d.spc || (d.vChars > 400 ? d.vSec / d.vChars : 1 / 14.5)
+// Seconds a voice takes per character. A measured pace outside what any voice can take is a measurement gone wrong,
+// not a pace: sentences stored silent (a key missing on that device) once measured 0, and every time on screen read
+// 0:00 (Tharun's Edge, 16 October 2026).
+const PACE = [1 / 40, 1 / 5]
+const sane = x => x >= PACE[0] && x <= PACE[1]
+export const secPerChar = d => (sane(d.spc) ? d.spc : d.vChars > 400 && sane(d.vSec / d.vChars) ? d.vSec / d.vChars : 1 / 14.5)
 export const docDuration = d => d.chars * secPerChar(d)
 
 // Library sort orders. The player uses the same order to pick "up next", so the queue you see is the queue you hear.
@@ -305,6 +310,27 @@ export async function ensureFresh(id) {
   if (!d || first === undefined) return
   const rec = await db.getAudio(id, first)
   if (rec && rec.codec !== 'none' && !audioMatches(d, rec)) { await resetAudio(id); kickVoice() }
+  else void healSilent(id)
+}
+
+// Sentences stored as silent because the voice's KEY was missing or refused on a device (each was taken for a
+// sentence the voice would not say, and the whole book raced by in silence: Tharun's Edge, 16 October 2026). A
+// sentence the voice really would not say is marked so (`why`); the others are made again. Found from the made
+// sentences that have no length, so a whole book is not read to find them.
+async function healSilent(id) {
+  const c = await loadDoc(id)
+  const set = voicedSet(id)
+  if (!c || !set.size) return
+  const empty = [...set].filter(i => !(c.durs[i] > 0))
+  if (!empty.length) return
+  const recs = await db.getAudiosAt(id, empty)
+  const again = empty.filter((i, k) => recs[k]?.codec === 'none' && !recs[k].why)
+  if (!again.length) return
+  await db.delAudiosAt(id, again)
+  for (const i of again) set.delete(i)
+  const d = getDoc(id)
+  if (d) patch(id, { done: set.size, ...(d.status === 'ready' ? { status: 'voicing', stage: 'Making the audio' } : {}) })
+  kickVoice()
 }
 
 // A voice that could not be loaded because the device was offline is loaded when it is online again. (Nothing
@@ -332,6 +358,18 @@ async function resetAudio(id) {
 
 // Documents whose online voice could not be reached, and when each is tried again.
 const later = new Map()
+// Books whose voice cannot be asked on this device (its key is missing here, or was refused, or the voice is gone):
+// nothing is made for them, and nothing is stored as silent, until a key or a voice changes in Settings.
+const needKey = new Map() // id → the words the book shows
+export const keyWaitOf = id => needKey.get(id) || null // what the reader says instead of "Making the audio"
+let keyWas = ''
+settings.sub(() => {
+  const s = settings.get()
+  const now = [s.nvidiaKey, s.voiceKey, s.voiceBase, s.voiceModel, s.voiceNames].join('|')
+  if (now === keyWas) return
+  keyWas = now
+  if (needKey.size) { needKey.clear(); kickVoice() }
+})
 const AGAIN_MS = 5000
 
 // The book in the player goes first until this much is made ahead of the listener; then the other documents are
@@ -367,6 +405,7 @@ async function nextVoiceJob() {
   for (const d of docs) {
     if (d.voice == null) continue // no natural voice for this language: the built-in voice speaks it, no generation
     if (later.get(d.id) > Date.now()) continue // its online voice could not be reached a moment ago: the others go first
+    if (needKey.has(d.id)) continue // its voice cannot be asked here until a key or a voice changes
     const c = await loadDoc(d.id)
     if (!c) continue
     const set = voicedSet(d.id)
@@ -467,9 +506,19 @@ async function voiceOne(id, i, again = false) {
         if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
         const status = e?.status
         const msg = String(e?.message || '')
-        const refusal = status === 401 || status === 403 || status === 404 || status === 400 ||
-          /did not accept the key/i.test(msg)
-        if (refusal) { run.length = 1; throw e }
+        // The key, or the voice itself, refused: that is about this device, not about the sentence. Nothing is stored;
+        // the book waits, and says why, until a key or a voice changes (it used to store every sentence as silent).
+        if (status === 401 || status === 403 || status === 404 || /did not accept the key/i.test(msg)) {
+          const here = own ? !!String(settings.get().voiceBase || '').trim() : isNvidiaKey(settings.get().nvidiaKey)
+          const words = status === 404 ? 'This voice is not available now. Choose another voice for this document.'
+            : own ? `${ownHost} did not accept the key. Check it in Settings → Voice.`
+            : here ? 'NVIDIA did not accept your key. Check it in Settings → AI.'
+            : 'Your NVIDIA key is not on this device. Add it in Settings → AI, or sign in to bring it from your account.'
+          needKey.set(id, words)
+          patch(id, { stage: words })
+          return
+        }
+        if (status === 400) { run.length = 1; throw e } // this text was refused: this sentence alone is marked
         if (!/limiting requests/i.test(msg)) patch(id, { stage: 'This voice is made online. Waiting for a connection.' })
         later.set(id, Date.now() + AGAIN_MS)
         if (again) { if (!remake.has(id)) remake.set(id, new Set()); remake.get(id).add(i) } // tried again with the others
@@ -485,7 +534,7 @@ async function voiceOne(id, i, again = false) {
     if (engine.get().status === 'error') return // voice failed to load; loop parks until retried
     console.warn('Sentence failed, skipping:', c.segs[i].t, e)
     run.length = 1 // only this sentence is marked; the ones after it are tried by the next turns
-    recs = [{ codec: 'none', dur: 0, tail: 0 }]
+    recs = [{ codec: 'none', dur: 0, tail: 0, why: String(e?.message || e).slice(0, 120) }] // the voice would not say it (healSilent leaves it)
   }
   const now = getDoc(id)
   if (!now || (isVoice(now.voice) ? now.voice : fromKokoro(now.voice)) !== voice || (settings.get().voiceTone || 'natural') !== tone || cache.get(id) !== c || rewriting.has(id)) return // deleted / voice changed / re-processed meanwhile
@@ -518,7 +567,7 @@ async function voiceOne(id, i, again = false) {
     ...(done >= c.segs.length ? { status: 'ready', stage: 'Ready' } : {}),
   })
   const voicedNow = getDoc(id)
-  if (voicedNow && !voicedNow.spc && voicedNow.vChars > SPC_FROM) derive(id, { spc: Math.round((voicedNow.vSec / voicedNow.vChars) * 1e5) / 1e5 })
+  if (voicedNow && !sane(voicedNow.spc) && voicedNow.vChars > SPC_FROM && sane(voicedNow.vSec / voicedNow.vChars)) derive(id, { spc: Math.round((voicedNow.vSec / voicedNow.vChars) * 1e5) / 1e5 })
   for (const j of run) if (set.has(j)) segListeners.forEach(f => f(id, j))
 }
 

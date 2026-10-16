@@ -2,9 +2,10 @@ import { onShelf } from './shelf.js'
 import { createStore } from './store.js'
 import { SPEED_USUAL } from './speed.js'
 
-// Per-device preferences. The AI keys live only here (localStorage on this device). The
-// Gemini key is sent only to generativelanguage.googleapis.com; the NVIDIA key and the text
-// travel through Noesis's relay (/api/nvidia) to reach NVIDIA — never anywhere else.
+// Preferences, kept on this device (localStorage). Those that are the customer's rather than the device's, their
+// AI and voice services and keys among them, also follow them through their own Drive folder (prefs.js FOLLOW).
+// The Gemini key is sent only to generativelanguage.googleapis.com; the NVIDIA key and the text travel through
+// Noesis's relay (/api/nvidia) to reach NVIDIA, and nowhere else.
 const KEY = onShelf('noesis.settings.v1') // a person's settings (their AI key among them) go away with their library
 
 export const DEFAULTS = {

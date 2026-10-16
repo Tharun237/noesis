@@ -50,6 +50,8 @@ export const db = {
   getAudio: (id, i) => get(id + ':' + i, audio),
   getAudios: (id, from, to) => getMany(Array.from({ length: to - from }, (_, k) => id + ':' + (from + k)), audio),
   putAudio: (id, i, rec) => set(id + ':' + i, rec, audio),
+  getAudiosAt: (id, idxs) => getMany(idxs.map(i => id + ':' + i), audio),
+  delAudiosAt: (id, idxs) => delMany(idxs.map(i => id + ':' + i), audio),
   audioKeys: () => keys(audio),
   async delAudio(id) {
     const ks = (await keys(audio)).filter(k => k.startsWith(id + ':'))

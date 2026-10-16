@@ -5,7 +5,7 @@ import { leaveCover, arriveCover, coverInFlight } from '../lib/coverflight.js'
 import { T, label } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, goBack, openSheet, tab as showTab } from '../lib/nav.js'
-import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation, fetchOriginal, originals } from '../lib/library.js'
+import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation, fetchOriginal, originals, keyWaitOf } from '../lib/library.js'
 import { account, syncState } from '../lib/sync.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate, startNow } from '../lib/player.js'
 import { toggleMark, setMarkNote } from '../lib/library.js'
@@ -720,7 +720,9 @@ function Preparing({ d, doc, pos }) {
   const translating = d.status === 'narrating' && !!d.target && /^Translating/.test(d.stage || '')
   const said = text => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Pulse color={failed ? T.danger : undefined} />{text}</span>
   // head: what is being waited for · bar: null (none), undefined (no known length) or 0..1 · next: what happens then
+  const keyWait = voicing ? keyWaitOf(d.id) : null // the voice cannot be asked on this device: why, and nothing turning
   const [head, bar, next] = d.status === 'error' ? [<StatusLine d={d} />, null, null]
+    : keyWait ? [keyWait, null, 'It starts by itself once that is done.']
     : failed ? [said(voiceOff ? "You're offline" : `The ${voiceName(engVoice)} voice couldn't start`), null, voiceOff ? `The ${voiceName(engVoice)} voice downloads when you are back online.` : null]
     : voice ? [said(voice.progress != null ? `${voice.text} · ${Math.floor(voice.progress * 100)}%` : voice.text), voice.progress, [voice.detail, gated && 'Play starts by itself.'].filter(Boolean).join(' ') || null]
     : behind ? [said('Waiting for another document'), undefined, gated ? 'Its audio is being made first. This one is next, and starts by itself.' : 'Its audio is being made first. Press Play and this one goes first.']

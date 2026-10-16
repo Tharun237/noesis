@@ -378,7 +378,11 @@ async function resetFor(user) {
   dirty = {}
   ids = {}
   const now = drive.clockNow()
-  for (const k of await hooks.allKeys()) { clock[k] = now; dirty[k] = now } // first sync here = union of libraries
+  // First sync here = union of libraries. The settings are the exception: what this device happens to be set to
+  // is not a choice made now, so it is stamped the oldest it can be, and any the account already has win (a new
+  // browser's untouched defaults replaced the AI service and model chosen on the laptop, 16 October 2026). With
+  // none in the account yet, this device's become them. A key the account lacks still goes up (prefs.js).
+  for (const k of await hooks.allKeys()) { const at = k === 'prefs' ? 1 : now; clock[k] = at; dirty[k] = at }
   await persist()
 }
 

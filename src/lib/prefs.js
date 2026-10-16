@@ -1,14 +1,19 @@
 // What a customer sets that is theirs, not the device's: it follows them to every device they sign in on.
 // Tharun, 13 October 2026, asked which: how fast they listen, their usual voice, how the library is sorted,
-// whether the next document plays by itself, whether a finished one is archived. What suits a screen (the
-// size of the text, the layout) and what belongs to a device (its own voices, its measured speed, the AI
-// keys, which never leave it) stays where it is.
+// whether the next document plays by itself, whether a finished one is archived. On 16 October 2026 their own AI
+// and voice services joined them, keys included ("a user has to carry the API key everywhere: absurd"): a key
+// left behind on one device made a book there race by in silence. They travel in the customer's own Drive
+// folder, which only Noesis can open with their sign-in; never through Noesis's server. What suits a screen (the
+// size of the text, the layout) and what belongs to a device (its own voices, its measured speed) stays.
 // One record, `prefs`, newest wins, like the rest of the library (sync.js).
 import { settings, DEFAULTS } from './settings.js'
 import { onShelf } from './shelf.js'
 import { touch, touchAfter } from './sync.js'
 
-export const FOLLOW = ['speed', 'voice', 'sort', 'autoplayNext', 'archiveFinished', 'listenGoal']
+// the customer's own services: which AI, its key and model, and their own voice service
+export const SERVICES = ['aiProvider', 'geminiKey', 'geminiModel', 'nvidiaKey', 'nvidiaModel', 'nvidiaVision', 'customBase', 'customKey', 'customModel', 'customVision', 'voiceBase', 'voiceKey', 'voiceModel', 'voiceNames', 'describeFigures', 'aiNarration']
+const SECRETS = ['geminiKey', 'nvidiaKey', 'customKey', 'voiceKey']
+export const FOLLOW = ['speed', 'voice', 'sort', 'autoplayNext', 'archiveFinished', 'listenGoal', ...SERVICES]
 const OFFERED = onShelf('noesis.prefs.offered')
 const only = s => Object.fromEntries(FOLLOW.filter(k => s[k] !== undefined).map(k => [k, s[k]]))
 
@@ -24,14 +29,25 @@ settings.sub(() => {
 export const prefsSnapshot = () => ({ ...only(settings.get()), paced: 1 })
 export const quietly = fn => { quiet = true; try { return fn() } finally { quiet = false } }
 // From a device that still has the old usual speed written down (no `paced`): 1x there means "never chosen".
-export const applyPrefs = v => quietly(() => settings.set(only(v && !v.paced && v.speed === 1 ? { ...v, speed: DEFAULTS.speed } : v || {})))
+// A key never arrives as nothing over a key this device has: a device that never had it (a new browser) must not
+// wipe it everywhere. This device keeps its own and sends it back out.
+export function applyPrefs(v) {
+  const got = only(v && !v.paced && v.speed === 1 ? { ...v, speed: DEFAULTS.speed } : v || {})
+  const mine = settings.get()
+  const kept = SECRETS.filter(k => !String(got[k] || '').trim() && String(mine[k] || '').trim())
+  for (const k of kept) delete got[k]
+  quietly(() => settings.set(got))
+  return kept.length ? 'again' : undefined // sync.js: what was here goes back out, as the record after this one
+}
 
 // The first time on a device: what it is already set to is offered to the others, as something worked out
 // (sync.js touchAfter), so it never beats a setting really changed somewhere.
+// Offered again when more settings come to follow the customer (their services, 16 October 2026): a device that had
+// offered the first few never sent its key.
 export function offerPrefs() {
   try {
-    if (localStorage.getItem(OFFERED)) return
-    localStorage.setItem(OFFERED, '1')
+    if (localStorage.getItem(OFFERED) === FOLLOW.join(',')) return
+    localStorage.setItem(OFFERED, FOLLOW.join(','))
   } catch { return }
   if (FOLLOW.some(k => settings.get()[k] !== DEFAULTS[k])) touchAfter('prefs')
 }
