@@ -34,7 +34,10 @@ export function InstallPrompt({ wide, full, lift = 0 }) {
 
   useEffect(() => { const t = setTimeout(() => setReady(true), DELAY); return () => clearTimeout(t) }, [])
   useEffect(() => {
-    const on = () => { setHidden(true); toast('Noesis is installed. Open it from your apps.') }
+    // The browser says it has STARTED adding the app: on some phones it then cannot (a browser on a Xiaomi phone
+    // without permission to add home-screen icons says "Installing…" and nothing appears), and "Noesis is
+    // installed" was shown over its "Installing Noesis…" for an app that never came (Tharun, Edge, 16 October 2026).
+    const on = () => { setHidden(true); toast("Adding Noesis to your apps. If it doesn't appear, see Settings → About.") }
     addEventListener('appinstalled', on)
     return () => removeEventListener('appinstalled', on)
   }, [])

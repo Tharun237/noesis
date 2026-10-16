@@ -293,14 +293,24 @@ function InstallBody() {
   const evt = useStore(ui, s => s.installEvt)
   const installed = useStore(ui, s => s.installed)
   const ios = /iPhone|iPad/.test(navigator.userAgent)
+  const android = /Android/.test(navigator.userAgent)
+  const inApp = matchMedia('(display-mode: standalone)').matches
   return (
     <Group title="The app">
       <div style={{ fontSize: 14, color: T.sub, lineHeight: 1.55 }}>
-        {installed ? 'Noesis is installed on this device.'
+        {inApp ? 'Noesis is installed on this device.'
+          : installed ? 'Your browser has been asked to add Noesis to your apps.'
           : evt ? 'Install Noesis for a full-screen app with its own icon, offline use and lock-screen controls. No app store needed.'
           : ios ? 'To install: tap Share, then "Add to Home Screen".'
           : 'Open your browser menu and choose "Install app" or "Add to Home screen".'}
       </div>
+      {android && !inApp && (
+        // Some phones let a browser add an icon to the home screen only with a permission, and do nothing without
+        // it: the browser says "Installing…" and no app appears (Xiaomi, Redmi, POCO; reported for several browsers).
+        <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.55 }}>
+          No icon after installing? Some phones (Xiaomi, Redmi, POCO and others) need to let your browser add icons to the home screen: open your phone's Settings → Apps → this browser → Other permissions → turn on <b style={{ color: T.text }}>Home screen shortcuts</b>, then install again.
+        </div>
+      )}
       {evt && !installed && (
         <div><Button kind="primary" icon="install" onClick={async () => { evt.prompt(); const r = await evt.userChoice; if (r.outcome === 'accepted') ui.set({ installEvt: null }) }}>Install Noesis</Button></div>
       )}
