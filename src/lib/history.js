@@ -13,7 +13,7 @@
 // the moment it was last heard (library.js).
 import { createStore, useStore, uid } from './store.js'
 import { db } from './db.js'
-import { player, audioState } from './player.js'
+import { player, audioState, systemSounding } from './player.js'
 import { activeEngine } from './engine.js'
 import { library, getDoc, addDocument, setHeardSync } from './library.js'
 import { touch, deviceName } from './sync.js'
@@ -314,7 +314,7 @@ export function startHistory() {
   // the document sound is coming out for right now, or null
   const sounding = () => {
     const p = player.get()
-    return p.playing && !p.waiting && p.id && (audioState().paused === false || (activeEngine() === 'system' && globalThis.speechSynthesis?.speaking)) ? p.id : null
+    return p.playing && !p.waiting && p.id && (audioState().paused === false || (activeEngine() === 'system' && globalThis.speechSynthesis?.speaking && !globalThis.speechSynthesis.paused && systemSounding())) ? p.id : null
   }
   let last = { at: Date.now(), id: null, carry: 0 }
   const look = () => {

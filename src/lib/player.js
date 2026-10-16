@@ -219,6 +219,15 @@ async function load(i, { autoplay = player.get().playing, offset = 0, from = 0, 
 }
 
 // ── built-in voice ───────────────────────────────────────────────────────────────
+// When the browser's own voice last said a word. Browsers keep saying they are "speaking" after their speech has
+// stalled or been cut off, and listening was counted on that: 47 minutes of a book its listener never heard (16
+// October 2026). history.js counts the built-in voice only while it can be speaking: within the time its sentence
+// takes (from its length; half as long again, for a slow voice) and while words keep coming, for a voice that says
+// where it is. A voice that tells nothing (some phones' default voice) is counted for its sentence's time only.
+const SAID_RECENT_MS = 4000 // a word this recently: still speaking (a long word, a comma's pause)
+let saidUntil = 0
+export const systemSounding = () => Date.now() < saidUntil
+
 function speak(c, i, autoplay, from = 0) {
   const my = ++utter
   if (!autoplay) return
@@ -231,13 +240,16 @@ function speak(c, i, autoplay, from = 0) {
   if (voice) { u.voice = voice; u.lang = voice.lang } else { u.lang = locale }
   u.rate = speed()
   const est = secPerChar(getDoc(player.get().id) || { vChars: 0 })
+  const expectMs = (text.length * est * 1000 * 1.5) / (u.rate || 1)
+  u.onstart = () => { if (my === utter) saidUntil = Date.now() + expectMs }
   u.onboundary = e => {
     if (my !== utter || e.name === 'sentence') return
+    saidUntil = Math.max(saidUntil, Date.now() + SAID_RECENT_MS)
     const word = from + e.charIndex
     player.set({ word, t: word * est })
     sleepCheck()
   }
-  u.onend = () => { if (my === utter) sentenceEnded() }
+  u.onend = () => { if (my === utter) { saidUntil = 0; sentenceEnded() } }
   u.onerror = e => {
     if (my !== utter || e.error === 'interrupted' || e.error === 'canceled') return
     console.warn('Built-in voice error:', e.error)

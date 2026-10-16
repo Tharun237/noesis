@@ -2,9 +2,12 @@
 // Tharun, 13 October 2026, asked which: how fast they listen, their usual voice, how the library is sorted,
 // whether the next document plays by itself, whether a finished one is archived. On 16 October 2026 their own AI
 // and voice services joined them, keys included ("a user has to carry the API key everywhere: absurd"): a key
-// left behind on one device made a book there race by in silence. They travel in the customer's own Drive
-// folder, which only Noesis can open with their sign-in; never through Noesis's server. What suits a screen (the
-// size of the text, the layout) and what belongs to a device (its own voices, its measured speed) stays.
+// left behind on one device made a book there race by in silence. The same day the rest of what they choose joined
+// too: how the reader looks, sounds and haptics ("entire settings doesn't remember my preference", Tharun, on a new
+// install of the app). They travel in the customer's own Drive folder, which only Noesis can open with their
+// sign-in; never through Noesis's server. What belongs to a device stays: what it measured or found (its speed,
+// its voices, what it learnt about a voice or a service), the built-in voice (each browser has its own), and what
+// needs that device's own permission (the microphone of aware listening).
 // One record, `prefs`, newest wins, like the rest of the library (sync.js).
 import { settings, DEFAULTS } from './settings.js'
 import { onShelf } from './shelf.js'
@@ -13,7 +16,9 @@ import { touch, touchAfter } from './sync.js'
 // the customer's own services: which AI, its key and model, and their own voice service
 export const SERVICES = ['aiProvider', 'geminiKey', 'geminiModel', 'nvidiaKey', 'nvidiaModel', 'nvidiaVision', 'customBase', 'customKey', 'customModel', 'customVision', 'voiceBase', 'voiceKey', 'voiceModel', 'voiceNames', 'describeFigures', 'aiNarration']
 const SECRETS = ['geminiKey', 'nvidiaKey', 'customKey', 'voiceKey']
-export const FOLLOW = ['speed', 'voice', 'sort', 'autoplayNext', 'archiveFinished', 'listenGoal', ...SERVICES]
+// how they listen and read
+export const CHOICES = ['voiceTone', 'skipVisuals', 'mode', 'view', 'ambientMode', 'ambientVolume', 'haptics', 'lockScreenWords', 'readFont', 'readSize', 'readLeading', 'readWidth', 'justify', 'wordHighlight', 'tocOpen', 'readerView', 'focusWpm', 'invertPages']
+export const FOLLOW = ['speed', 'voice', 'sort', 'autoplayNext', 'archiveFinished', 'listenGoal', ...SERVICES, ...CHOICES]
 const OFFERED = onShelf('noesis.prefs.offered')
 const only = s => Object.fromEntries(FOLLOW.filter(k => s[k] !== undefined).map(k => [k, s[k]]))
 

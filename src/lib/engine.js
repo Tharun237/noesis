@@ -24,6 +24,9 @@ function refresh() {
 if (hasSystemVoice()) {
   refresh()
   speechSynthesis.addEventListener?.('voiceschanged', refresh)
+  // Some browsers fill the list late and never say so (no "voiceschanged"): looked at again a few times as the app
+  // starts, so a voice the browser has is never missing from Settings for having been asked too early.
+  for (const ms of [500, 1500, 4000, 10000]) setTimeout(refresh, ms)
 }
 
 export function pickSystemVoice(locale = 'en') {

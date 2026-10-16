@@ -22,6 +22,7 @@ function collect() {
       ['Version', String(__APP_VERSION__)],
       ['Build', String(__APP_BUILD__)],
       ['Installed as app', matchMedia('(display-mode: standalone)').matches ? 'yes' : 'no'],
+      ['Voices this browser offers', (() => { const v = globalThis.speechSynthesis?.getVoices?.() || []; const n = v.filter(x => /natural|neural|online/i.test(x.name) || !x.localService).length; return v.length ? `${v.length}${n ? ` (${n} online or natural)` : ''}` : 'none' })()],
       ['Service worker in control', navigator.serviceWorker?.controller ? 'yes' : 'no'],
       ['Cross-origin isolated', crossOriginIsolated ? 'yes' : 'no'],
       ['Page visible', document.visibilityState],

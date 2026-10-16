@@ -57,13 +57,14 @@ try {
   check('the reader says why, instead of "Making the audio"', !!says, says)
 
   // 2. A has the key; both sign in to one account
-  await a.lib(`m.settings.settings.set({ aiProvider: 'nvidia', nvidiaKey: ${JSON.stringify(KEY)}, nvidiaModel: 'test/model' })`)
+  await a.lib(`m.settings.settings.set({ aiProvider: 'nvidia', nvidiaKey: ${JSON.stringify(KEY)}, nvidiaModel: 'test/model', readSize: 23, readFont: 'sans', ambientMode: 'calm' })`)
   await a.lib(`m.sync.devSignIn(${JSON.stringify(who)})`)
   await a.until('A to finish a round', () => a.lib("m.sync.syncState.get().last > 0"))
   await b.lib(`m.sync.devSignIn(${JSON.stringify(who)})`)
   const got = await b.until('the key to reach B', async () => { await a.lib('m.sync.flush()'); await b.lib('m.sync.flush()'); return b.lib(`m.settings.settings.get().nvidiaKey === ${JSON.stringify(KEY)} && 'here'`) }, 40000).catch(() => null)
   check('the key reaches the other device by itself', got === 'here')
   check('with it, the AI service and model', await b.lib("m.settings.settings.get().aiProvider === 'nvidia' && m.settings.settings.get().nvidiaModel === 'test/model'"))
+  check('and how the reader looks and sounds', await b.lib("(s => s.readSize === 23 && s.readFont === 'sans' && s.ambientMode === 'calm')(m.settings.settings.get())"))
   // it tries again at once (the dev server has no NVIDIA relay, so its answer then is "not available": not the key)
   await sleep(3000)
   const now = await b.lib(`m.library.keyWaitOf(${JSON.stringify(book)}) || 'nothing'`)
