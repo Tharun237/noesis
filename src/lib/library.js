@@ -1103,6 +1103,11 @@ async function createSynced(id, v) {
   pending.delete(id)
   await db.putMeta(meta)
   library.set(s => ({ docs: [meta, ...s.docs].sort((a, b) => b.createdAt - a.createdAt) }))
+  // The place and bookmarks are taken at the same time as the document (sync.js takes records together): one that
+  // came while it was being written down was kept for it here, after it had been read, and was lost. The place
+  // read on the laptop before it signed in reached every other device as the start (16 October 2026).
+  const late = pending.get(id)
+  if (late) { pending.delete(id); patch(id, late, true) }
   fetchSynced(id)
 }
 
