@@ -74,6 +74,28 @@ try {
   for (let k = 0; k < 3; k++) { await a.lib('m.sync.flush()'); await b.lib('m.sync.flush()'); await sleep(600) }
   check('a device that never had the key does not wipe it on the other', await a.lib(`m.settings.settings.get().nvidiaKey === ${JSON.stringify(KEY)}`))
 
+  // 3b. the failure of 16 October 2026: a key added on one device, then a device that never had it changes
+  // something else. The account must keep the key, and the other device must get it.
+  const GKEY = 'AIzaTEST' + 'x'.repeat(31)
+  await a.lib(`m.settings.settings.set({ geminiKey: ${JSON.stringify(GKEY)} })`)
+  await a.lib('m.sync.flush()'); await sleep(800)
+  await b.lib(`m.settings.settings.set({ geminiKey: '' })`).catch(() => {}) // b never had it: make sure
+  await b.lib(`m.settings.settings.set({ readSize: 25 })`) // something unrelated, changed on the device without the key
+  await b.lib('m.sync.flush()'); await sleep(800)
+  const inAccount = async () => b.page.evaluate(async () => {
+    const pass = await (await fetch('/api/auth/token', { method: 'POST' })).json()
+    const files = (await (await fetch(`${pass.api}/drive/v3/files`, { headers: { authorization: `Bearer ${pass.access_token}` } })).json()).files
+    const f = files.find(x => x.name === 'prefs')
+    const v = await (await fetch(`${pass.api}/drive/v3/files/${f.id}?alt=media`, { headers: { authorization: `Bearer ${pass.access_token}` } })).json()
+    return { key: !!String(v.geminiKey || '').trim(), size: v.readSize }
+  })
+  const acct = await inAccount()
+  check('a device without the key changing something else does not wipe the key from the account', acct.key, JSON.stringify(acct))
+  check('…and its own change is in the account too', acct.size === 25, JSON.stringify(acct))
+  const bGot = await b.until('the Gemini key to reach B', async () => { await a.lib('m.sync.flush()'); await b.lib('m.sync.flush()'); return b.lib(`m.settings.settings.get().geminiKey === ${JSON.stringify(GKEY)} && 'here'`) }, 30000).catch(() => null)
+  check('the key added on A reaches B', bGot === 'here')
+  check('A keeps its key and takes the size changed on B', await a.lib(`(s => s.geminiKey === ${JSON.stringify(GKEY)} && s.readSize === 25)(m.settings.settings.get())`))
+
   // 4. a sentence stored silent the old way is made again when the book opens
   const healBook = await addText(a, 'Healing book', 6)
   await a.until('the second book to be read', () => a.lib(`m.library.getDoc(${JSON.stringify(healBook)})?.total > 0`))

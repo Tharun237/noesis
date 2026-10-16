@@ -283,3 +283,12 @@ key it still lists matching passages. Page numbers and a spoken answer came late
 
 
 Removed 2026-10-13: the concept map (item 18), at Tharun's word: "it's useless at Noesis". Its screen, its menu entry and `lib/concepts.js` are gone.
+
+## Pending (Tharun, 2026-10-16)
+
+- **The full stop is still abrupt, in every voice.** "This full stop is annoying: abrupt in ending and starting
+  of new sentence." What is measured: no clicks, endings decay naturally; across a full stop the voice's loudness
+  jumps +8 to +16 dB within 80 ms (a comma, +4 dB): every sentence starts at full force. Paragraph runs did not
+  change what he hears. Next: a softer, adaptive sentence start (sized to each jump) with a setting he can tune;
+  A/B files C and D (mia-C-gentle, mia-D-softer) sent, his verdict not given. Piper voices still speak one
+  sentence at a time (no durations exposed to cut runs).

@@ -41,6 +41,10 @@ const TAKE_AT_ONCE = 6
 const SAY_FROM = 8 // fewer records than this are taken without saying so: it is over before it could be read
 const FIRST = ['meta', 'cols', 'heard', 'marks', 'pos'] // a library is its documents; places and bookmarks follow
 const TEXT = 'doc:' // the prefix of a book-text part: fetched when a document is opened, never on a round
+// Records merged rather than replaced (prefs.js merges setting by setting): whatever the folder holds that this
+// device has not merged is read before this device writes over it, even when it looks older. Written over unread,
+// the settings of a device that never had a key wiped the key from the account (16 October 2026).
+const MERGED = new Set(['prefs'])
 const ORIGINAL = 'file:' // a document's own file (its PDF): fetched when its pages are wanted, never on a round
 
 let hooks = null // { snapshot(k), apply(k, value), content(id), allKeys(), originals(), original(id) } — provided by library.js
@@ -54,8 +58,9 @@ let flushing = null
 let lastPosPush = 0
 let urgent = false // a pause arrived while a flush was in flight: push again right after
 let early = {} // edits made before the account check finished (e.g. at boot); merged in when sync starts
+let merged = {} // k → the version of a MERGED record in the folder this device has merged (or written itself)
 
-const persist = () => uid && set('state', { uid, cursor, clock, dirty, ids }, store)
+const persist = () => uid && set('state', { uid, cursor, clock, dirty, ids, merged }, store)
 const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer())
 
 export const configureSync = h => { hooks = h }
@@ -145,6 +150,7 @@ async function pull() {
     ids[k] = seen
     if (k.startsWith(TEXT) || k.startsWith(ORIGINAL)) continue
     if (seen.at > (clock[k] || 0)) want.set(k, seen) // a record changed twice since the last look is read once
+    else if (MERGED.has(k) && seen.at !== (merged[k] || 0)) { want.set(k, seen); if (seen.at < (clock[k] || 0)) dirty[k] = clock[k] } // read and merged before ours goes over it
     else if (seen.at < (clock[k] || 0) && !dirty[k]) dirty[k] = clock[k] // the folder is behind us: send ours again
   }
   const rank = k => { const at = FIRST.indexOf(k.split(':')[0]); return at < 0 ? FIRST.length : at }
@@ -175,9 +181,10 @@ async function pull() {
 }
 
 async function receive(k, at, v) {
-  if (v == null || at <= (clock[k] || 0)) return
+  if (v == null || (at <= (clock[k] || 0) && !MERGED.has(k))) return
   const answer = await hooks.apply(k, v) // first: if this fails the record is still "not seen", and is taken again next round
-  clock[k] = at
+  if (MERGED.has(k)) merged[k] = at
+  clock[k] = Math.max(clock[k] || 0, at)
   if (dirty[k] && dirty[k] < at) delete dirty[k] // a newer edit from another device beats our queued one
   // What arrived was put together with what was here (bookmarks made on two devices), and this device had
   // something the other did not: the two together go back, as the record that follows this one.
@@ -216,6 +223,7 @@ async function push(quick) {
           }
           const body = JSON.stringify(v)
           ids[k] = { id: await put(k, at, body, quick && body.length < QUICK_MAX), at }
+          if (MERGED.has(k)) merged[k] = at // what we wrote is what the folder holds: nothing there to merge
           if (k.startsWith('meta:') && v.deleted) { await dropText(k.slice(5)); await dropOriginal(k.slice(5)) } // a deleted document leaves nothing behind in their Drive
           if (k.startsWith('pos:')) lastPosPush = Date.now()
         }
@@ -377,6 +385,7 @@ async function resetFor(user) {
   clock = {}
   dirty = {}
   ids = {}
+  merged = {}
   const now = drive.clockNow()
   // First sync here = union of libraries. The settings are the exception: what this device happens to be set to
   // is not a choice made now, so it is stamped the oldest it can be, and any the account already has win (a new
@@ -397,7 +406,7 @@ export async function startSync() {
   const mine = id => saved?.uid === id && saved.ids // state from before the library moved to Drive has no ids: start again
   if (me === null) { // offline: keep syncing with the account we last knew about
     if (saved?.uid && saved.ids) {
-      ({ uid, cursor, clock, dirty, ids } = saved)
+      ({ uid, cursor, clock, dirty, ids } = saved); merged = saved.merged || {}
       mergeEarly()
     }
     account.set({ checked: true, reachable: false })
@@ -409,7 +418,7 @@ export async function startSync() {
   if (me.user && takeShelf(me.user.id)) { location.reload(); return new Promise(() => {}) }
   account.set({ user: me.user, checked: true, reachable: true })
   if (!me.user) return
-  if (mine(me.user.id)) ({ uid, cursor, clock, dirty, ids } = saved)
+  if (mine(me.user.id)) { ({ uid, cursor, clock, dirty, ids } = saved); merged = saved.merged || {} }
   else await resetFor(me.user.id)
   // Every time the app is opened it looks at the WHOLE folder, not only at what changed since its mark. The
   // mark is a convenience for the rounds in between; it is not to be believed across a launch. A version of

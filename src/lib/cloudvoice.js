@@ -334,16 +334,45 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
 
 // ── Gemini ────────────────────────────────────────────────────────────────────────────────────────────────────────
 // One request: the text and a voice to Gemini's speech models (the Interactions API, as Google documents it, read
-// 16 October 2026); a WAV comes back (24 kHz mono 16-bit). The newest model first; one this key cannot reach
-// (404) is passed over for the next, and the one that answered is remembered (servicePlans.gemini.model).
+// 16 October 2026); a WAV comes back (24 kHz mono 16-bit). WHICH models is not written here: they are read from
+// Google's own list for this key (geminiModels), so a new one is found and a retired one dropped by themselves.
+// The one that last answered goes first (servicePlans.gemini.model); one this key cannot reach is passed over.
 const GM_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions'
-const GM_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts']
+const GM_LIST = 'https://generativelanguage.googleapis.com/v1beta/models'
 let gmStart = 0
+const gmPlan = () => settings.get().servicePlans?.gemini || {}
+const setGmPlan = change => settings.set({ servicePlans: { ...(settings.get().servicePlans || {}), gemini: { ...gmPlan(), ...change } } })
+
+// The key's models that speak, from Google's list (once a day): newest version first, the full model before its
+// lighter one, a release before a preview, the faster flash before pro (listening needs speed). → model names.
+export const rankSpeechModels = names => [...names].sort((a, b) => {
+  const ver = n => parseFloat((/gemini-(\d+(?:\.\d+)?)/.exec(n) || [])[1] || 0)
+  const cost = n => (/lite/.test(n) ? 2 : 0) + (/pro/.test(n) ? 1 : 0) + (/preview/.test(n) ? 0.5 : 0)
+  return ver(b) - ver(a) || cost(a) - cost(b) || a.localeCompare(b)
+})
+async function geminiModels(key, signal) {
+  const plan = gmPlan()
+  if (plan.models?.length && Date.now() - (plan.listedAt || 0) < DAY) return plan.models
+  const found = []
+  let token
+  do {
+    const res = await fetch(`${GM_LIST}?pageSize=200${token ? '&pageToken=' + token : ''}`, { headers: { 'x-goog-api-key': key }, signal })
+    if (!res.ok) { if (plan.models?.length) return plan.models; throw Object.assign(new Error(res.status === 400 || res.status === 403 ? 'Gemini did not accept the key. Check it in Settings → AI.' : `Gemini error ${res.status}`), { status: res.status === 400 || res.status === 403 ? 401 : res.status }) }
+    const out = await res.json()
+    for (const m of out.models || []) if (/-tts/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent')) found.push(m.name.replace(/^models\//, ''))
+    token = out.nextPageToken
+  } while (token)
+  const models = rankSpeechModels(found)
+  setGmPlan({ models, listedAt: Date.now() })
+  return models
+}
+
 export async function geminiSpeech(text, voice, { signal } = {}) {
   const key = String(settings.get().geminiKey || '').trim()
   if (key.length < 20) throw Object.assign(new Error('Gemini did not accept the key. Check it in Settings → AI.'), { status: 401 })
-  const learnt = settings.get().servicePlans?.gemini?.model
-  const models = learnt ? [learnt, ...GM_MODELS.filter(m => m !== learnt)] : GM_MODELS
+  const listed = await geminiModels(key, signal)
+  const learnt = gmPlan().model
+  const models = learnt && listed.includes(learnt) ? [learnt, ...listed.filter(m => m !== learnt)] : listed
   let last = null
   for (const model of models) {
     const res = await fetch(GM_URL, {
@@ -356,6 +385,12 @@ export async function geminiSpeech(text, voice, { signal } = {}) {
       const got = await res.json().catch(() => ({}))
       const err = (Array.isArray(got) ? got[0] : got)?.error || {} // this endpoint answers with a list: [{ error }]
       const msg = String(err.message || '')
+      // A voice name Google no longer knows: dropped from the list (the names come from its documentation; there is
+      // no list to read), and said as a voice that is not available, so the book asks for another
+      if (res.status === 400 && /voice/i.test(msg) && !/api key/i.test(msg)) {
+        setGmPlan({ gone: [...new Set([...(gmPlan().gone || []), voice])] })
+        throw Object.assign(new Error('This voice is not available now.'), { status: 404 })
+      }
       // Gemini refuses a wrong key with 400 (reason API_KEY_INVALID): that is the key, not this sentence
       if ((res.status === 400 || res.status === 403) && ((err.details || []).some(x => /API_KEY/.test(x.reason || '')) || /api key/i.test(msg))) throw Object.assign(new Error('Gemini did not accept the key. Check it in Settings → AI.'), { status: 401 })
       throw Object.assign(new Error(msg || `Gemini error ${res.status}`), { status: res.status, retryAfter: (+res.headers.get('retry-after') || 0) * 1000 })
@@ -363,7 +398,7 @@ export async function geminiSpeech(text, voice, { signal } = {}) {
     const body = await res.json()
     const audio = (body.steps || []).filter(x => x.type === 'model_output').flatMap(x => x.content || []).filter(c => c.type === 'audio').pop()
     if (!audio?.data) throw Object.assign(new Error('Gemini gave no audio for this text.'), { status: 400 })
-    if (learnt !== model) settings.set({ servicePlans: { ...(settings.get().servicePlans || {}), gemini: { ...(settings.get().servicePlans?.gemini || {}), model } } })
+    if (learnt !== model) setGmPlan({ model })
     const bin = atob(audio.data)
     const bytes = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)

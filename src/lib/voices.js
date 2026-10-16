@@ -68,7 +68,8 @@ function geminiFor(lang) {
   let s
   try { s = settings.get() } catch { return [] }
   if (String(s.geminiKey || '').trim().length < 20) return []
-  return GEMINI_VOICES.map(n => ({ id: 'gm:' + n, name: n, accent: 'Gemini · online', g: undefined, license: 'Google', lang, cloud: true }))
+  const gone = new Set(s.servicePlans?.gemini?.gone || []) // names Google turned down: not offered again
+  return GEMINI_VOICES.filter(n => !gone.has(n)).map(n => ({ id: 'gm:' + n, name: n, accent: 'Gemini · online', g: undefined, license: 'Google', lang, cloud: true }))
 }
 
 function customFor() {
