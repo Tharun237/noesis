@@ -207,19 +207,24 @@ const secs = ms => (ms < 90_000 ? `${Math.round(ms / 1000)} s` : `${Math.round(m
 function NvidiaUse() {
   const days = useStore(nvidiaUse, u => u.days)
   const u = useOver(days, 7)
-  if (!u.voice.made && !u.text.made) return null
-  const asked = [u.voice.made && `${n(u.voice.said || u.voice.made)} sentences spoken in ${n(u.voice.made)} ${u.voice.made === 1 ? 'request' : 'requests'}`, u.text.made && `${n(u.text.made)} AI requests`].filter(Boolean).join(' · ')
-  const limited = u.voice.limited + u.text.limited
-  const waited = u.voice.waitedMs + u.text.waitedMs
-  const busy = u.voice.failed + u.text.failed
+  const when = u.days === 1 ? 'today' : `the last ${u.days} days`
+  const slow = (limited, waited) => (limited ? `asked to slow down ${n(limited)} ${limited === 1 ? 'time' : 'times'}, ${secs(waited)} of waiting in all.` : 'never asked to slow down.')
+  const nv = u.voice.made || u.text.made ? (() => {
+    const asked = [u.voice.made && `${n(u.voice.said || u.voice.made)} sentences spoken in ${n(u.voice.made)} ${u.voice.made === 1 ? 'request' : 'requests'}`, u.text.made && `${n(u.text.made)} AI requests`].filter(Boolean).join(' · ')
+    const busy = u.voice.failed + u.text.failed
+    return { title: `Your NVIDIA key on this device, ${when}`, text: `${asked}${u.voice.peak ? ` · at most ${n(u.voice.peak)} voice ${u.voice.peak === 1 ? 'request' : 'requests'} in a minute` : ''}. NVIDIA ${slow(u.voice.limited + u.text.limited, u.voice.waitedMs + u.text.waitedMs)}${busy ? ` It was busy ${n(busy)} ${busy === 1 ? 'time' : 'times'}; each was asked again.` : ''}` }
+  })() : null
+  const g = u.gemini
+  const gm = g.made ? { title: `Gemini voices with your key on this device, ${when}`, text: `${n(g.said || g.made)} sentences spoken in ${n(g.made)} ${g.made === 1 ? 'request' : 'requests'}${g.peak ? ` · at most ${n(g.peak)} in a minute` : ''}. Google ${slow(g.limited, g.waitedMs)}${g.failed ? ` It was busy ${n(g.failed)} ${g.failed === 1 ? 'time' : 'times'}; each was asked again.` : ''}` } : null
+  if (!nv && !gm) return null
   return (
-    <div style={small}>
-      <div style={{ color: T.text, fontWeight: 600, marginBottom: 2 }}>Your NVIDIA key on this device, {u.days === 1 ? 'today' : `the last ${u.days} days`}</div>
-      <div style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {asked}{u.voice.peak ? ` · at most ${n(u.voice.peak)} voice ${u.voice.peak === 1 ? 'request' : 'requests'} in a minute` : ''}.{' '}
-        {limited ? `NVIDIA asked it to slow down ${n(limited)} ${limited === 1 ? 'time' : 'times'}, ${secs(waited)} of waiting in all.` : 'NVIDIA never asked it to slow down.'}
-        {busy ? ` NVIDIA was busy ${n(busy)} ${busy === 1 ? 'time' : 'times'}; each was asked again.` : ''}
-      </div>
+    <div style={{ ...small, display: 'grid', gap: 10 }}>
+      {[nv, gm].filter(Boolean).map(x => (
+        <div key={x.title}>
+          <div style={{ color: T.text, fontWeight: 600, marginBottom: 2 }}>{x.title}</div>
+          <div style={{ fontVariantNumeric: 'tabular-nums' }}>{x.text}</div>
+        </div>
+      ))}
     </div>
   )
 }

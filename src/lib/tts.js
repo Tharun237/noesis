@@ -88,7 +88,7 @@ export async function synthesizeRun(texts, voice, pauses, tone = settings.get().
   if (!isCloudVoice(voice)) return (await call({ type: 'speakRun', texts, voice, pauses, tone })).recs
   const { pcm, rate } = await cloudSynthesize(texts.join(' '), voice, { signal: opts.signal, onRetry: opts.onRetry })
   const recs = (await call({ type: 'encodeRun', pcm, rate, lengths: texts.map(t => t.length), pauses, tone })).recs
-  if (recs && voice.startsWith('nv:')) countUse('voice', 'said', { n: texts.length }) // sentences, beside the requests (usage.js)
+  if (recs && (voice.startsWith('nv:') || voice.startsWith('gm:'))) countUse(voice.startsWith('gm:') ? 'gemini' : 'voice', 'said', { n: texts.length }) // sentences, beside the requests (usage.js)
   return recs
 }
 
@@ -96,7 +96,7 @@ export async function synthesize(text, voice, pause = 'sentence', tone = setting
   await loadEngine(voice)
   if (isCloudVoice(voice)) {
     const { pcm, rate } = await cloudSynthesize(text, voice, { signal: opts.signal, onRetry: opts.onRetry })
-    if (voice.startsWith('nv:')) countUse('voice', 'said')
+    if (voice.startsWith('nv:') || voice.startsWith('gm:')) countUse(voice.startsWith('gm:') ? 'gemini' : 'voice', 'said')
     return (await call({ type: 'encode', pcm, rate, pause, tone })).rec
   }
   return (await call({ type: 'speak', text, voice, pause, tone })).rec

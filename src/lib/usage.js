@@ -1,7 +1,8 @@
 // How much this device asks of the customer's NVIDIA key, and how often NVIDIA asks it to slow down: counted a day
 // at a time, so "is the free key enough for four hours a day?" is answered from what happened, not guessed
 // (Tharun, 16 October 2026). Kept on this device only, never sent anywhere; the last two weeks.
-//   voice: a request to an NVIDIA voice (one sentence, or a run of a paragraph's sentences) · text: an AI request
+//   voice: a request to an NVIDIA voice (one sentence, or a run of a paragraph's sentences) · gemini: the same to a
+//   Gemini voice (the customer's own Gemini key) · text: an AI request
 //   made · said (sentences, for voices) · limited (NVIDIA said 429: too many, wait) · failed (NVIDIA was busy: 5xx)
 //   · waitedMs · peak (most requests in a minute: what NVIDIA's limit is about)
 import { onShelf } from './shelf.js'
@@ -40,11 +41,12 @@ export function countUse(kind, what, { waited: waitedMs = 0, n = 1, now = Date.n
 // The last `n` days (today included) added up: { voice: { made, said, limited, failed, waitedMs, peak }, text: {…}, days }
 export function useOver(days, n = 7, now = Date.now()) {
   const want = new Set(Array.from({ length: n }, (_, k) => dayOf(now - k * 86400000)))
-  const sum = { voice: { made: 0, said: 0, limited: 0, failed: 0, waitedMs: 0, peak: 0 }, text: { made: 0, said: 0, limited: 0, failed: 0, waitedMs: 0, peak: 0 }, days: 0 }
+  const blank = () => ({ made: 0, said: 0, limited: 0, failed: 0, waitedMs: 0, peak: 0 })
+  const sum = { voice: blank(), gemini: blank(), text: blank(), days: 0 }
   for (const [d, v] of Object.entries(days)) {
     if (!want.has(d)) continue
     sum.days++
-    for (const kind of ['voice', 'text']) {
+    for (const kind of ['voice', 'gemini', 'text']) {
       for (const f of ['made', 'said', 'limited', 'failed', 'waitedMs']) sum[kind][f] += v[`${kind}_${f}`] || 0
       sum[kind].peak = Math.max(sum[kind].peak, v[`${kind}_peak`] || 0)
     }

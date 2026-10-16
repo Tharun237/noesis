@@ -10,7 +10,7 @@
 // model and at least one voice name are set: { id: 'oa:…', accent: '<host> · online', cloud: true }.
 import { settings } from './settings.js'
 import { isNvidiaKey, cleanBase, hostOf } from './ai.js'
-import { isCloudVoice, cloudVoiceInfo, parseVoiceNames } from './cloudvoice.js'
+import { isCloudVoice, cloudVoiceInfo, parseVoiceNames, GEMINI_VOICES } from './cloudvoice.js'
 
 export const VOICE_BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/'
 
@@ -63,6 +63,14 @@ function cloudFor(lang) {
   })
 }
 
+// Gemini's voices, with the customer's own Gemini key: each speaks the language of the text, so every document has them.
+function geminiFor(lang) {
+  let s
+  try { s = settings.get() } catch { return [] }
+  if (String(s.geminiKey || '').trim().length < 20) return []
+  return GEMINI_VOICES.map(n => ({ id: 'gm:' + n, name: n, accent: 'Gemini · online', g: undefined, license: 'Google', lang, cloud: true }))
+}
+
 function customFor() {
   let s
   try { s = settings.get() } catch { return [] }
@@ -74,8 +82,8 @@ function customFor() {
   return names.map(n => ({ id: 'oa:' + n, name: n, accent: `${host} · online`, g: undefined, license: 'Own voice', lang: null, cloud: true }))
 }
 
-export const voicesFor = lang => [...VOICES.filter(v => v.lang === lang), ...cloudFor(lang), ...customFor()]
-// On-device first, then NVIDIA, then the customer's own voices last: an `oa:` voice is the default
+export const voicesFor = lang => [...VOICES.filter(v => v.lang === lang), ...cloudFor(lang), ...geminiFor(lang), ...customFor()]
+// On-device first, then NVIDIA, then Gemini, then the customer's own voices last: an `oa:` voice is the default
 // only when nothing else exists for that language.
 export const defaultVoiceFor = lang => voicesFor(lang)[0]?.id ?? null
 export const isVoice = id => VOICES.some(v => v.id === id) || isCloudVoice(id)

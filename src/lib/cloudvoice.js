@@ -1,5 +1,5 @@
-// Cloud voices: NVIDIA Magpie (M10, through Noesis's relay) and the customer's own
-// OpenAI-protocol voice service (M11, called straight from the browser).
+// Cloud voices: NVIDIA Magpie (M10, through Noesis's relay), Google Gemini (with the customer's own Gemini key,
+// straight from the browser to Google) and the customer's own OpenAI-protocol voice service (M11, also direct).
 // A cloud voice produces the same stored audio as a Piper voice; only where the samples come from differs.
 import { LANGS } from './lang.js'
 import { countUse } from './usage.js'
@@ -9,13 +9,20 @@ import { isNvidiaKey, cleanBase, hostOf } from './ai.js'
 
 export const NV_TRUTH = "Made online by NVIDIA: the text travels through Noesis's relay to NVIDIA. The audio is kept on this device and plays offline."
 
-export const isCloudVoice = (id = '') => typeof id === 'string' && (id.startsWith('nv:') || id.startsWith('oa:'))
+export const GM_TRUTH = 'Made online by Google Gemini, with your own Gemini key: the text goes straight from this device to Google. The audio is kept on this device and plays offline.'
+
+export const isCloudVoice = (id = '') => typeof id === 'string' && (id.startsWith('nv:') || id.startsWith('oa:') || id.startsWith('gm:'))
+
+// Gemini's prebuilt voices (ai.google.dev/gemini-api/docs/speech-generation, read 16 October 2026). Each speaks
+// whatever language the text is in (130+), so they are offered for every document.
+export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat']
 
 // 'nv:Magpie-Multilingual.HI-IN.Sofia' → { name: 'Sofia', nv: 'hi-IN', lang: 'hi' }.
 // The middle part is mapped back to a LANGS key (case-insensitive); unknown codes keep their text.
 // 'oa:nova' → { name: 'nova', lang: null }: a custom voice has no language of its own.
 export function cloudVoiceInfo(id = '') {
   if (String(id).startsWith('oa:')) return { name: String(id).slice(3), lang: null }
+  if (String(id).startsWith('gm:')) return { name: String(id).slice(3), lang: null }
   const full = String(id).startsWith('nv:') ? String(id).slice(3) : String(id)
   const parts = full.split('.')
   const code = parts.length >= 2 ? parts[1] : ''
@@ -119,6 +126,7 @@ export function ownHost(base) {
 
 // The exact truth line for a cloud voice, with the real host for a custom voice.
 export function cloudTruth(id, host) {
+  if (String(id).startsWith('gm:')) return GM_TRUTH
   if (String(id).startsWith('oa:')) {
     const h = host || ownHost()
     return `Made online by ${h || 'your voice service'}: the text goes straight from this device to that address. The audio is kept on this device and plays offline.`
@@ -238,6 +246,7 @@ function waitOnline(signal) {
 // reports `onRetry('offline')` and waits; a browser block (fetch TypeError while online) reports the
 // pre-worded 'Couldn't reach …' message for the stage. 401/403/404 throw a sentence the customer can act on.
 export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
+  if (String(voiceId).startsWith('gm:')) return geminiSynthesize(text, String(voiceId).slice(3), { signal, onRetry })
   if (String(voiceId).startsWith('oa:')) {
     for (let attempt = 0; ; attempt++) {
       if (signal?.aborted) throw signal.reason || new Error('Aborted')
@@ -320,5 +329,79 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
     if (res.status === 401 || res.status === 403) throw Object.assign(new Error('NVIDIA did not accept the key. Check it in Settings.'), { status: res.status })
     const detail = await res.text().catch(() => '')
     throw Object.assign(new Error(detail.trim().slice(0, 300) || `NVIDIA error ${res.status}`), { status: res.status })
+  }
+}
+
+// ── Gemini ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// One request: the text and a voice to Gemini's speech models (the Interactions API, as Google documents it, read
+// 16 October 2026); a WAV comes back (24 kHz mono 16-bit). The newest model first; one this key cannot reach
+// (404) is passed over for the next, and the one that answered is remembered (servicePlans.gemini.model).
+const GM_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions'
+const GM_MODELS = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts']
+let gmStart = 0
+export async function geminiSpeech(text, voice, { signal } = {}) {
+  const key = String(settings.get().geminiKey || '').trim()
+  if (key.length < 20) throw Object.assign(new Error('Gemini did not accept the key. Check it in Settings → AI.'), { status: 401 })
+  const learnt = settings.get().servicePlans?.gemini?.model
+  const models = learnt ? [learnt, ...GM_MODELS.filter(m => m !== learnt)] : GM_MODELS
+  let last = null
+  for (const model of models) {
+    const res = await fetch(GM_URL, {
+      method: 'POST', signal,
+      headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+      body: JSON.stringify({ model, input: [{ type: 'user_input', content: [{ type: 'text', text: String(text) }] }], response_format: { type: 'audio' }, generation_config: { speech_config: [{ voice }] } }),
+    })
+    if (res.status === 404) { last = res; continue } // this model is not for this key, or retired: the next
+    if (!res.ok) {
+      const got = await res.json().catch(() => ({}))
+      const err = (Array.isArray(got) ? got[0] : got)?.error || {} // this endpoint answers with a list: [{ error }]
+      const msg = String(err.message || '')
+      // Gemini refuses a wrong key with 400 (reason API_KEY_INVALID): that is the key, not this sentence
+      if ((res.status === 400 || res.status === 403) && ((err.details || []).some(x => /API_KEY/.test(x.reason || '')) || /api key/i.test(msg))) throw Object.assign(new Error('Gemini did not accept the key. Check it in Settings → AI.'), { status: 401 })
+      throw Object.assign(new Error(msg || `Gemini error ${res.status}`), { status: res.status, retryAfter: (+res.headers.get('retry-after') || 0) * 1000 })
+    }
+    const body = await res.json()
+    const audio = (body.steps || []).filter(x => x.type === 'model_output').flatMap(x => x.content || []).filter(c => c.type === 'audio').pop()
+    if (!audio?.data) throw Object.assign(new Error('Gemini gave no audio for this text.'), { status: 400 })
+    if (learnt !== model) settings.set({ servicePlans: { ...(settings.get().servicePlans || {}), gemini: { ...(settings.get().servicePlans?.gemini || {}), model } } })
+    const bin = atob(audio.data)
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return parseWav(bytes.buffer)
+  }
+  throw Object.assign(new Error('This voice is not available now.'), { status: last?.status || 404 })
+}
+
+// The same care as NVIDIA's: paced by what Google says (voiceplan.js), waiting out a "too many" or a busy moment,
+// and waiting for the network rather than failing.
+async function geminiSynthesize(text, voice, { signal, onRetry } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) throw signal.reason || new Error('Aborted')
+    const gap = gapOf('gemini') - (Date.now() - gmStart)
+    if (gap > 0) await sleep(gap)
+    gmStart = Date.now()
+    try {
+      const r = await geminiSpeech(text, voice, { signal })
+      onRetry?.(null)
+      paced('gemini', 'ok')
+      countUse('gemini', 'made')
+      return r
+    } catch (e) {
+      if (signal?.aborted) throw e
+      if (e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        onRetry?.('offline')
+        await waitOnline(signal)
+        continue
+      }
+      if ((e.status === 429 || e.status >= 500) && attempt < 8) {
+        const ms = Math.max(retryMs(attempt), e.retryAfter || 0)
+        if (e.status === 429) paced('gemini', 'limited', e.retryAfter || 0)
+        countUse('gemini', e.status === 429 ? 'limited' : 'failed', { waited: e.status === 429 ? ms : 0 })
+        onRetry?.(Math.max(1, Math.round(ms / 1000)))
+        await sleep(ms)
+        continue
+      }
+      throw e
+    }
   }
 }

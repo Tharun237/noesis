@@ -365,7 +365,7 @@ export const keyWaitOf = id => needKey.get(id) || null // what the reader says i
 let keyWas = ''
 settings.sub(() => {
   const s = settings.get()
-  const now = [s.nvidiaKey, s.voiceKey, s.voiceBase, s.voiceModel, s.voiceNames].join('|')
+  const now = [s.nvidiaKey, s.geminiKey, s.voiceKey, s.voiceBase, s.voiceModel, s.voiceNames].join('|')
   if (now === keyWas) return
   keyWas = now
   if (needKey.size) { needKey.clear(); kickVoice() }
@@ -426,7 +426,7 @@ async function nextVoiceJob() {
 // how long a run is and how often a service is asked are learnt, not listed (voiceplan.js).
 // ponytail: a run's last sentence still meets the next run cold; runs overlapping by a sentence if that is heard.
 const RUN_SENTENCES = 8
-const serviceOf = voice => (!isCloudVoice(voice) ? 'device' : String(voice).startsWith('nv:') ? 'nvidia' : 'own')
+const serviceOf = voice => (!isCloudVoice(voice) ? 'device' : String(voice).startsWith('nv:') ? 'nvidia' : String(voice).startsWith('gm:') ? 'gemini' : 'own')
 
 async function voiceOne(id, i, again = false) {
   if (library.get().voicingNow !== id) library.set({ voicingNow: id })
@@ -467,7 +467,7 @@ async function voiceOne(id, i, again = false) {
     else if (v == null) patch(id, { stage: 'Making the audio' })
     else if (typeof v === 'string') patch(id, { stage: v }) // pre-worded provider message (browser block)
     else if (ownHost) patch(id, { stage: `${ownHost}'s quota is limiting requests. Retrying in about ${v} s.` })
-    else patch(id, { stage: `NVIDIA's free quota is limiting requests. Retrying in about ${v} s.` })
+    else patch(id, { stage: `${String(voice).startsWith('gm:') ? 'Gemini' : 'NVIDIA'}'s free quota is limiting requests. Retrying in about ${v} s.` })
   }
   const one = () => synthesize(c.segs[i].t, voice, pauseOf(i), tone, cloud ? { onRetry } : undefined).then(rec => [rec])
   // The run given to the voice as one. A text the service refused as too long teaches its limit (undefined: not held
@@ -509,11 +509,13 @@ async function voiceOne(id, i, again = false) {
         // The key, or the voice itself, refused: that is about this device, not about the sentence. Nothing is stored;
         // the book waits, and says why, until a key or a voice changes (it used to store every sentence as silent).
         if (status === 401 || status === 403 || status === 404 || /did not accept the key/i.test(msg)) {
-          const here = own ? !!String(settings.get().voiceBase || '').trim() : isNvidiaKey(settings.get().nvidiaKey)
+          const gm = String(voice).startsWith('gm:')
+          const who = gm ? 'Gemini' : 'NVIDIA'
+          const here = own ? !!String(settings.get().voiceBase || '').trim() : gm ? String(settings.get().geminiKey || '').trim().length >= 20 : isNvidiaKey(settings.get().nvidiaKey)
           const words = status === 404 ? 'This voice is not available now. Choose another voice for this document.'
             : own ? `${ownHost} did not accept the key. Check it in Settings → Voice.`
-            : here ? 'NVIDIA did not accept your key. Check it in Settings → AI.'
-            : 'Your NVIDIA key is not on this device. Add it in Settings → AI, or sign in to bring it from your account.'
+            : here ? `${who} did not accept your key. Check it in Settings → AI.`
+            : `Your ${who} key is not on this device. Add it in Settings → AI, or sign in to bring it from your account.`
           needKey.set(id, words)
           patch(id, { stage: words })
           return
