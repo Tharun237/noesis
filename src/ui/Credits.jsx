@@ -4,6 +4,7 @@
 // being added there.
 import { T, eyebrow } from '../theme.js'
 import { VOICES } from '../lib/voices.js'
+import { SOURCE, LICENCE } from '../lib/source.js'
 
 const LICENCE_URL = {
   'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/',
@@ -31,7 +32,8 @@ function Out({ href, children }) {
 export function CreditsCard({ Card }) {
   return (
     <Card title="Credits and licences">
-      <p style={para}>Noesis is built on work other people shared freely. These are the terms they asked for.</p>
+      <p style={para}>Noesis is open source, under the <Out href={LICENCE.url}>{LICENCE.name}</Out>: anyone can read, run and improve its code. <Out href={SOURCE}>Read the code</Out></p>
+      <p style={para}>It is built on work other people shared freely. These are the terms they asked for.</p>
       <details>
         <summary style={{ cursor: 'pointer', fontFamily: T.font, fontSize: 14, fontWeight: 600, color: T.text }}>Show credits</summary>
 

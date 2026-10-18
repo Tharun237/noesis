@@ -25,6 +25,7 @@ import { Icon } from './icons.jsx'
 import { Button, IconButton, Segmented } from './kit.jsx'
 import { Wordmark } from './Library.jsx'
 import { SAMPLE } from './sample.js'
+import { SOURCE, LICENCE } from '../lib/source.js'
 
 // ── the page's own numbers ────────────────────────────────────────────────────────────────────────────────
 const PAGE_W = 1080 // the widest the content gets
@@ -119,6 +120,11 @@ export function Landing({ wide, hasLibrary }) {
         {/* ── what it is, and the thing itself ── */}
         <section style={{ paddingTop: wide ? '9vh' : '5vh', display: 'grid', gridTemplateColumns: wide ? 'minmax(0, 1.05fr) minmax(0, 0.95fr)' : 'minmax(0, 1fr)', columnGap: 56, rowGap: 44, alignItems: 'center' }}>
           <div>
+            {/* the news, said once where everyone arrives, and a way to read why */}
+            <a data-rise="0" data-press="" href="/open-source" style={{ '--press': T.tap.control, display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 26, padding: '6px 14px 6px 6px', borderRadius: T.r.pill, border: `1px solid ${T.borderHi}`, color: T.text, fontSize: 13.5, fontWeight: 600, textDecoration: 'none' }}>
+              <span style={{ padding: '3px 9px', borderRadius: T.r.pill, background: T.lime, color: T.bg, fontSize: 11.5, fontWeight: 700 }}>New</span>
+              Noesis is now open source <Icon name="next" size={13} style={{ color: T.sub }} />
+            </a>
             <div data-rise="0" style={{ ...eyebrow, display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ width: 6, height: 6, borderRadius: 6, background: T.lime }} />
               Listen deeper
@@ -216,6 +222,19 @@ export function Landing({ wide, hasLibrary }) {
           </div>
         </section>
 
+        <section data-enter="" style={{ display: 'grid', gridTemplateColumns: wide ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)', columnGap: 56, rowGap: 32, alignItems: 'center' }}>
+          <div style={{ order: wide ? 2 : 0 }}>
+            <div style={label}>06 · Open</div>
+            <h2 style={{ ...h2, marginTop: 16 }}>Every line,<br />in the open.</h2>
+            <p style={say}>You do not have to take our word that your documents stay on your device. The code is public, under the {LICENCE.name}: anyone can read what Noesis does, run their own copy and make it better.</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 28 }}>
+              <Button kind="primary" onClick={() => { location.href = SOURCE }} style={{ height: 48, padding: '0 24px', fontSize: 15, fontWeight: 700, borderRadius: T.r.pill }}>Read the code <Icon name="next" size={15} /></Button>
+              <Button onClick={() => { location.href = '/open-source' }} style={{ height: 48, padding: '0 22px', fontSize: 15, background: 'transparent', borderColor: T.borderHi, borderRadius: T.r.pill }}>Why it is open</Button>
+            </div>
+          </div>
+          <OwnCopy wide={wide} />
+        </section>
+
         {/* ── and the way in, once more ── */}
         <section data-enter="" style={{ display: 'grid', justifyItems: wide ? 'center' : 'stretch', textAlign: wide ? 'center' : 'left', gap: 0, paddingBottom: wide ? 120 : 72 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: wide ? 'center' : 'flex-start' }}>
@@ -230,7 +249,7 @@ export function Landing({ wide, hasLibrary }) {
             </Button>
           </div>
           <div style={{ marginTop: 56, fontFamily: T.code, fontSize: 11.5, lineHeight: 1.7, color: T.faint }}>
-            Your documents stay on this device. Sign in, and a copy is kept in your own Google Drive for your other devices.<br />The audio never leaves it. <a href="/listen-to-pdf" style={{ color: T.sub, textUnderlineOffset: 3 }}>Listen to a PDF</a> · <a href="/alternatives" style={{ color: T.sub, textUnderlineOffset: 3 }}>Noesis next to other reader apps</a> · <a href="/guides" style={{ color: T.sub, textUnderlineOffset: 3 }}>All guides</a> · <a href="/privacy" style={{ color: T.sub, textUnderlineOffset: 3 }}>Privacy</a> · Noesis {__APP_VERSION__}
+            Your documents stay on this device. Sign in, and a copy is kept in your own Google Drive for your other devices.<br />The audio never leaves it. <a href="/listen-to-pdf" style={{ color: T.sub, textUnderlineOffset: 3 }}>Listen to a PDF</a> · <a href="/alternatives" style={{ color: T.sub, textUnderlineOffset: 3 }}>Noesis next to other reader apps</a> · <a href="/guides" style={{ color: T.sub, textUnderlineOffset: 3 }}>All guides</a> · <a href="/privacy" style={{ color: T.sub, textUnderlineOffset: 3 }}>Privacy</a> · <a href={SOURCE} style={{ color: T.sub, textUnderlineOffset: 3 }}>Source code</a> · Noesis {__APP_VERSION__}
           </div>
         </section>
       </main>
@@ -257,6 +276,26 @@ function NowReading({ wide }) {
         </svg>
         <div style={{ fontFamily: T.code, fontSize: 12, color: T.faint, flexShrink: 0 }}>1x</div>
       </div>
+    </div>
+  )
+}
+
+// The thing itself again: three lines, and Noesis is running on your own computer. Each line is lit in turn by
+// the same one keyframe rule as the word being "spoken" above (no script).
+const OWN = [['git clone', SOURCE], ['npm', 'install'], ['npm', 'run dev']] // a command shown is a command that runs
+function OwnCopy({ wide }) {
+  return (
+    <div aria-label={`To run Noesis yourself: ${OWN.map(l => l.join(' ')).join(', then ')}.`} role="img" style={{ borderRadius: T.r.xl, border: `1px solid ${T.border}`, background: T.surface, padding: wide ? 30 : 20, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: wide ? 22 : 16 }}>
+      <div style={{ ...label, display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 6, height: 6, borderRadius: 6, background: T.lime }} /> Your own copy</div>
+      <div aria-hidden style={{ display: 'grid', gap: wide ? 14 : 10, fontFamily: T.code, fontSize: wide ? 15 : 13, lineHeight: 1.5, color: T.sub, minWidth: 0 }}>
+        {OWN.map(([cmd, arg], i) => (
+          <div key={cmd + arg} style={{ display: 'flex', gap: 10, minWidth: 0 }}>
+            <span style={{ color: T.faint }}>$</span>
+            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}><span data-now={cmd} style={{ '--i': i * 2, color: T.text }}>{cmd}</span> {arg}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: T.sub }}>{LICENCE.name}. The voices, models and libraries inside keep their own licences, listed in the app.</div>
     </div>
   )
 }

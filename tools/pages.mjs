@@ -8,6 +8,8 @@
 // /listen-to-pdf, /alternatives and /privacy are written by hand and are only listed here (HAND).
 import { writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { T } from '../src/theme.js'
+import { SOURCE, LICENCE } from '../src/lib/source.js'
 
 const SITE = 'https://www.noesisaudio.com'
 const out = name => fileURLToPath(new URL(`../public/${name}`, import.meta.url))
@@ -258,6 +260,90 @@ ${BEACON}
 `
 }
 
+// Noesis is open source (18 October 2026): what that is, why, and what it means for whoever reads it. The one page
+// here that moves: each part rises as it comes onto the screen, by the app's own entrance (T.enter), tied to the
+// scroll by the browser itself. Transform and opacity only, no script, and nothing at all for someone who asked
+// for less motion; a browser without scroll-driven animations shows it standing still.
+function openSource() {
+  const ease = `cubic-bezier(${T.enter.ease.join(', ')})`
+  const ms = Math.round(T.enter.duration * 1000)
+  const step = Math.round(T.enter.step * 1000)
+  return `${HEAD('Noesis is open source', `Every line of Noesis is public, under the ${LICENCE.name}. Read what it does with your documents, run your own copy, and make it better.`, 'open-source')}
+    <style>
+      .tag { display: flex; width: max-content; align-items: center; gap: 10px; margin-top: 56px; padding: 6px 14px 6px 6px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.16); color: #fff; font-size: 14px; font-weight: 600; }
+      .tag b { padding: 3px 9px; border-radius: 999px; background: ${T.lime}; color: #000; font-size: 12px; }
+      .tag + h1 { margin-top: 22px; }
+      h1 { font-size: 52px; }
+      .go.alt { background: transparent; color: #fff; border: 1px solid rgba(255, 255, 255, 0.24); margin-left: 8px; }
+      code { font: 15px/1.6 ui-monospace, 'JetBrains Mono', Consolas, monospace; color: #fff; }
+      @media (prefers-reduced-motion: no-preference) {
+        @keyframes arrive { from { opacity: 0; transform: translateY(${T.enter.y}px); } }
+        .tag, h1, .short, .lead { animation: arrive ${ms}ms ${ease} both; }
+        h1 { animation-delay: ${step}ms; }
+        .short { animation-delay: ${step * 2}ms; }
+        .lead { animation-delay: ${step * 3}ms; }
+        @supports (animation-timeline: view()) {
+          section { animation: arrive linear both; animation-timeline: view(); animation-range: entry 0% entry 70%; }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="mark" href="/">Noesis</a>
+      <div class="tag"><b>New</b> Open source</div>
+      <h1>Noesis is open source</h1>
+      <p class="short">Every line of Noesis is now public, under the ${esc(LICENCE.name)}. Read it, run it, make it better.</p>
+      <div class="lead"><a class="go" href="${SOURCE}" rel="noopener">Read the code</a><a class="go alt" href="/">Open Noesis</a></div>
+
+      <section>
+        <h2>Why open</h2>
+        <p>Noesis makes promises about your documents. They stay on your device. The voice that reads them is made there. Signing in keeps your library in your own Google Drive, not on a server of ours. Your AI key stays with you, and nothing is sent to an AI until you turn it on.</p>
+        <p>A promise you can check is worth more than one you have to believe. Now anyone can read exactly what Noesis does with a document, from the moment it is added to the moment it is heard.</p>
+      </section>
+
+      <section>
+        <h2>What the licence means for you</h2>
+        <ul>
+          <li><strong>To listen,</strong> nothing changes. Noesis is free to use.</li>
+          <li><strong>To read and learn from it,</strong> it is all there.</li>
+          <li><strong>To run your own copy,</strong> for yourself or for others, you may. The code says how.</li>
+          <li><strong>To change it,</strong> you may. If you let other people use your changed copy, over the web too, the licence asks you to give them its source under the same terms. That keeps every copy as open as this one.</li>
+        </ul>
+        <p>This is a plain summary. The licence itself is <a href="${LICENCE.url}" rel="noopener">the ${esc(LICENCE.name)}</a>.</p>
+      </section>
+
+      <section>
+        <h2>What is not ours to give</h2>
+        <p>Noesis stands on work other people shared freely: the voices and the recordings they were trained on, the translation models, the fonts, the libraries. Each keeps its own licence, and the app lists every one, with a link, in Settings → About → Credits and licences.</p>
+      </section>
+
+      <section>
+        <h2>How it is made</h2>
+        <ul>
+          <li><strong>Your device does the work.</strong> The voice, the translation and the reading run in your browser. It keeps working without a connection.</li>
+          <li><strong>One of everything.</strong> Each screen has one purpose, each control one place. If a control needs a sentence to explain it, the design is wrong, not the label.</li>
+          <li><strong>Motion means something.</strong> Things move to show where they came from and where they went, and only in ways a phone can draw smoothly.</li>
+          <li><strong>Made for people who get interrupted.</strong> Phones close apps halfway through. What you did survives it.</li>
+          <li><strong>Tested as a customer.</strong> An impatient random customer taps through the whole app, and transitions are filmed frame by frame, before a change is called done.</li>
+        </ul>
+        <p>These rules are written down with the code, in <code>.claude/skills</code>, and a change is judged by them.</p>
+      </section>
+
+      <section>
+        <h2>Take part</h2>
+        <p>Found something wrong? <a href="${SOURCE}/issues" rel="noopener">Tell us in an issue.</a> Want to build something? Read <a href="${SOURCE}/blob/main/CONTRIBUTING.md" rel="noopener">how to contribute</a> first: it says what a change must keep true, and the terms a contribution is given under.</p>
+${SUPPORT.url ? `        <p>Noesis is made by one person. If it is worth something to you, you can <a href="/support">support it</a>. Nothing in the app changes either way.</p>
+` : ''}      </section>
+
+      <p class="foot"><a href="/guides">All guides</a> · <a href="/privacy">Privacy</a> · <a href="/">noesisaudio.com</a></p>
+    </main>
+${BEACON}
+  </body>
+</html>
+`
+}
+
 function hub() {
   const all = [...HAND, ...PAGES]
   return `${HEAD('What you can listen to with Noesis', 'Everything Noesis reads aloud, one page for each: PDFs, EPUB books, Word documents, research papers, web articles and pasted text, in nine languages.', 'guides')}
@@ -282,7 +368,8 @@ ${BEACON}
 for (const p of PAGES) writeFileSync(out(`${p.slug}.html`), page(p))
 writeFileSync(out('guides.html'), hub())
 if (SUPPORT.url) writeFileSync(out('support.html'), support()); else rmSync(out('support.html'), { force: true })
-const urls = ['', ...HAND.map(p => p.slug), ...PAGES.map(p => p.slug), 'guides', ...(SUPPORT.url ? ['support'] : []), 'privacy']
+writeFileSync(out('open-source.html'), openSource())
+const urls = ['', ...HAND.map(p => p.slug), ...PAGES.map(p => p.slug), 'guides', 'open-source', ...(SUPPORT.url ? ['support'] : []), 'privacy']
 writeFileSync(out('sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
 <!-- The pages of Noesis that are for everyone (written by tools/pages.mjs). The app itself (a library, a document
      being read) is each person's own and lives on their device: it has no public pages to list. -->
@@ -291,5 +378,5 @@ ${urls.map(u => `  <url><loc>${SITE}/${u}</loc></url>`).join('\n')}
 </urlset>
 `)
 // the addresses the app's service worker must leave alone (vite.config.js reads this)
-export const PLAIN_PAGES = [...PAGES.map(p => p.slug), 'guides', 'support']
+export const PLAIN_PAGES = [...PAGES.map(p => p.slug), 'guides', 'open-source', 'support']
 console.log(`${PAGES.length + 1} pages and the sitemap written:`, PLAIN_PAGES.join(', '))

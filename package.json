@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "Listen to any document. Free, private, on-device text to speech.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
