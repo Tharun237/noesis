@@ -15,7 +15,7 @@
 // stack: there it is a Motion value per word, here it is one style rule and no script.
 import { useState } from 'react'
 import { T } from '../theme.js'
-import { go, openSheet, closeWelcome, pushPanel, toast } from '../lib/nav.js'
+import { go, tab, openSheet, closeWelcome, pushPanel, toast } from '../lib/nav.js'
 import { useStore } from '../lib/store.js'
 import { account } from '../lib/sync.js'
 import { addDocument, library } from '../lib/library.js'
@@ -111,6 +111,8 @@ export function Landing({ wide, hasLibrary }) {
           {/* someone who already has a library came here by the page's own address: their way back */}
           {canSignIn && <Button onClick={() => { go('settings'); pushPanel('settings:account') }} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Sign in</Button>}
           {hasLibrary && <Button onClick={closeWelcome} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Your library</Button>}
+          {/* free books to explore: a place of its own, reachable before there is any library (Books.jsx) */}
+          <Button icon="book" onClick={() => tab('books')} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Books</Button>
           <IconButton icon="settings" label="Settings" onClick={() => go('settings')} />
           <IconButton icon="plus" label="Add" onClick={add} size={34} iconSize={18} style={{ background: T.text, color: T.bg, marginLeft: 2 }} />
         </div>

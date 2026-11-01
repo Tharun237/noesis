@@ -24,7 +24,9 @@ export async function readEpub(data, filename) {
   const container = parseXml(await zip.file('META-INF/container.xml').async('string'))
   const opfPath = byLocal(container, 'rootfile')[0].getAttribute('full-path')
   const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : ''
-  const opf = parseXml(await zip.file(opfPath).async('string'))
+  const opfText = await zip.file(opfPath).async('string')
+  const opf = parseXml(opfText)
+  const gutenberg = /gutenberg\.org/i.test(opfText) // a Project Gutenberg book: its own markings are known (below)
 
   const items = new Map(byLocal(opf, 'item').map(i => [i.getAttribute('id'), {
     href: resolve(base, i.getAttribute('href')),
@@ -57,6 +59,17 @@ export async function readEpub(data, filename) {
     // Skip front/back matter that nobody wants read aloud.
     const epubType = (body.getAttribute('epub:type') || '') + ' ' + (body.querySelector('section')?.getAttribute('epub:type') || '')
     if (/\b(toc|copyright-page|index|landmarks|loi|lot)\b/.test(epubType)) continue
+    // Project Gutenberg's own header and licence, marked by Gutenberg itself: the book, not the legal text, is heard.
+    for (const el of body.querySelectorAll('#pg-header, #pg-footer')) el.remove()
+    // Gutenberg's contents page, which nothing marks as one (a heading over a table of links to its chapters), is
+    // for the eye: a row that is nothing but links into the book goes, then a "Contents" heading left over. Only in
+    // its books: elsewhere a caption may be a single link.
+    if (gutenberg) for (const el of body.querySelectorAll('table, ul, ol, p')) {
+      const links = [...el.querySelectorAll('a[href]')]
+      const own = links.length && links.every(a => !/^[a-z][a-z\d+.-]*:/i.test(a.getAttribute('href')))
+      if (own && el.textContent.replace(/\s+/g, '') === links.map(a => a.textContent).join('').replace(/\s+/g, '')) el.remove()
+    }
+    if (gutenberg) for (const h of body.querySelectorAll('h1, h2, h3, h4')) if (/^\s*(table of\s+)?contents\s*$/i.test(h.textContent)) h.remove()
     const chapter = walk(body)
     const words = chapter.reduce((a, b) => a + b.text.split(' ').length, 0)
     if (words < 12 && !chapter.some(b => b.k === 'h')) continue // cover/title/blank pages

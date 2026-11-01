@@ -54,7 +54,12 @@ const voicedSet = id => voiced.get(id) ?? voiced.set(id, new Set()).get(id)
 export const isVoiced = (id, i) => voicedSet(id).has(i)
 
 // What syncs between devices. Everything else on a doc (status, voicing progress, errors) is per-device.
-const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts', 'target', 'from', 'part', 'spc']
+const META_FIELDS = ['title', 'author', 'kind', 'url', 'createdAt', 'mode', 'ai', 'voice', 'lang', 'archived', 'collections', 'cover', 'renamed', 'contentVer', 'parts', 'target', 'from', 'part', 'spc', 'src']
+
+// A book being tried from the Books tab (books.js): played and kept on this device, but not in the library. It is
+// left out of every list, count and summary of the library, and never sent to the customer's Drive, until it is
+// added (keepTrial). Every place that means "the library" asks this, not `docs`.
+export const inLibrary = d => !d.trial
 const POS_FIELDS = ['pos', 'posF', 'finished', 'lastPlayed']
 const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]))
 
@@ -73,7 +78,7 @@ export function patch(id, p, remote = false) {
   library.set(s => ({ docs: s.docs.map(d => (d.id === id ? (next = withVersions(d, p)) : d)) }))
   if (!next) return
   saveMeta(id, next)
-  if (remote) return
+  if (remote || next.trial) return
   const keys = Object.keys(p)
   if (keys.some(k => META_FIELDS.includes(k))) touch('meta:' + id)
   if (keys.some(k => POS_FIELDS.includes(k))) touch('pos:' + id)
@@ -85,6 +90,7 @@ export function patch(id, p, remote = false) {
 // holds what the customer chose: their place, their bookmarks, a title, a voice.
 export function derive(id, p) {
   patch(id, p, true)
+  if (getDoc(id)?.trial) return
   const keys = Object.keys(p)
   if (keys.some(k => META_FIELDS.includes(k))) touchAfter('meta:' + id)
   if (keys.some(k => POS_FIELDS.includes(k))) touchAfter('pos:' + id)
@@ -134,7 +140,7 @@ export const SORTS = {
 
 // The unfinished, unarchived document after `id` in the given order (wrapping to the top).
 export function nextInQueue(id, sort) {
-  const list = library.get().docs.filter(d => d.id === id || (!d.archived && !d.finished && d.status !== 'error')).sort(SORTS[sort] || SORTS.recent)
+  const list = library.get().docs.filter(d => d.id === id || (inLibrary(d) && !d.archived && !d.finished && d.status !== 'error')).sort(SORTS[sort] || SORTS.recent)
   const at = list.findIndex(d => d.id === id)
   return [...list.slice(at + 1), ...list.slice(0, Math.max(0, at))][0] || null
 }
@@ -612,7 +618,7 @@ async function prepare(id) {
       patch(id, { kind: o?.kind || 'text' })
     }
     if (src.kind === 'link') {
-      patch(id, { stage: 'Fetching link' })
+      patch(id, { stage: d.src?.startsWith('gutenberg:') ? 'Getting the book' : 'Fetching link' })
       src = await fetchUrl(src.url)
       if (!refFrom) await db.putSource(id, src)
       patch(id, { kind: src.kind, url: src.url })
@@ -1050,9 +1056,9 @@ export function fetchOriginal(id) {
 
 const syncHooks = {
   // the files to send, the book being listened to first
-  originals: async () => [...library.get().docs].filter(d => d.kind === 'pdf' && !d.from && !d.deleted).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).map(d => d.id),
+  originals: async () => [...library.get().docs].filter(d => inLibrary(d) && d.kind === 'pdf' && !d.from && !d.deleted).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0)).map(d => d.id),
   original: async id => (await db.getSource(id))?.blob || null,
-  allKeys: async () => ['cols', 'prefs', ...library.get().docs.flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id, ...(hasAny(d.id) ? ['figs:' + d.id] : [])]), ...(await heard?.keys() || [])],
+  allKeys: async () => ['cols', 'prefs', ...library.get().docs.filter(inLibrary).flatMap(d => ['meta:' + d.id, 'pos:' + d.id, 'marks:' + d.id, ...(hasAny(d.id) ? ['figs:' + d.id] : [])]), ...(await heard?.keys() || [])],
   content: id => db.getDoc(id),
   snapshot(k) {
     if (k === 'cols') return { collections: library.get().collections }
@@ -1212,7 +1218,7 @@ export async function listenIn(id, target, part = null) {
     else {
       const name = `${root?.title || 'Untitled'} (${LANGS[target].name}${part?.label ? `, ${part.label}` : ''})`
       wantedId = await addDocument({ kind: 'ref', from: rootId },
-        { target, title: name, renamed: true, mode: 'full', from: rootId, ...(part ? { part: { from: part.from, to: part.to ?? null, label: part.label } } : {}) })
+        { target, title: name, renamed: true, mode: 'full', from: rootId, ...(root?.trial ? { trial: true } : {}), ...(part ? { part: { from: part.from, to: part.to ?? null, label: part.label } } : {}) })
     }
   }
   // Carry the place: the block number being read in the current document, counted in the ORIGINAL's blocks
@@ -1258,13 +1264,23 @@ export function reprocess(id, changes = {}) {
   kickPrep()
 }
 
+// A book being tried is added to the library: from now on it is an ordinary document, sent to Drive whole.
+export function keepTrial(id) {
+  // the book and its versions in other languages, made while it was being tried, come into the library together
+  for (const d of library.get().docs.filter(x => (x.id === id || x.from === id) && x.trial)) {
+    patch(d.id, { trial: false })
+    for (const k of ['meta:', 'pos:', 'marks:']) touch(k + d.id)
+  }
+}
+
 export async function deleteDoc(id, remote = false) {
   if (library.get().noRoom) { library.set({ noRoom: false }); setTimeout(() => kickVoice(), 500) } // room has been made
   cache.delete(id)
   voiced.delete(id)
   void dropFigures(id)
+  const tried = getDoc(id)?.trial // never sent anywhere: nothing to delete elsewhere
   library.set(s => ({ docs: s.docs.filter(d => d.id !== id) }))
-  if (!remote) touch('meta:' + id) // snapshot of a missing doc = tombstone → deleted on every device
+  if (!remote && !tried) touch('meta:' + id) // snapshot of a missing doc = tombstone → deleted on every device
   await Promise.all([db.delMeta(id), db.delContent(id), db.delAudio(id)])
 }
 

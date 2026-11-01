@@ -8,7 +8,7 @@ import { ui, go, goBack, openSheet, tab as showTab } from '../lib/nav.js'
 import { library, loadDoc, docDuration, reprocess, readiness, kickVoice, pauseTranslation, resumeTranslation, fetchOriginal, originals, keyWaitOf } from '../lib/library.js'
 import { account, syncState } from '../lib/sync.js'
 import { player, open as openPlayer, seekTo, timeline, audioClock, play, pause, nextSentence, prevSentence, setRate, startNow } from '../lib/player.js'
-import { toggleMark, setMarkNote } from '../lib/library.js'
+import { toggleMark, setMarkNote, keepTrial } from '../lib/library.js'
 import { toast } from '../lib/nav.js'
 import { parseCommand, isEcho, speechSupported } from '../lib/voicecmd.js'
 import { VoiceControl, VoiceHud } from './VoiceControl.jsx'
@@ -449,6 +449,13 @@ export function Reader({ wide }) {
                 </div>
                 {playId !== id && (d.status === 'voicing' || d.status === 'ready') && (
                   <div {...rowIn(2)}><Button kind="primary" icon="play" onClick={() => openPlayer(id)}>{d.pos > 0 && !d.finished ? 'Resume' : 'Play'}</Button></div>
+                )}
+                {/* a book being tried from Books: said, with the one thing to do about it (books.js) */}
+                {d.trial && (
+                  <div {...rowIn(2)} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 12px', fontSize: 14, color: T.sub }}>
+                    You're trying this book. It isn't in your library yet.
+                    <Button icon="plus" onClick={() => { keepTrial(id); toast(`${d.title} is in your library.`) }} style={{ height: 36, padding: '0 14px', fontSize: 13.5 }}>Add to library</Button>
+                  </div>
                 )}
               </div>
             </div>

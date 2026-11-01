@@ -115,6 +115,18 @@ export default defineConfig({
           urlPattern: ({ url }) => ['/pdfjs/', '/dict/', '/ort/', '/espeak/'].some(p => url.pathname.startsWith(p)),
           handler: 'CacheFirst',
           options: { cacheName: 'noesis-pdfjs' },
+        }, {
+          // The free-book catalogue (tools/books.mjs): shown from what was kept, refreshed behind it, so Books opens
+          // offline once it has been seen. The index is named by its build day, so the old one simply ages out.
+          // home.json names the index of its own build, so it is asked for new first (an old one pointed at an index
+          // the next build had removed); the index and the subject files keep their names until the next build.
+          urlPattern: ({ url }) => url.pathname === '/books/home.json',
+          handler: 'NetworkFirst',
+          options: { cacheName: 'noesis-books-home', networkTimeoutSeconds: 4 },
+        }, {
+          urlPattern: ({ url }) => url.pathname.startsWith('/books/'),
+          handler: 'StaleWhileRevalidate',
+          options: { cacheName: 'noesis-books', expiration: { maxEntries: 120 } }, // the index and every subject file (101)
         }],
       },
     }),

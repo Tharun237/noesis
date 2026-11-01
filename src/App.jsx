@@ -22,6 +22,8 @@ import { ActivityStrip, useActivity, ACTIVITY_H } from './ui/Activity.jsx'
 // The sheets (Add a document, voices, languages and the rest) load just after the first screen, in their own file.
 const Sheets = lazy(() => import('./ui/Sheets.jsx').then(m => ({ default: m.Sheets })))
 const Settings = later(() => import('./ui/Settings.jsx').then(m => m.Settings))
+const Books = later(() => import('./ui/Books.jsx').then(m => m.Books))
+const BookPage = later(() => import('./ui/Books.jsx').then(m => m.BookPage))
 
 // A page moves the way the customer is going. Going deeper, the new page arrives from the right and the old
 // one leaves to the left; going back (the Back button, Android's back gesture) it is the mirror image, so
@@ -49,14 +51,14 @@ export default function App() {
   const active = useStore(player, s => !!s.id)
   const toastMsg = useStore(ui, s => s.toast)
   const toastAction = useStore(ui, s => s.toastAction)
-  const libraryScroll = useRef(0)
+  const scrolls = useRef({}) // where the library and Books were scrolled to, each kept for its return
   const activity = useActivity()
 
   useEffect(() => { boot() }, [])
   useEffect(() => { startHistory(); startExtras(); startFigures() }, [])
   // Settings is fetched in a quiet moment after the app has started: the first tap on its tab then shows
   // Settings, not an empty screen while it loads (filmed by e2e/film.mjs: a third of a second of black).
-  useEffect(() => { whenIdle(Settings.fetch) }, [])
+  useEffect(() => { whenIdle(Settings.fetch); whenIdle(Books.fetch) }, []) // fetched in a quiet moment: the first tap on a tab is answered at once
 
   useEffect(() => {
     const onKey = e => {
@@ -73,7 +75,7 @@ export default function App() {
   // live page, and put back when the library page arrives again (PageScroll, below), not while the old page
   // is still fading out.
   useEffect(() => {
-    const onScroll = () => { if (ui.get().view === 'library') libraryScroll.current = window.scrollY }
+    const onScroll = () => { const v = ui.get().view; if (v === 'library' || v === 'books') scrolls.current[v] = window.scrollY }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
@@ -104,10 +106,12 @@ export default function App() {
           <motion.div key={view + (docId || '')} data-screen="" custom={dir} variants={PAGE} initial="enter" animate="show" exit="exit">
             <Route.Provider value={route}>
               {/* First, so the page is at its scroll position before anything on it measures where it is. */}
-              <PageScroll view={view} top={libraryScroll} />
+              <PageScroll view={view} kept={scrolls} />
               {view === 'library' && <Library wide={wide} />}
               {view === 'reader' && <Reader wide={wide} />}
               {view === 'settings' && <Suspense fallback={null}><Settings wide={wide} /></Suspense>}
+              {view === 'books' && <Suspense fallback={null}><Books wide={wide} /></Suspense>}
+              {view === 'book' && <Suspense fallback={null}><BookPage wide={wide} /></Suspense>}
             </Route.Provider>
           </motion.div>
         </AnimatePresence>
@@ -143,7 +147,7 @@ export default function App() {
 
 // Runs when a page arrives (after the old one has left): the library returns to where it was, anything
 // else starts at its top. It sits after the page's content so the content is laid out when it runs.
-function PageScroll({ view, top }) {
-  useLayoutEffect(() => { window.scrollTo(0, view === 'library' ? top.current : 0) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+function PageScroll({ view, kept }) {
+  useLayoutEffect(() => { window.scrollTo(0, kept.current[view] || 0) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }

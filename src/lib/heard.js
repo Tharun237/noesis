@@ -95,7 +95,8 @@ export const shareOf = d => (d.finished ? 1 : d.total ? Math.min(1, d.pos / d.to
 //   lengthOf(d): how long the document takes the listener (the caller puts it at the speed it is heard at)
 // → { shelf: [{ d, seconds, share }], all, heard, left }, in those seconds.
 export function shelfOf(docs, lengthOf) {
-  const shelf = docs.filter(d => d.chars && !d.archived).map(d => ({ d, seconds: lengthOf(d), share: shareOf(d) }))
+  // a book being tried (Books tab) is not on the shelf
+  const shelf = docs.filter(d => !d.trial && d.chars && !d.archived).map(d => ({ d, seconds: lengthOf(d), share: shareOf(d) }))
   const all = shelf.reduce((a, s) => a + s.seconds, 0)
   const heard = shelf.reduce((a, s) => a + s.seconds * s.share, 0)
   return { shelf, all, heard, left: all - heard }

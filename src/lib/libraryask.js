@@ -1,4 +1,4 @@
-import { library, loadDoc, patch } from './library.js'
+import { library, inLibrary, loadDoc, patch } from './library.js'
 import { timeline } from './player.js'
 import { db } from './db.js'
 import { pause } from './text.js'
@@ -13,7 +13,7 @@ let cachedIndex = null
 let cachedPages = new Map() // document id -> the page of each block (PDFs only), for "p. 14" beside a passage
 
 export async function loadLibraryIndex({ onProgress } = {}) {
-  const eligible = library.get().docs.filter(d => d.status === 'voicing' || d.status === 'ready')
+  const eligible = library.get().docs.filter(d => inLibrary(d) && (d.status === 'voicing' || d.status === 'ready'))
   const total = eligible.length
   const key = eligible.map(d => `${d.id}:${d.contentVer || 0}`).sort().join('|')
   if (cachedIndex && key === cachedKey) {

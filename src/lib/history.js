@@ -298,7 +298,7 @@ export function startHistory() {
     for (const d of docs) {
       const was = prev.get(d.id)
       if (was === undefined) { prev.set(d.id, !!d.finished); continue }
-      if (!was && d.finished && stopping.is(d.id)) done.push(d.id)
+      if (!was && d.finished && stopping.is(d.id) && !d.trial) done.push(d.id)
       prev.set(d.id, !!d.finished)
     }
     for (const id of [...prev.keys()]) {
@@ -323,6 +323,10 @@ export function startHistory() {
     const id = last.id
     last = { at: now, id: sounding(), carry }
     if (!loaded || !seconds) return
+    // A book being tried from Books is not the customer's yet: its title and minutes would go to their Drive with
+    // this log. ponytail: so its listening is not counted at all; keep it on the device and add it on "Add to
+    // library" if anyone misses it.
+    if (getDoc(id)?.trial) return
     const title = getDoc(id)?.title || own.titles?.[id] || historyStore.get().log.titles?.[id] || 'Untitled'
     const when = new Date(now)
     const goal = goalOf(settings.get()) * 60

@@ -39,3 +39,7 @@ translate-site/
 
 # the app-tour film: its recording and what is rendered from it
 film/tour-out/
+
+# the free-book catalogue: written from Project Gutenberg's list by tools/books.mjs at each build, not kept in git
+public/books/
+.books-cache/

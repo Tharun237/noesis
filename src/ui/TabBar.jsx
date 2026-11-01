@@ -7,6 +7,7 @@ import { Icon } from './icons.jsx'
 // indicator bar on top. The mini player docks above it (PlayerBar), like Apple Music.
 const TABS = [
   { id: 'library', icon: 'list', label: 'Library', run: () => { if (ui.get().searching) closeSearch(); else tab('library') } },
+  { id: 'books', icon: 'book', label: 'Books', run: () => tab('books') },
   { id: 'search', icon: 'search', label: 'Search', run: () => { tab('library'); openSearch() } },
   { id: 'settings', icon: 'settings', label: 'Settings', run: () => tab('settings') },
 ]
@@ -14,7 +15,7 @@ const TABS = [
 export function TabBar() {
   const view = useStore(ui, s => s.view)
   const searching = useStore(ui, s => s.searching)
-  const current = view === 'settings' ? 'settings' : searching ? 'search' : 'library'
+  const current = view === 'settings' ? 'settings' : view === 'books' || view === 'book' ? 'books' : searching ? 'search' : 'library'
   return (
     <nav aria-label="Main" style={{
       position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 32, display: 'flex', background: T.bg, borderTop: `1px solid ${T.border}`,

@@ -1,7 +1,7 @@
 import { createStore } from './store.js'
 
 // A reload (live update, manual refresh, Android restoring the app) keeps you where you were.
-const restored = ['library', 'reader', 'settings'].includes(history.state?.view) ? history.state : { view: 'library' }
+const restored = ['library', 'reader', 'settings', 'books', 'book'].includes(history.state?.view) ? history.state : { view: 'library' }
 
 // The landing page's own address. An empty library shows the landing page anyway; this is how someone who
 // HAS a library sees it (and the address to give to someone who has never been here).
@@ -10,7 +10,7 @@ const atWelcome = () => location.pathname === WELCOME
 
 // View state lives in history entries, so Android's back gesture closes sheets and leaves the reader.
 export const ui = createStore({
-  view: restored.view, // library | reader | settings
+  view: restored.view, // library | reader | settings | books | book (docId: the book's number)
   docId: restored.docId || null,
   sheet: null, // add | null
   filter: 'queue', // queue | all | archived | <collection id>

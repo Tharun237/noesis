@@ -11,7 +11,7 @@ import { T, label, eyebrow } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { ui, go, openSheet, closeSearch, tab } from '../lib/nav.js'
 import { settings } from '../lib/settings.js'
-import { library, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addCollection, removeCollection } from '../lib/library.js'
+import { library, inLibrary, docDuration, secPerChar, SORTS, reprocess, deleteDoc, patch, exportTranscript, exportAudio, addCollection, removeCollection } from '../lib/library.js'
 import { player, open as openPlayer, stopIf } from '../lib/player.js'
 import { historyStore, hasEntries } from '../lib/history.js'
 import { engine } from '../lib/tts.js'
@@ -53,7 +53,7 @@ function useVisibleDocs() {
   const progress = useStore(ui, s => s.progress)
   return useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = docs.filter(d =>
+    const list = docs.filter(d => inLibrary(d) &&
       (filter === 'all' ? true : filter === 'archived' ? d.archived : filter === 'queue' ? !d.archived : d.collections.includes(filter)) &&
       (!kind || KIND[d.kind] === kind) && (!progress || progressOf(d) === progress) &&
       (!q || d.title.toLowerCase().includes(q) || d.author.toLowerCase().includes(q)))
@@ -71,11 +71,11 @@ const hadDocs = (() => { try { return localStorage.getItem(HAD_DOCS) === '1' } c
 if (!hadDocs || ui.get().welcome) Landing.fetch()
 // Is there nothing to list? Before the library has been read: what it was last time. (The app's bottom bars
 // belong to a library: they go when there is none.)
-export const useEmptyLibrary = () => useStore(library, s => (s.loaded ? s.docs.length === 0 : !hadDocs))
+export const useEmptyLibrary = () => useStore(library, s => (s.loaded ? !s.docs.some(inLibrary) : !hadDocs))
 
 export function Library({ wide }) {
   const loaded = useStore(library, s => s.loaded)
-  const total = useStore(library, s => s.docs.length)
+  const total = useStore(library, s => s.docs.filter(inLibrary).length)
   const welcome = useStore(ui, s => s.welcome)
   useEffect(() => { if (loaded) try { localStorage.setItem(HAD_DOCS, total ? '1' : '0') } catch { /* no storage: asked again next time */ } }, [loaded, total])
   const docs = useVisibleDocs()
@@ -135,7 +135,7 @@ export function Library({ wide }) {
 
 function SidebarItem({ id, icon, name, onRemove, filter, count }) {
   return (
-    <button type="button" onClick={() => ui.set({ filter: id })}
+    <button type="button" onClick={() => { if (id === 'books') return tab('books'); ui.set({ filter: id }); tab('library') }}
       style={{
         position: 'relative', isolation: 'isolate', flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 40, padding: '0 12px', border: 'none', borderRadius: T.r.sm,
@@ -157,16 +157,20 @@ function SidebarItem({ id, icon, name, onRemove, filter, count }) {
   )
 }
 
-function Sidebar() {
-  const filter = useStore(ui, s => s.filter)
+// The wide screen's side menu, on the library and on Books: the library's shelves, and Books, which is a place of
+// its own (free books to explore), not a shelf of the library.
+export function Sidebar() {
+  const view = useStore(ui, s => s.view)
+  const filter = useStore(ui, s => (s.view === 'library' ? s.filter : null))
   const collections = useStore(library, s => s.collections)
   const docs = useStore(library, s => s.docs)
   const [naming, setNaming] = useState(false)
-  const count = f => docs.filter(d => (f === 'all' ? true : f === 'archived' ? d.archived : f === 'queue' ? !d.archived : d.collections.includes(f))).length
+  const count = f => docs.filter(d => inLibrary(d) && (f === 'all' ? true : f === 'archived' ? d.archived : f === 'queue' ? !d.archived : d.collections.includes(f))).length
   return (
     <motion.aside layoutRoot style={{ width: T.sidebarW, flexShrink: 0, borderRight: `1px solid ${T.border}`, padding: '24px 14px', position: 'sticky', top: 0, height: 'calc(100dvh - var(--dock, 0px))', display: 'flex', flexDirection: 'column', gap: 4 }}>
       <Wordmark reveal={docs.length === 0} />
-      <div style={{ ...label, padding: '28px 12px 8px' }}>Library</div>
+      <SidebarItem id="books" icon="book" name="Books" filter={view === 'books' ? 'books' : null} />
+      <div style={{ ...label, padding: '24px 12px 8px' }}>Library</div>
       <SidebarItem id="queue" icon="list" name="Queue" filter={filter} count={count('queue')} />
       <SidebarItem id="all" icon="grid" name="All" filter={filter} count={count('all')} />
       <SidebarItem id="archived" icon="archive" name="Archived" filter={filter} count={count('archived')} />
@@ -222,8 +226,8 @@ function DesktopHeader({ summary }) {
   const query = useStore(ui, s => s.query)
   const view = useStore(settings, s => s.view)
   const collections = useStore(library, s => s.collections)
-  const hasDocs = useStore(library, s => s.docs.length > 0)
-  const hasBriefing = useStore(library, s => s.docs.length >= 2)
+  const hasDocs = useStore(library, s => s.docs.some(inLibrary))
+  const hasBriefing = useStore(library, s => s.docs.filter(inLibrary).length >= 2)
   const hasHistory = useStore(historyStore, s => hasEntries(s.log))
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'
   return (
@@ -264,7 +268,7 @@ function SortMenu() {
   const sort = useStore(settings, s => s.sort)
   const kind = useStore(ui, s => s.kind)
   const progress = useStore(ui, s => s.progress)
-  const kinds = useStore(library, s => [...new Set(s.docs.map(d => KIND[d.kind]).filter(Boolean))].sort().join())
+  const kinds = useStore(library, s => [...new Set(s.docs.filter(inLibrary).map(d => KIND[d.kind]).filter(Boolean))].sort().join())
   const pick = (cur, v, set) => ({ icon: cur === v ? 'check' : undefined, onClick: () => set(cur === v ? null : v) })
   return (
     <Menu trigger={toggle => <IconButton icon="sliders" label="Sort and filter" active={!!(kind || progress)} onClick={toggle} />} items={[
@@ -287,8 +291,8 @@ function MobileHeader({ summary }) {
   const query = useStore(ui, s => s.query)
   const searching = useStore(ui, s => s.searching)
   const collections = useStore(library, s => s.collections)
-  const hasDocs = useStore(library, s => s.docs.length > 0)
-  const hasBriefing = useStore(library, s => s.docs.length >= 2)
+  const hasDocs = useStore(library, s => s.docs.some(inLibrary))
+  const hasBriefing = useStore(library, s => s.docs.filter(inLibrary).length >= 2)
   const hasHistory = useStore(historyStore, s => hasEntries(s.log))
   const chips = [['queue', 'Queue'], ['all', 'All'], ['archived', 'Archived'], ...collections.map(c => [c.id, c.name])]
   const name = FILTER_NAMES[filter] || collections.find(c => c.id === filter)?.name || 'Library'

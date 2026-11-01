@@ -5,6 +5,7 @@ import { WORDMARK, MARK, TAGLINE } from "./brand-paths.js"
 // Inline SVG icons, 24px grid, currentColor stroke. No icon library needed.
 const P = {
   plus: 'M12 5v14M5 12h14',
+  book: 'M12 6.5C10 5 7 4.5 3.5 5v13.5c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5c-3.5-.5-6.5 0-8.5 1.5ZM12 6.5V20',
   person: 'M12 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8ZM4.5 20c1.1-3.4 3.9-5.2 7.5-5.2s6.4 1.8 7.5 5.2',
   info: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18ZM12 11v5.5M12 7.5v.3',
   next1: 'M9 6l6 6-6 6',

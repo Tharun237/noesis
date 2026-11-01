@@ -112,7 +112,7 @@ async function describeOne({ d, c, bi }) {
   if (!words) { failed.set(tag, (failed.get(tag) || 0) + 1); return }
   const fresh = await addFigures(d.id, { [b.fk]: words })
   if (fresh.length) {
-    touch('figs:' + d.id) // to the account's other devices: described once
+    if (!d.trial) touch('figs:' + d.id) // to the account's other devices: described once (a book being tried stays here)
     await figuresArrived(d.id, fresh)
   }
 }

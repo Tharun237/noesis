@@ -3,7 +3,7 @@ import { T } from '../theme.js'
 import { useStore } from '../lib/store.js'
 import { settings } from '../lib/settings.js'
 import { hasAiKey } from '../lib/ai.js'
-import { library } from '../lib/library.js'
+import { library, inLibrary } from '../lib/library.js'
 import { makeBriefing } from '../lib/briefing.js'
 import { go, closeSheet } from '../lib/nav.js'
 import { Button, IconButton, Pulse, Appear } from './kit.jsx'
@@ -13,7 +13,7 @@ export function Briefing({ wide }) {
   // The store hands back the same list until it changes; filtering inside the selector would make a new
   // list on every read, which React treats as endless change.
   const all = useStore(library, s => s.docs)
-  const docs = useMemo(() => all.filter(d => d.status === 'voicing' || d.status === 'ready'), [all])
+  const docs = useMemo(() => all.filter(d => inLibrary(d) && (d.status === 'voicing' || d.status === 'ready')), [all])
   const keyed = hasAiKey()
   const [checked, setChecked] = useState([])
   const [busy, setBusy] = useState(false)
