@@ -25,7 +25,9 @@ const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
 const BRIGHT = rgb(T.mood.bright), CALM = rgb(T.mood.calm), DARK = rgb(T.mood.dark)
 // the colour of a feeling, from -1 (dark) to 1 (bright): it leaves white quickly, so a mild mood still shows
 // (`alpha` for a light of that colour rather than a line of it: Focus)
-export const moodColour = (v, alpha = 1) => { const to = v >= 0 ? BRIGHT : DARK, f = Math.min(1, Math.abs(v)) ** 0.6; return `rgb(${CALM.map((c, i) => Math.round(c + (to[i] - c) * f)).join(' ')} / ${alpha})` }
+// the same colour as three numbers, 0 to 255 (the silk behind the text is drawn by the graphics chip: MoodLight)
+export const moodRgb = v => { const to = v >= 0 ? BRIGHT : DARK, f = Math.min(1, Math.abs(v)) ** 0.6; return CALM.map((c, i) => Math.round(c + (to[i] - c) * f)) }
+export const moodColour = (v, alpha = 1) => `rgb(${moodRgb(v).join(' ')} / ${alpha})`
 const moodWord = v => (v > FEELS_AT ? 'Brighter' : v < -FEELS_AT ? 'Darker' : 'Even')
 const ARC_MIN_SENTENCES = 120
 const ARC_POINTS_MIN = 16

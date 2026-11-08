@@ -112,14 +112,6 @@ const rules = [
   // the light behind Focus's word breathes while something is being read: one animation, started once
   '@keyframes noesis-breathe{from{opacity:0.62;transform:scale(1)}to{opacity:1;transform:scale(1.07)}}',
   '[data-breathe]{animation:noesis-breathe 2.4s ease-in-out infinite alternate}',
-  // the mood light behind the text drifts while it is read (MoodLight.jsx): two lights, slow, never in step
-  '@keyframes noesis-drift{from{transform:translate3d(-6%,-4%,0) scale(1)}to{transform:translate3d(7%,5%,0) scale(1.14)}}',
-  '[data-drift]{animation:noesis-drift 17s ease-in-out infinite alternate}',
-  '[data-drift=slow]{animation-duration:23s;animation-direction:alternate-reverse}',
-  // its waves flow while it is read: a tile twice the screen's width slides by one tile, without end
-  '@keyframes noesis-flow{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}',
-  '[data-flow]{animation:noesis-flow 13s linear infinite}',
-  '[data-flow=back]{animation-duration:21s;animation-direction:reverse}',
   // a line that has just replaced another (a status) fades up
   '@keyframes noesis-fade{from{transform:translateY(5px);opacity:0}to{transform:none;opacity:1}}',
   `[data-fade]{animation:noesis-fade 240ms ${EASE} both}`,
