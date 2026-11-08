@@ -6,7 +6,10 @@
 //   the silk     the voice going on: its folds flow while the book is read and rest when it stops
 //   the glow     each word as it is said: the cloth brightens and flows a little faster, more for a heavier word
 //   the sheen    a new sentence: a band of light passes across the cloth
-// The middle of the page, where the text is, stays darker than its edges: the words are the subject.
+// The middle of the page, where the text is, stays darker than its edges: the words are the subject. Toward the
+// solid bars at the top and the foot it fades to black before it reaches them, so the cloth seems to go on under
+// them: it ended at full strength against them, and read as colour held in a box (Tharun, same day).
+const FADE = 0.13 // share of the screen's height over which the silk comes out of the black at each bar
 //
 // Drawn by the graphics chip (WebGL), at a quarter of the screen's size and stretched: silk is soft, so the
 // stretch is what smooths it. The page's own thread only passes a few numbers once a frame, at most 30 frames a
@@ -39,7 +42,7 @@ const VERTEX = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}'
 // Silk: the plane is folded by itself a few times (each fold bends the next), and the light falls on the folds'
 // crests. `hi` is the mood's colour, `lo` its shadow; `k` how bright, `g` the word's glow, `s` where the sheen is.
 const FRAGMENT = `precision mediump float;
-uniform vec2 r;uniform float t,k,g,s;uniform vec3 hi,lo;
+uniform vec2 r,n;uniform float t,k,g,s,fade;uniform vec3 hi,lo;
 void main(){
   vec2 uv=gl_FragCoord.xy/r;
   vec2 q=uv*vec2(r.x/r.y,1.)*1.7;
@@ -49,8 +52,10 @@ void main(){
   vec3 c=mix(lo,hi,smoothstep(.15,.95,fold))*(.6+.4*g)+hi*crest*(.45+.55*g);
   float band=uv.x*.8+uv.y*.35-s;
   c+=hi*exp(-band*band*55.)*.5*fold;
-  float edge=.55+.45*smoothstep(.12,.48,abs(uv.x-.5));
-  gl_FragColor=vec4(c*k*edge,1.);
+  float calm=r.x<r.y?.8:.55; // on a phone the words cover most of the width: the middle is only a little calmer
+  float edge=calm+(1.-calm)*smoothstep(.12,.48,abs(uv.x-.5));
+  float bars=smoothstep(n.x,n.x+fade,uv.y)*smoothstep(n.y,n.y+fade,1.-uv.y);
+  gl_FragColor=vec4(c*k*edge*bars,1.);
 }`
 
 function silk(canvas) {
@@ -66,10 +71,10 @@ function silk(canvas) {
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer())
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW) // one triangle over the screen
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
-  const u = Object.fromEntries(['r', 't', 'k', 'g', 's', 'hi', 'lo'].map(n => [n, gl.getUniformLocation(prog, n)]))
+  const u = Object.fromEntries(['r', 'n', 't', 'k', 'g', 's', 'fade', 'hi', 'lo'].map(n => [n, gl.getUniformLocation(prog, n)]))
   return (w, h, v) => {
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h) }
-    gl.uniform2f(u.r, w, h); gl.uniform1f(u.t, v.t); gl.uniform1f(u.k, v.k); gl.uniform1f(u.g, v.g); gl.uniform1f(u.s, v.s)
+    gl.uniform2f(u.r, w, h); gl.uniform2f(u.n, v.bottom, v.top); gl.uniform1f(u.fade, FADE); gl.uniform1f(u.t, v.t); gl.uniform1f(u.k, v.k); gl.uniform1f(u.g, v.g); gl.uniform1f(u.s, v.s)
     gl.uniform3fv(u.hi, v.hi); gl.uniform3fv(u.lo, v.lo)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
@@ -80,7 +85,7 @@ const target = mood => {
   return { hi, lo: hi.map(c => c * 0.18), k: STRENGTH[0] + (STRENGTH[1] - STRENGTH[0]) * Math.min(1, Math.abs(mood)) ** 0.6 }
 }
 
-export function MoodLight({ d, doc, active, reading, spoken }) {
+export function MoodLight({ d, doc, active, reading, spoken, top = 0, bottom = 0 }) {
   const line = useArc(d)
   const canvas = useRef(null)
   const state = useRef(null) // what the drawing is now, and what it is moving to
@@ -94,7 +99,7 @@ export function MoodLight({ d, doc, active, reading, spoken }) {
     if (!ready) return undefined
     const draw = canvas.current && silk(canvas.current)
     if (!draw) { if (canvas.current) canvas.current.style.display = 'none'; return undefined } // the two lights under it show
-    const s = state.current = { ...target(mood), aim: target(mood), t: Math.random() * 100, g: 0, s: -1, reading: !!reading, wake: null }
+    const s = state.current = { ...target(mood), aim: target(mood), t: Math.random() * 100, g: 0, s: -1, reading: !!reading, top, bottom, wake: null }
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches
     let raf = 0, last = performance.now(), drawn = 0
     const frame = now => {
@@ -106,7 +111,7 @@ export function MoodLight({ d, doc, active, reading, spoken }) {
       if (now - drawn >= 1000 / FPS - 2) {
         drawn = now
         const c = canvas.current
-        if (c) draw(Math.max(2, Math.round(c.clientWidth / SCALE)), Math.max(2, Math.round(c.clientHeight / SCALE)), { ...s, s: s.s < 0 ? -9 : s.s - 0.3 })
+        if (c) draw(Math.max(2, Math.round(c.clientWidth / SCALE)), Math.max(2, Math.round(c.clientHeight / SCALE)), { ...s, s: s.s < 0 ? -9 : s.s - 0.3, top: s.top / (c.clientHeight || 1), bottom: s.bottom / (c.clientHeight || 1) })
       }
       const settling = Math.abs(s.k - s.aim.k) > 0.002 || s.hi.some((c, i) => Math.abs(c - s.aim.hi[i]) > 0.002)
       if ((s.reading && !still) || settling) raf = requestAnimationFrame(frame)
@@ -119,6 +124,7 @@ export function MoodLight({ d, doc, active, reading, spoken }) {
   // what it is asked to show: the mood, whether the book is being read, a word's glow, a sentence's sheen
   useEffect(() => { const s = state.current; if (s) { s.aim = target(mood); s.wake?.() } }, [mood])
   useEffect(() => { const s = state.current; if (s) { s.reading = !!reading; s.wake?.() } }, [reading])
+  useEffect(() => { const s = state.current; if (s) { s.top = top; s.bottom = bottom; s.wake?.() } }, [top, bottom])
   useEffect(() => { const s = state.current; if (s && reading && lit >= 0) s.g = Math.min(1, s.g + GLOW_WORD * weightOf(ws[lit])) }, [lit, spoken?.text]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { const s = state.current; if (s && reading && spoken?.text) { s.s = 0; s.wake?.() } }, [spoken?.text]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -128,7 +134,7 @@ export function MoodLight({ d, doc, active, reading, spoken }) {
     <motion.div aria-hidden initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: BLEND_S, ease: T.ease }}
       style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       {/* without WebGL: two soft lights of the same colour, still */}
-      <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(60% 50% at 10% 15%, ${moodColour(mood, glow)}, transparent), radial-gradient(60% 50% at 90% 85%, ${moodColour(mood, glow * 0.7)}, transparent)` }} />
+      <div style={{ position: 'absolute', top, bottom, left: 0, right: 0, maskImage: `linear-gradient(transparent, #000 ${FADE * 100}%, #000 ${100 - FADE * 100}%, transparent)`, background: `radial-gradient(60% 50% at 10% 15%, ${moodColour(mood, glow)}, transparent), radial-gradient(60% 50% at 90% 85%, ${moodColour(mood, glow * 0.7)}, transparent)` }} />
       <canvas ref={canvas} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
     </motion.div>
   )
