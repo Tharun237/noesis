@@ -31,6 +31,7 @@ import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Spinner, Swap, fmtDur, rowIn } from './kit.jsx'
 import { figureNews } from '../lib/figstore.js'
+import { MoodLight } from './MoodLight.jsx'
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { DocInsight } from './Heard.jsx'
@@ -422,6 +423,7 @@ export function Reader({ wide }) {
       </header>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative' }}>
+        {view === 'text' && <MoodLight d={d} doc={doc} active={active} reading={reading} />}
         <AnimatePresence initial={false} mode="popLayout">
         {showToc && (
           <motion.aside key="toc" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20, transition: { duration: 0.12, ease: 'easeIn' } }} transition={{ duration: 0.22, ease: T.ease }}
@@ -432,7 +434,7 @@ export function Reader({ wide }) {
         )}
         </AnimatePresence>
 
-        <article style={{ flex: 1, minWidth: 0, padding: view === 'focus' ? `${FOCUS_PAD}px 20px` : wide ? `48px 32px ${END_PAD}px` : `28px 20px ${END_PAD}px`, marginRight: askDocked ? T.askW : 0 }}>
+        <article style={{ position: 'relative', flex: 1, minWidth: 0, padding: view === 'focus' ? `${FOCUS_PAD}px 20px` : wide ? `48px 32px ${END_PAD}px` : `28px 20px ${END_PAD}px`, marginRight: askDocked ? T.askW : 0 }}>
           {/* When a side panel opens or closes, the text glides to its new place instead of jumping (measured only then). */}
           <motion.div layout={wide ? 'position' : false} layoutDependency={dock} transition={{ layout: T.settle }} style={{ maxWidth: wide ? width : '100%', margin: '0 auto' }}>
             {/* The cover, the title and what is said about the document open the TEXT. Pages are the document
