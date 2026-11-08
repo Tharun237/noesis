@@ -423,7 +423,7 @@ export function Reader({ wide }) {
       </header>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative' }}>
-        {view === 'text' && <MoodLight d={d} doc={doc} active={active} reading={reading} />}
+        {view === 'text' && <MoodLight d={d} doc={doc} active={active} reading={reading} spoken={spoken} />}
         <AnimatePresence initial={false} mode="popLayout">
         {showToc && (
           <motion.aside key="toc" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20, transition: { duration: 0.12, ease: 'easeIn' } }} transition={{ duration: 0.22, ease: T.ease }}
