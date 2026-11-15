@@ -21,6 +21,7 @@ import { Button, IconButton, Menu, Pulse, Spinner, inputStyle, fmtDur, fmtAbout,
 import { AccountChip } from './SyncStatus.jsx'
 import { syncState } from '../lib/sync.js'
 import { waitSeconds, waitWords } from '../lib/readiness-math.js'
+import { InstallButton } from './InstallPrompt.jsx'
 
 const KIND = { pdf: 'PDF', epub: 'EPUB', docx: 'DOCX', html: 'WEB', md: 'MD', txt: 'TXT', text: 'TEXT', link: 'LINK' }
 const MODE = { long: 'Long summary', short: 'Short summary' }
@@ -195,6 +196,7 @@ export function Sidebar() {
         </button>
       )}
       </div>
+      <div style={{ padding: '0 2px 8px' }}><InstallButton wide /></div>
       <div style={{ padding: '0 2px 8px' }}><AccountChip /></div>
       <button type="button" onClick={() => go('settings')}
         style={{ display: 'flex', alignItems: 'center', gap: 12, height: 40, padding: '0 12px', border: 'none', borderRadius: T.r.sm, background: 'transparent', color: T.sub, fontFamily: T.font, fontSize: 14, cursor: 'pointer' }}>
@@ -304,6 +306,7 @@ function MobileHeader({ summary }) {
             <Wordmark size={24} reveal={!hasDocs} />
             <BarTitle name={name} />
           </div>
+          <InstallButton />
           {(hasDocs || hasHistory) && <LibraryAi hasBriefing={hasBriefing} />}
           <SortMenu />
           {/* Adding is an action, not a place: a button here, not a tab below. */}

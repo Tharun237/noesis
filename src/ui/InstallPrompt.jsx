@@ -23,6 +23,24 @@ const iosSafari = () => {
 }
 const snoozed = () => { try { return Date.now() - +localStorage.getItem(DISMISS_KEY) < SNOOZE } catch { return false } }
 
+// Install, where a person looks for it: the top bar on a phone, the side menu on a computer, the welcome page.
+// It was only in the banner (shown once, then put away for two weeks) and three taps deep in Settings → About:
+// Tharun looked for it and could not find it (15 November 2026). Installed, Noesis plays on with the app put away
+// or swiped from the recent apps, like a music app; as a browser tab it cannot. Shown while it is not installed:
+// the browser's own dialog where the browser offers one; otherwise the steps, in words.
+export function InstallButton({ wide }) {
+  const evt = useStore(ui, s => s.installEvt)
+  const installed = useStore(ui, s => s.installed)
+  if (installed || standalone()) return null
+  const run = async () => {
+    if (evt) { evt.prompt(); const { outcome } = await evt.userChoice; if (outcome === 'accepted') ui.set({ installEvt: null }); return }
+    toast(iosSafari() ? 'To install: tap Share, then "Add to Home Screen".' : 'To install: open the browser menu (⋮) and choose "Install app" or "Add to Home screen".')
+  }
+  return wide
+    ? <Button icon="install" onClick={run} style={{ height: 34, padding: '0 14px', fontSize: 13.5 }}>Install app</Button>
+    : <IconButton icon="install" label="Install Noesis" onClick={run} />
+}
+
 const CARD_SPACE = 104 // px of the page's bottom the card covers, with its margin
 export function InstallPrompt({ wide, full, lift = 0 }) {
   const evt = useStore(ui, s => s.installEvt)

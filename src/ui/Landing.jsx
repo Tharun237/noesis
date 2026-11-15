@@ -26,6 +26,7 @@ import { Button, IconButton, Segmented } from './kit.jsx'
 import { Wordmark } from './Library.jsx'
 import { SAMPLE } from './sample.js'
 import { SOURCE, LICENCE } from '../lib/source.js'
+import { InstallButton } from './InstallPrompt.jsx'
 
 // ── the page's own numbers ────────────────────────────────────────────────────────────────────────────────
 const PAGE_W = 1080 // the widest the content gets
@@ -112,7 +113,9 @@ export function Landing({ wide, hasLibrary }) {
           {canSignIn && <Button onClick={() => { go('settings'); pushPanel('settings:account') }} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Sign in</Button>}
           {hasLibrary && <Button onClick={closeWelcome} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Your library</Button>}
           {/* free books to explore: a place of its own, reachable before there is any library (Books.jsx) */}
-          <Button icon="book" onClick={() => tab('books')} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Books</Button>
+          {/* on a phone the bar holds the name and five controls: Books and Install are icons there, or Sign in runs over the name */}
+          {wide ? <Button icon="book" onClick={() => tab('books')} style={{ height: 34, padding: '0 14px', fontSize: 13.5, marginRight: 4 }}>Books</Button> : <IconButton icon="book" label="Books" onClick={() => tab('books')} />}
+          <InstallButton wide={wide} />
           <IconButton icon="settings" label="Settings" onClick={() => go('settings')} />
           <IconButton icon="plus" label="Add" onClick={add} size={34} iconSize={18} style={{ background: T.text, color: T.bg, marginLeft: 2 }} />
         </div>
