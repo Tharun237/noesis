@@ -6,6 +6,7 @@ import { engine } from '../lib/tts.js'
 import { player, stretchInfo, audioState } from '../lib/player.js'
 import { toast } from '../lib/nav.js'
 import { Button } from './kit.jsx'
+import { flightNotes } from '../lib/flight.js'
 
 const probe = document.createElement('audio')
 const plays = type => probe.canPlayType(type) || 'no'
@@ -47,6 +48,8 @@ function collect() {
       ['Media Session artist', ms?.metadata?.artist ?? 'none'],
       ['Notifications permission', typeof Notification === 'undefined' ? 'unsupported' : Notification.permission],
     ]],
+    // what happened while listening (lib/flight.js): the moments a promise broke, newest last
+    ['While listening', flightNotes().length ? flightNotes().map(n => [n.at.replace('T', ' ').slice(0, 19), `${n.kind}${n.detail ? ` (${n.detail})` : ''} · page ${n.page} · ${n.player} · ${n.audio}`]) : [['Nothing went wrong', 'no notes yet']]],
     ['Device', [
       ['User agent', navigator.userAgent],
       ['Cores', String(navigator.hardwareConcurrency ?? 'unknown')],

@@ -97,8 +97,15 @@ export function MoodLight({ d, doc, active, reading, spoken, top = 0, bottom = 0
   // the drawing: started once there is a canvas (when the mood line is ready), it reads what to show from `state`
   useEffect(() => {
     if (!ready) return undefined
-    const draw = canvas.current && silk(canvas.current)
+    let draw = canvas.current && silk(canvas.current)
     if (!draw) { if (canvas.current) canvas.current.style.display = 'none'; return undefined } // the two lights under it show
+    // A phone may take the drawing away from an app it hides, and give it back later: kept waiting for it, then
+    // built again, instead of drawing into nothing for the rest of the book (the flight recorder notes it).
+    const el = canvas.current
+    const lost = e => { e.preventDefault(); draw = null; dispatchEvent(new CustomEvent('noesis:flight', { detail: { kind: 'silk drawing taken away' } })) }
+    const back = () => { draw = silk(el); state.current?.wake?.() }
+    el.addEventListener('webglcontextlost', lost)
+    el.addEventListener('webglcontextrestored', back)
     const s = state.current = { ...target(mood), aim: target(mood), t: Math.random() * 100, g: 0, s: -1, reading: !!reading, top, bottom, wake: null }
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches
     let raf = 0, last = performance.now(), drawn = 0
@@ -111,14 +118,14 @@ export function MoodLight({ d, doc, active, reading, spoken, top = 0, bottom = 0
       if (now - drawn >= 1000 / FPS - 2) {
         drawn = now
         const c = canvas.current
-        if (c) draw(Math.max(2, Math.round(c.clientWidth / SCALE)), Math.max(2, Math.round(c.clientHeight / SCALE)), { ...s, s: s.s < 0 ? -9 : s.s - 0.3, top: s.top / (c.clientHeight || 1), bottom: s.bottom / (c.clientHeight || 1) })
+        if (c && draw) draw(Math.max(2, Math.round(c.clientWidth / SCALE)), Math.max(2, Math.round(c.clientHeight / SCALE)), { ...s, s: s.s < 0 ? -9 : s.s - 0.3, top: s.top / (c.clientHeight || 1), bottom: s.bottom / (c.clientHeight || 1) })
       }
       const settling = Math.abs(s.k - s.aim.k) > 0.002 || s.hi.some((c, i) => Math.abs(c - s.aim.hi[i]) > 0.002)
       if ((s.reading && !still) || settling) raf = requestAnimationFrame(frame)
     }
     s.wake = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame) } }
     s.wake()
-    return () => { cancelAnimationFrame(raf); s.wake = null }
+    return () => { cancelAnimationFrame(raf); s.wake = null; el.removeEventListener('webglcontextlost', lost); el.removeEventListener('webglcontextrestored', back) }
   }, [ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // what it is asked to show: the mood, whether the book is being read, a word's glow, a sentence's sheen

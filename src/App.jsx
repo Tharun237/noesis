@@ -18,6 +18,7 @@ import { PlayerBar, playerHeight } from './ui/PlayerBar.jsx'
 import { InstallPrompt } from './ui/InstallPrompt.jsx'
 import { TabBar } from './ui/TabBar.jsx'
 import { ActivityStrip, useActivity, ACTIVITY_H } from './ui/Activity.jsx'
+import './lib/flight.js' // notes what goes wrong while listening, on the device it happens on (Diagnostics)
 
 // The sheets (Add a document, voices, languages and the rest) load just after the first screen, in their own file.
 const Sheets = lazy(() => import('./ui/Sheets.jsx').then(m => ({ default: m.Sheets })))
