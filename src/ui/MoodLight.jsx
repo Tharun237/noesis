@@ -23,8 +23,8 @@ import { useArc, moodAt, moodRgb, moodColour } from './ArcScrubber.jsx'
 import { useLitWord } from './litword.js'
 
 const STEPS = 8 // the mood in eighths, so a colour is sought once a sentence at most
-const SCALE = 4 // the silk is drawn this many times smaller than the screen, then stretched
-const FPS = 30 // the most frames a second it is drawn; silk needs no more
+const SCALE = 6 // the silk is drawn this many times smaller than the screen, then stretched (silk is soft)
+const FPS = 15 // the most frames a second it is drawn: it moves slowly, and the phone's graphics chip also moves the lit words
 const STRENGTH = [0.16, 0.34] // the brightest a fold gets, where the writing is even … where it is felt most
 const GLOW_FALL = 1.6 // how quickly a word's glow fades, a share a second
 const GLOW_WORD = 0.55 // how much the heaviest word adds to the glow
@@ -57,6 +57,15 @@ void main(){
   float bars=smoothstep(n.x,n.x+fade,uv.y)*smoothstep(n.y,n.y+fade,1.-uv.y);
   gl_FragColor=vec4(c*k*edge*bars,1.);
 }`
+
+const SILK_KEY = 'noesis.silk'
+function silkOff() {
+  try {
+    const asked = new URLSearchParams(location.search).get('silk')
+    if (asked === 'off' || asked === 'on') localStorage.setItem(SILK_KEY, asked)
+    return localStorage.getItem(SILK_KEY) === 'off'
+  } catch { return false }
+}
 
 function silk(canvas) {
   const gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, premultipliedAlpha: false, powerPreference: 'low-power' })
@@ -91,7 +100,10 @@ export function MoodLight({ d, doc, active, reading, spoken, top = 0, bottom = 0
   const state = useRef(null) // what the drawing is now, and what it is moving to
   const { ws, lit } = useLitWord(spoken?.text, spoken?.dur, spoken?.tail, !!reading && !!spoken)
   const at = active >= 0 ? active : d.pos || 0
-  const ready = !!line && !!doc?.segs?.length // the mood is counted for English writing long enough to have one
+  // ?silk=off on the address turns the silk off on this device (and ?silk=on back): to find out, on a real phone,
+  // whether it is what slows the lit words or stops the sound in the background (Tharun, 15 November 2026)
+  const off = silkOff()
+  const ready = !off && !!line && !!doc?.segs?.length // the mood is counted for English writing long enough to have one
   const mood = ready ? Math.round(moodAt(line, doc.segs.length > 1 ? at / (doc.segs.length - 1) : 0) * STEPS) / STEPS : 0
 
   // the drawing: started once there is a canvas (when the mood line is ready), it reads what to show from `state`
@@ -102,8 +114,16 @@ export function MoodLight({ d, doc, active, reading, spoken, top = 0, bottom = 0
     // A phone may take the drawing away from an app it hides, and give it back later: kept waiting for it, then
     // built again, instead of drawing into nothing for the rest of the book (the flight recorder notes it).
     const el = canvas.current
-    const lost = e => { e.preventDefault(); draw = null; dispatchEvent(new CustomEvent('noesis:flight', { detail: { kind: 'silk drawing taken away' } })) }
+    let letGo = null // the drawing given back on purpose while the app is put away
+    const lost = e => { e.preventDefault(); draw = null; if (!letGo) dispatchEvent(new CustomEvent('noesis:flight', { detail: { kind: 'silk drawing taken away' } })) }
     const back = () => { draw = silk(el); state.current?.wake?.() }
+    // Put away, the app gives the graphics chip back: a phone closes background apps that hold on to memory, and
+    // the sound goes with them. Taken out again, the silk is built anew.
+    const away = () => {
+      if (document.visibilityState === 'hidden') { if (draw) { letGo = el.getContext('webgl')?.getExtension('WEBGL_lose_context') || null; letGo?.loseContext() } }
+      else if (letGo) { const x = letGo; letGo = null; x.restoreContext() } // comes back through `back`
+    }
+    document.addEventListener('visibilitychange', away)
     el.addEventListener('webglcontextlost', lost)
     el.addEventListener('webglcontextrestored', back)
     const s = state.current = { ...target(mood), aim: target(mood), t: Math.random() * 100, g: 0, s: -1, reading: !!reading, top, bottom, wake: null }
@@ -125,7 +145,7 @@ export function MoodLight({ d, doc, active, reading, spoken, top = 0, bottom = 0
     }
     s.wake = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame) } }
     s.wake()
-    return () => { cancelAnimationFrame(raf); s.wake = null; el.removeEventListener('webglcontextlost', lost); el.removeEventListener('webglcontextrestored', back) }
+    return () => { cancelAnimationFrame(raf); s.wake = null; document.removeEventListener('visibilitychange', away); el.removeEventListener('webglcontextlost', lost); el.removeEventListener('webglcontextrestored', back) }
   }, [ready]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // what it is asked to show: the mood, whether the book is being read, a word's glow, a sentence's sheen
