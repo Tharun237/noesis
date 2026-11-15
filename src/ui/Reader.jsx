@@ -31,7 +31,6 @@ import { voiceName } from '../lib/voices.js'
 import { Icon } from './icons.jsx'
 import { Button, IconButton, Menu, Progress, Pulse, Segmented, Sheet, Spinner, Swap, fmtDur, rowIn } from './kit.jsx'
 import { figureNews } from '../lib/figstore.js'
-import { MoodLight } from './MoodLight.jsx'
 import { db } from '../lib/db.js'
 import { Cover, StatusLine, docMenu } from './Library.jsx'
 import { DocInsight } from './Heard.jsx'
@@ -423,7 +422,6 @@ export function Reader({ wide }) {
       </header>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative' }}>
-        {view === 'text' && <MoodLight d={d} doc={doc} active={active} reading={reading} spoken={spoken} top={headH} bottom={bottom} />}
         <AnimatePresence initial={false} mode="popLayout">
         {showToc && (
           <motion.aside key="toc" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20, transition: { duration: 0.12, ease: 'easeIn' } }} transition={{ duration: 0.22, ease: T.ease }}
