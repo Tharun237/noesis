@@ -87,7 +87,9 @@ export async function synthesizeRun(texts, voice, pauses, tone = settings.get().
   await loadEngine(voice)
   if (!isCloudVoice(voice)) return (await call({ type: 'speakRun', texts, voice, pauses, tone })).recs
   const { pcm, rate } = await cloudSynthesize(texts.join(' '), voice, { signal: opts.signal, onRetry: opts.onRetry })
-  const recs = (await call({ type: 'encodeRun', pcm, rate, lengths: texts.map(t => t.length), pauses, tone })).recs
+  const got = await call({ type: 'encodeRun', pcm, rate, lengths: texts.map(t => t.length), pauses, tone, keep: true }) // an online run is never asked for twice
+  const recs = got.recs
+  if (recs && got.placed) recs.placed = true
   if (recs && (voice.startsWith('nv:') || voice.startsWith('gm:'))) countUse(voice.startsWith('gm:') ? 'gemini' : 'voice', 'said', { n: texts.length }) // sentences, beside the requests (usage.js)
   return recs
 }

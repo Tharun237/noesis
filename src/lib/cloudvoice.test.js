@@ -193,3 +193,9 @@ test('cloudTruth: NVIDIA exactly, custom with the real host', () => {
     'Made online by api.openai.com: the text goes straight from this device to that address. The audio is kept on this device and plays offline.',
   )
 })
+
+test('what NVIDIA refuses is left out of what it is sent: < > { } (18 November 2026)', async () => {
+  const { speakable } = await import('./cloudvoice.js')
+  assert.equal(speakable('Wrap it in <b>bold</b> or {x: 1}.'), 'Wrap it in b bold /b or x: 1 .')
+  assert.equal(speakable('Plain prose stays as it is.'), 'Plain prose stays as it is.')
+})

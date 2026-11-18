@@ -1,7 +1,7 @@
 // A run spoken as one, cut back into its sentences (split.js): at the voice's own pauses, or not at all.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sentenceCuts } from './split.js'
+import { sentenceCuts, placedCuts } from './split.js'
 
 const RATE = 22050
 // speech-like noise for `s` seconds, then quiet for `q` seconds; a faint floor like a neural voice's silence
@@ -43,4 +43,16 @@ test('a piece far longer or shorter than its text: not trusted', () => {
 test('one sentence is its whole run', () => {
   const pcm = run([[1, 0.1]])
   assert.deepEqual(sentenceCuts(pcm, RATE, [12]), [0, pcm.length])
+})
+
+test('an online run with one unclear pause is kept: clear pauses are used, the unclear one placed by the text (18 November 2026)', () => {
+  // three sentences of equal text; the voice paused after the first, ran straight on into the third
+  const pcm = run([[2, 0.4], [4, 0]])
+  const lengths = [40, 40, 40]
+  assert.equal(sentenceCuts(pcm, RATE, lengths), null, 'not every cut can be trusted')
+  const b = placedCuts(pcm, RATE, lengths)
+  assert.equal(b.length, 4)
+  assert.ok(b.every((x, k) => k === 0 || x > b[k - 1]), 'in order')
+  assert.ok(Math.abs(b[1] / RATE - 2.36) < 0.1, `the clear pause is used: ${(b[1] / RATE).toFixed(2)} s`)
+  assert.ok(Math.abs(b[2] / RATE - 4.4) < 0.5, `the unclear end is put where its text ends: ${(b[2] / RATE).toFixed(2)} s`)
 })

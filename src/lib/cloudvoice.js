@@ -221,6 +221,11 @@ export async function loadCloudVoices({ force = false } = {}) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const retryMs = attempt => Math.min(60_000, 2000 * 2 ** attempt)
+// NVIDIA's voice reads "<" as the start of speech markup and "{" as a code of its own, and refuses the whole text
+// ("an XML document that did not have speak as the root", "a multichar start character but not an end
+// character": 101 of 277 requests in a 35-minute listen of technical writing, 18 November 2026). They are not
+// said aloud in prose; they are left out of what is sent (the text on the screen is untouched).
+export const speakable = text => String(text).replace(/[<>{}]/g, ' ').replace(/ {2,}/g, ' ')
 let lastStart = 0 // module-level: NVIDIA requests start at least 1.6 s apart (about 40 a minute)
 
 function waitOnline(signal) {
@@ -293,7 +298,7 @@ export async function cloudSynthesize(text, voiceId, { signal, onRetry } = {}) {
     if (gap > 0) await sleep(gap)
     lastStart = Date.now()
     const form = new FormData()
-    form.append('text', String(text))
+    form.append('text', speakable(text))
     form.append('language', nv)
     form.append('voice', full)
     form.append('encoding', 'LINEAR_PCM')

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 const kept = new Map()
 globalThis.localStorage = { getItem: k => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, String(v)), removeItem: k => kept.delete(k) }
 const { settings } = await import('./settings.js')
-const { judge, runsFor, learnRuns, runResult, runChars, gapOf, paced, tooLong, ceilingOf, fitsPace, learnPace, paceOf, runVerdict } = await import('./voiceplan.js')
+const { judge, runsFor, learnRuns, runResult, runChars, gapOf, paced, tooLong, took, ceilingOf, fitsPace, learnPace, paceOf, runVerdict } = await import('./voiceplan.js')
 
 test('a voice whose cuts match its sentences spoken alone passes; one that cut at a comma does not', () => {
   // measured on 16 October 2026: Mia cut cleanly, Alba cut in the middle of a sentence
@@ -69,4 +69,16 @@ test('one miss is not a verdict; three in a row are; a fit confirms', () => {
   assert.equal(runsFor('v2'), true, 'a fit: runs')
   runVerdict('v2', false); runVerdict('v2', false); runVerdict('v2', false)
   assert.equal(runsFor('v2'), false, 'three in a row: one sentence at a time')
+})
+
+test('a refusal shorter than what the service already took never shrinks the runs (NVIDIA, 18 November 2026)', () => {
+  settings.set({ servicePlans: { nv2: { ceiling: 160 } } })
+  assert.equal(ceilingOf('nv2'), undefined, 'the cap kept by the old rule is not read')
+  took('nv2', 1500)
+  tooLong('nv2', 137) // refused for another reason
+  assert.equal(ceilingOf('nv2'), undefined)
+  assert.equal(runChars(Infinity, ceilingOf('nv2'), true), 1500, 'an online voice gets full runs')
+  assert.ok(runChars(0, undefined, true) >= 600, 'even with the listener close behind')
+  tooLong('nv2', 2400) // longer than anything taken: that one is a length
+  assert.equal(ceilingOf('nv2'), 1680)
 })

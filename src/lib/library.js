@@ -6,7 +6,7 @@ import { settings, hasKey } from './settings.js'
 import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee, isNvidiaKey } from './ai.js'
 import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
 import { synthesize, synthesizeRun, engine, loadEngine } from './tts.js'
-import { runsFor, runVerdict, runChars, ceilingOf, tooLong, fitsPace, learnPace, paceOf } from './voiceplan.js'
+import { runsFor, runVerdict, runChars, ceilingOf, tooLong, took, fitsPace, learnPace, paceOf } from './voiceplan.js'
 import { toListeningAsync, pause } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
@@ -437,7 +437,8 @@ async function nextVoiceJob() {
 // ("B is far better than A", Tharun, 16 October 2026). Cut back into sentences by split.js. Which voices may be cut,
 // how long a run is and how often a service is asked are learnt, not listed (voiceplan.js).
 // ponytail: a run's last sentence still meets the next run cold; runs overlapping by a sentence if that is heard.
-const RUN_SENTENCES = 8
+const RUN_SENTENCES = 8 // made on the device; an online voice takes as many as fit its run (voiceplan.js ONLINE)
+const RUN_SENTENCES_ONLINE = 60
 const serviceOf = voice => (!isCloudVoice(voice) ? 'device' : String(voice).startsWith('nv:') ? 'nvidia' : String(voice).startsWith('gm:') ? 'gemini' : 'own')
 
 async function voiceOne(id, i, again = false) {
@@ -456,13 +457,16 @@ async function voiceOne(id, i, again = false) {
   const verdict = runsFor(voice) // true, false, or null: not tried yet (voiceplan.js)
   const service = serviceOf(voice)
   let chars = c.segs[i].t.length
-  if (verdict !== false && !again && !atPlace) {
+  if ((verdict !== false || isCloudVoice(voice)) && !again && !atPlace) { // online runs are always kept (below)
     // short while the listener is close behind (wanted soon), longer when the voice is well ahead
-    const most = runChars(p?.id === id ? madeAhead(d, c, p.i).ahead : Infinity, ceilingOf(service))
+    const online = isCloudVoice(voice)
+    const most = runChars(p?.id === id ? madeAhead(d, c, p.i).ahead : Infinity, ceilingOf(service), online)
     const set = voicedSet(id)
-    for (let j = i + 1; j < c.segs.length && run.length < RUN_SENTENCES; j++) {
+    for (let j = i + 1; j < c.segs.length && run.length < (online ? RUN_SENTENCES_ONLINE : RUN_SENTENCES); j++) {
       const sg = c.segs[j]
-      if (sg.b !== c.segs[i].b || sg.k === 'h' || set.has(j) || chars + sg.t.length > most) break
+      // an online voice reads on across paragraphs (its cuts are found at its own pauses, split.js): a request for
+      // each paragraph was most of the requests a free key is allowed
+      if ((!online && sg.b !== c.segs[i].b) || sg.k === 'h' || set.has(j) || chars + sg.t.length > most) break
       run.push(j)
       chars += sg.t.length
     }
@@ -485,7 +489,7 @@ async function voiceOne(id, i, again = false) {
   const one = () => synthesize(c.segs[i].t, voice, pauseOf(i), tone, cloud ? { onRetry } : undefined).then(rec => { learnPace(voice, rec.speech, c.segs[i].t.length); return [rec] })
   // The run given to the voice as one. A text the service refused as too long teaches its limit (undefined: not held
   // against the voice); on the device, a run the engine could not make counts as one that could not be cut (null).
-  const together = () => synthesizeRun(run.map(j => c.segs[j].t), voice, run.map(pauseOf), tone, cloud ? { onRetry } : undefined).catch(e => {
+  const together = () => synthesizeRun(run.map(j => c.segs[j].t), voice, run.map(pauseOf), tone, cloud ? { onRetry } : undefined).then(r => { if (r) took(service, chars); return r }).catch(e => {
     if (e?.status === 400 || e?.status === 413) { tooLong(service, chars); return undefined }
     if (!cloud) return null
     throw e
@@ -500,6 +504,9 @@ async function voiceOne(id, i, again = false) {
     const whole = await together()
     const fit = whole ? fitsPace(paceOf(voice), whole.map((r, k) => ({ speech: r.speech, chars: c.segs[run[k]].t.length }))) : false
     if (whole && fit) { runVerdict(voice, true); return whole }
+    // online, the run is kept even where its cuts were placed by the text rather than found (split.js placedCuts):
+    // asking again sentence by sentence spent the free key's requests and stopped the book for minutes
+    if (whole && cloud) return whole
     if (whole !== undefined) runVerdict(voice, false) // a cut that could not be trusted
     run.length = 1 // this sentence alone; the ones after it are made by the next turns
     return one()

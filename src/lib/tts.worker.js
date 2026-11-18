@@ -6,7 +6,7 @@ import { encode } from './encode.js'
 import { voiceUrl } from './voices.js'
 import { ipaChars } from './ipa.js'
 import { padTail, trailingSeconds, speechSeconds } from './pause.js'
-import { sentenceCuts } from './split.js'
+import { sentenceCuts, placedCuts } from './split.js'
 import { applyTone } from './tone.js'
 
 const PAUSE_MS = { sentence: 260, paragraph: 480, heading: 650 }
@@ -145,11 +145,14 @@ async function infer(text, id) {
 }
 
 // A run of sentences spoken as one and cut back into its sentences (split.js): one record each, or null.
-async function cutRun(pcm, rate, lengths, pauses, tone) {
-  const cuts = sentenceCuts(pcm, rate, lengths)
+// An online voice's run whose cuts cannot all be trusted is kept, cut where its text says (`placed`, split.js).
+async function cutRun(pcm, rate, lengths, pauses, tone, keep = false) {
+  const sure = sentenceCuts(pcm, rate, lengths)
+  const cuts = sure || (keep ? placedCuts(pcm, rate, lengths) : null)
   if (!cuts) return null
   const recs = []
   for (let k = 0; k < lengths.length; k++) recs.push(await finish(pcm.subarray(cuts[k], cuts[k + 1]), rate, pauses[k], tone))
+  if (!sure) recs.placed = true
   return recs
 }
 
@@ -178,8 +181,8 @@ self.onmessage = ({ data }) => {
       }
       else if (data.type === 'encodeRun' || data.type === 'speakRun') { // a run of sentences spoken as one, cut back into its sentences
         const { pcm, rate } = data.type === 'speakRun' ? await infer(data.texts.join(' '), data.voice) : data
-        const recs = await cutRun(pcm, rate, data.texts ? data.texts.map(t => t.length) : data.lengths, data.pauses, data.tone)
-        postMessage({ type: 'audio', id: data.id, recs }, (recs || []).flatMap(rec => [rec.data?.buffer, rec.bytes?.buffer]).filter(Boolean))
+        const recs = await cutRun(pcm, rate, data.texts ? data.texts.map(t => t.length) : data.lengths, data.pauses, data.tone, !!data.keep)
+        postMessage({ type: 'audio', id: data.id, recs, placed: !!recs?.placed }, (recs || []).flatMap(rec => [rec.data?.buffer, rec.bytes?.buffer]).filter(Boolean))
       }
       else if (data.type === 'speak') {
         const rec = await speak(data)

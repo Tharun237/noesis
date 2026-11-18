@@ -82,19 +82,33 @@ export function runResult(voice, cut) {
 const RUN_LEAST = 160 // characters: about two sentences, made quickly when the listener is close behind
 const RUN_MOST = 700 // characters: when the voice is well ahead (a service's own limit may be lower, and is learnt)
 const AHEAD_FAR_S = 300 // seconds of audio ready ahead of the listener at which runs are as long as they go
+// An online voice is asked for far more at a time. Measured with NVIDIA's free key for 35 minutes (18 November
+// 2026): a request takes about as long whatever its length (1,500 characters: 79 s of speech in 5.2 s; 70
+// characters: 2 s), and its free capacity refuses by the NUMBER of requests, even minutes apart. Sentences of
+// about 73 characters a request played for half of the 35 minutes. So: few, full requests.
+const ONLINE = { least: 600, most: 1500 }
 // → the most characters for the next run, from how far ahead of the listener the voice is (seconds; Infinity when
 // no one is listening to this book) and the longest text this service took.
-export function runChars(ahead, ceiling = RUN_MOST) {
+export function runChars(ahead, ceiling, online = false) {
+  const { least, most } = online ? ONLINE : { least: RUN_LEAST, most: RUN_MOST }
   const share = Math.max(0, Math.min(1, (Number.isFinite(ahead) ? ahead : AHEAD_FAR_S) / AHEAD_FAR_S))
-  return Math.round(Math.min(ceiling, RUN_LEAST + share * (RUN_MOST - RUN_LEAST)))
+  return Math.round(Math.min(ceiling ?? most, least + share * (most - least)))
 }
-// A service that refused a text as too long (400/413): the longest it takes is under that.
+// What a service has taken: the longest text it made into speech.
+export function took(service, chars) {
+  const p = settings.get().servicePlans?.[service] || {}
+  if (chars <= (p.longest || 0)) return
+  settings.set({ servicePlans: { ...(settings.get().servicePlans || {}), [service]: { ...p, longest: chars } } })
+}
+// A service that refused a text (400/413). It is taken as "too long" only when the text was longer than anything
+// the service has already taken: NVIDIA refused texts of 90 to 174 characters for other reasons, and every one of
+// those used to shrink every later request to 160 characters, for good (the `ceiling` kept before this is not read).
 export function tooLong(service, chars) {
-  const all = { ...(settings.get().servicePlans || {}) }
-  all[service] = { ...(all[service] || {}), ceiling: Math.max(RUN_LEAST, Math.floor(chars * 0.7)) }
-  settings.set({ servicePlans: all })
+  const p = settings.get().servicePlans?.[service] || {}
+  if (chars <= (p.longest || 0)) return
+  settings.set({ servicePlans: { ...(settings.get().servicePlans || {}), [service]: { ...p, cap: Math.max(RUN_LEAST, Math.floor(chars * 0.7)) } } })
 }
-export const ceilingOf = service => settings.get().servicePlans?.[service]?.ceiling || RUN_MOST
+export const ceilingOf = service => settings.get().servicePlans?.[service]?.cap
 
 // ── pace ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // The gap between two requests to a service: grows by half (and a second) at each "too many", and shrinks by a

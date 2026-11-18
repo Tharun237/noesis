@@ -19,9 +19,8 @@ const NEAR = 0.22 // a cut may be this far (share of the speech) from where the 
 const KEEP_MS = 40 // of the pause, kept as the next sentence's own lead-in: the rest stays with the sentence it ends
 const FIT = [0.45, 2.2] // each piece's share of the speech against its share of the text
 
-export function sentenceCuts(pcm, rate, lengths) {
-  const n = lengths.length
-  if (n < 2) return n === 1 ? [0, pcm.length] : null
+// The voice's own pauses in a run: [start window, end window), with the speech's first and last windows.
+function pausesIn(pcm, rate) {
   const win = Math.max(1, Math.round(rate * WIN_S))
   const count = Math.floor(pcm.length / win)
   if (count < 4) return null
@@ -48,6 +47,15 @@ export function sentenceCuts(pcm, rate, lengths) {
     if (e - w >= minRun) runs.push({ a: w, b: e, mid: (w + e) / 2, len: e - w })
     w = e
   }
+  return { win, first, last, runs, minRun }
+}
+
+export function sentenceCuts(pcm, rate, lengths) {
+  const n = lengths.length
+  if (n < 2) return n === 1 ? [0, pcm.length] : null
+  const found = pausesIn(pcm, rate)
+  if (!found) return null
+  const { win, first, last, runs, minRun } = found
   const total = lengths.reduce((x, y) => x + y, 0) || 1
   const span = last + 1 - first
   const want = []
@@ -83,4 +91,34 @@ export function sentenceCuts(pcm, rate, lengths) {
   }
   const keep = Math.round((KEEP_MS / 1000) * rate)
   return [0, ...chosen.map(r => Math.max(r.a * win, r.b * win - keep)), pcm.length]
+}
+
+// An online voice's run, when sentenceCuts cannot trust every cut. Its audio is kept whole (asked for again one
+// sentence at a time, a free key's requests ran out and the book stopped for minutes: NVIDIA, 18 November 2026);
+// each sentence's end is put at the longest pause near where its share of the text says it ends, or, with no pause
+// there, at that point itself. A sentence may then be lit a moment early or late, never the voice stopping. Every
+// boundary is placed from the text, so an uncertain one does not move the others. → bounds, as sentenceCuts.
+export function placedCuts(pcm, rate, lengths) {
+  const n = lengths.length
+  if (n < 2) return n === 1 ? [0, pcm.length] : null
+  const found = pausesIn(pcm, rate)
+  if (!found) return null
+  const { win, first, last, runs } = found
+  const total = lengths.reduce((x, y) => x + y, 0) || 1
+  const span = last + 1 - first
+  const want = []
+  for (let k = 1, at = 0; k < n; k++) { at += lengths[k - 1]; want.push(first + (at / total) * span) }
+  const keep = Math.round((KEEP_MS / 1000) * rate)
+  const bounds = [0]
+  let floor = first
+  for (let k = 0; k < n - 1; k++) {
+    const reach = Math.min(want[k] - (k ? want[k - 1] : first), (k + 1 < n - 1 ? want[k + 1] : last) - want[k]) / 2
+    const near = runs.filter(r => r.mid > floor && Math.abs(r.mid - want[k]) <= reach)
+    const pick = near.sort((x, y) => y.len - x.len)[0]
+    const at = pick ? Math.max(pick.a * win, pick.b * win - keep) : Math.round(want[k] * win)
+    bounds.push(Math.max(bounds[bounds.length - 1] + 1, at))
+    floor = pick ? pick.b : want[k]
+  }
+  bounds.push(pcm.length)
+  return bounds
 }
