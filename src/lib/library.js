@@ -7,7 +7,7 @@ import { hasAiKey, providerName, hostOf, keyWithoutModel, chooseModel, canSee, i
 import { figKey, isFigure, described, allOf, hasAny, loadFigures, addFigures, dropFigures, figureNews } from './figstore.js'
 import { synthesize, synthesizeRun, engine, loadEngine } from './tts.js'
 import { runsFor, runVerdict, runChars, ceilingOf, tooLong, took, fitsPace, learnPace, paceOf } from './voiceplan.js'
-import { toListeningAsync, pause } from './text.js'
+import { toListeningAsync, pause, cleanText } from './text.js'
 import { takeRefs, withoutEmptyRefHeading } from './citations.js'
 import { isVoice, fromKokoro, defaultVoiceFor, VOICES } from './voices.js'
 import { isCloudVoice, cloudVoiceInfo, loadCloudVoices, speaksAnyLanguage } from './cloudvoice.js'
@@ -693,6 +693,10 @@ async function prepare(id) {
       // With the customer's own AI key, the AI translates (more natural). Without one the device does it,
       // free: nobody is shut out of their own language for want of a key (Tharun, 2026-10-13).
       const source = detectLang(before)
+      // The translator gets the text as the voice would say it: citations, footnote marks, links and abbreviations
+      // taken out in the language they were written in. Left in, they were translated into nonsense, and cleaning
+      // after translation could no longer find them (2026-11-25).
+      blocks = blocks.map(b => (b.k === 'code' || b.k === 'math' || !b.text ? b : { ...b, text: cleanText(b.text, source) }))
       const onDevice = !hasAiKey()
       if (onDevice) {
         const { canTranslateHere } = await import('./localtranslate.js')
@@ -704,7 +708,8 @@ async function prepare(id) {
       patch(id, { status: 'narrating', stage, prep: 0 })
       const { translateBlocks } = await import('./translate.js')
       const stored = await db.getTranslation(id)
-      const saved = stored instanceof Map ? stored : new Map()
+      // pieces kept from before the text was cleaned first are of other text: start those again
+      const saved = stored instanceof Map && stored.get('clean') ? stored : new Map([['clean', true]])
       const progress = stepped(id), loading = stepped(id) // each moves the bar a whole per cent at a time, not on every message
       const pages = blocks.reduce((a, b) => (typeof b.page === 'number' && b.page > a ? b.page : a), 0)
       const firstPage = blocks.find(b => typeof b.page === 'number')?.page ?? 0

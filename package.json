@@ -1,7 +1,7 @@
 {
   "name": "noesis",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Listen to any document. Free, private, on-device text to speech.",
   "license": "AGPL-3.0-only",
   "type": "module",

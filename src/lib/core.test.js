@@ -55,3 +55,9 @@ test('muxOggOpus writes valid pages with correct final granule', () => {
   assert.equal(rt.packets.length, 600)
   assert.deepEqual(rt.packets[5], packets[5])
 })
+
+test('a title before a name does not end the sentence; _italics_ lose their marks', () => {
+  assert.deepEqual(sentences(cleanText('Mr. Bennet replied that he had not. For Mrs. Long has just been here.')), ['Mr Bennet replied that he had not.', 'For Mrs Long has just been here.'])
+  assert.equal(cleanText('_You_ want to tell me.'), 'You want to tell me.')
+  assert.equal(cleanText('keep snake_case_name'), 'keep snake_case_name')
+})

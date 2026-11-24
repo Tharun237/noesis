@@ -20,6 +20,9 @@ const SPOKEN = [
   [/\bresp\.\s*/gi, 'respectively '],
   [/\bNo\.\s*(?=\d)/g, 'number '],
   [/\bpp?\.\s*(?=\d)/g, 'page '],
+  // A title's full stop before a name ended the sentence there: "Mr." was said on its own, and "for Mrs. Long has
+  // just been here" reached the translator as "for Mrs." and "Long has just been here" (2026-11-25).
+  [/\b(Mrs|Mr|Ms|Mx|Dr|Prof|Rev|Hon|Capt|Col|Gen|Lt|Sgt|St)\.(?=\s+\p{Lu})/gu, '$1'],
 ]
 
 const CITATIONS = [
@@ -33,6 +36,7 @@ export function cleanText(s, lang = 'en') {
   s = s.replace(/[ﬀ-ﬆ]/g, c => LIGATURES[c]).replace(/­/g, '')
   for (const re of CITATIONS) s = s.replace(re, '')
   s = s.replace(/[†‡]+|(?<=[\p{L}\p{P}])\*+(?=[\s\p{P}]|$)/gu, '') // a footnote's mark is for the eye
+  s = s.replace(/(^|[\s"“‘'(])_(?=\S)([^_\n]+?)_(?=$|[\s\p{P}])/gu, '$1$2') // _word_ is a plain-text book's italics
   s = s.replace(/\bhttps?\s?:\s?\/\/\S+|\bwww\.\S+|\bdoi:\s?\S+/gi, '') // OCR often writes "https ://"
   if (lang === 'en') for (const [re, to] of SPOKEN) s = s.replace(re, to)
   return s.replace(/\s+([,.;:!?])/g, '$1').replace(/\s+/g, ' ').trim()
