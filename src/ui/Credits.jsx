@@ -74,6 +74,7 @@ export function CreditsCard({ Card }) {
           Documents are translated on your device by the models of <Out href="https://github.com/mozilla/translations">Mozilla&apos;s Firefox Translations</Out>,
           run by <Out href="https://github.com/browsermt/bergamot-translator">bergamot-translator</Out> (built on Marian). Both are free software under
           the <Out href="https://www.mozilla.org/MPL/2.0/">Mozilla Public License 2.0</Out>; Noesis uses them unchanged, and their source is at those links.
+          Where the browser has its own translator (Chrome and Edge on a computer), Noesis uses that instead; it also works on your device.
         </p>
 
         <div style={heading}>Software</div>

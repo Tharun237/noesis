@@ -5,7 +5,7 @@ import { useStore } from '../lib/store.js'
 import { ui, closeSheet, go, toast } from '../lib/nav.js'
 import { settings, hasKey } from '../lib/settings.js'
 import { hasAiKey, provider } from '../lib/ai.js'
-import { canTranslateHere } from '../lib/localtranslate.js'
+import { canTranslateHere, warmTranslator } from '../lib/localtranslate.js'
 import { LANGS } from '../lib/lang.js'
 import { library, addDocument, changeVoice, addCollection, toggleInCollection, listenIn, loadDoc } from '../lib/library.js'
 import { partsOf, secondsFor } from '../lib/parts.js'
@@ -172,6 +172,7 @@ function AddForm({ wide }) {
 
   async function submit() {
     if (!ready) return
+    if (target && !keyed) warmTranslator('en', target) // most documents are English; any other is found when read, and uses ours
     let src
     if (tab === 'file') src = { kind, name: file.name, blob: file }
     else if (tab === 'text') src = { kind: looksMarkdown(text) ? 'md' : 'text', name: title.trim() || 'Pasted text', title: title.trim() || undefined, text }
@@ -345,6 +346,7 @@ function LanguagePicker() {
   const can = code => code === d.lang || keyed || (!!from && canTranslateHere(from, code))
   const choose = async lang => {
     if (busy || !can(lang)) return
+    if (!keyed) warmTranslator(from, lang) // inside the tap: the browser's own translator may start downloading only here
     setBusy(lang)
     try {
       const nid = await listenIn(d.id, lang, chosen?.part || null)

@@ -61,9 +61,49 @@ async function engine() {
   await call('initialize', { cacheSize: 0 })
 }
 
+// The browser's own translator, where it has one (Chrome and Edge on a computer, 2026): also on the device, nothing
+// leaves it, and it translates far better than the Telugu and Hindi models above (measured 2026-11-25 on the same
+// book pages: "Mr Bennet replied" came out as "Pawan replied" here, right in Chrome's). Phones do not have it yet.
+// Its first download must start inside a tap, so the tap calls warmTranslator; later work picks it up.
+const browser = new Map() // 'en' + 'te' → Promise<translator | null>
+let hearBrowserLoad = null
+// Chrome may refuse ("translation service count exceeded") or, seen once, never answer: a create that has heard
+// nothing of its download for STALL_MS is given up, and ours translates. Measured: Hindi came down in 20 s.
+const STALL_MS = 30000
+const make = (from, to) => new Promise(resolve => {
+  let timer
+  const wait = () => { clearTimeout(timer); timer = setTimeout(() => resolve(null), STALL_MS) }
+  wait()
+  Translator.create({ sourceLanguage: from, targetLanguage: to, monitor: m => m.addEventListener('downloadprogress', e => { wait(); hearBrowserLoad?.(e.loaded, 1) }) })
+    .then(t => { clearTimeout(timer); resolve(t) }, () => { clearTimeout(timer); resolve(null) })
+})
+export function warmTranslator(from, to) {
+  if (typeof Translator === 'undefined' || !from || from === to || browser.has(from + to)) return
+  browser.set(from + to, make(from, to))
+}
+async function browserTranslator(from, to) {
+  if (typeof Translator === 'undefined') return null
+  if (!browser.has(from + to)) {
+    const ready = await Translator.availability({ sourceLanguage: from, targetLanguage: to }).catch(() => 'unavailable')
+    if (ready !== 'available') return null // not on this device, and no tap to start its download: ours does it
+    browser.set(from + to, make(from, to))
+  }
+  const t = await browser.get(from + to)
+  if (!t) browser.delete(from + to)
+  return t
+}
+
 // texts → the same number of texts, in `to`. onLoad(gotBytes, totalBytes) while a translator is being
 // downloaded (never called when it is already on the device).
 export async function translateTexts(texts, from, to, { onLoad } = {}) {
+  if (from !== to && texts.length) {
+    hearBrowserLoad = onLoad
+    const t = await browserTranslator(from, to)
+    hearBrowserLoad = null
+    // a text it refuses (too long, or it stopped) sends the whole piece to ours instead
+    const within = x => Promise.race([t.translate(x), new Promise((_, no) => setTimeout(() => no(new Error('stalled')), STALL_MS))])
+    if (t) try { const out = []; for (const x of texts) out.push(await within(x)); return out } catch { browser.delete(from + to) /* ours below, from now on */ }
+  }
   const steps = route(from, to)
   if (!steps) throw new Error('There is no translator for this pair of languages.')
   if (!steps.length || !texts.length) return [...texts]
